@@ -144,6 +144,8 @@ export const BrandKit = z.object({
       wallColor: HexColor.optional(),
       // Floor override — for showroom-style polished tile etc.
       floorColor: HexColor.optional(),
+      // Window frame / mullion colour — defaults to palette.accent when unset.
+      windowTrimColor: HexColor.optional(),
       // Ambient / global-illumination intensity multiplier (0..2).
       giMultiplier: z.number().optional(),
       // Key light intensity multiplier (0..2).

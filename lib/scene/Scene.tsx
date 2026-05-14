@@ -215,6 +215,7 @@ export function Scene() {
             backWallMotif={kit.scene?.wallMotif}
             windowsEnabled={windowsEnabled}
             windowSillM={windowSillM}
+            windowTrimColor={kit.scene?.windowTrimColor ?? kit.palette.accent}
           />
         </Suspense>
       </TimedReveal>
@@ -370,6 +371,7 @@ export function Scene() {
               lengthM={tableLengthM}
               widthM={tableWidthM}
               position={[0, platformHeightM, 0]}
+              tintHex={kit.palette.primary}
             />
             <ChairsAroundTable
               count={chairCount}
@@ -377,6 +379,7 @@ export function Scene() {
               tableWidthM={tableWidthM}
               chairVariant={chairVariant}
               position={[0, platformHeightM, 0]}
+              tintHex={kit.palette.secondary}
             />
           </Suspense>
 
@@ -522,7 +525,7 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle 
       <boxGeometry args={[widthM, platformHeightM, depthM]} />
       <meshPhysicalMaterial attach="material-0" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-1" color={sideColor} roughness={0.7} metalness={0.04} />
-      <meshPhysicalMaterial attach="material-2" map={map} normalMap={normalMap} aoMap={aoMap} color="#f4ede0" roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
+      <meshPhysicalMaterial attach="material-2" map={map} normalMap={normalMap} aoMap={aoMap} color={sideColor} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
       <meshPhysicalMaterial attach="material-3" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-4" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-5" color={sideColor} roughness={0.7} metalness={0.04} />
@@ -595,7 +598,7 @@ function atriumSize(w: number, d: number): [number, number] {
 
 function Room({
   shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
-  backWallGraphic, backWallMotif, windowsEnabled, windowSillM,
+  backWallGraphic, backWallMotif, windowsEnabled, windowSillM, windowTrimColor,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
@@ -603,6 +606,7 @@ function Room({
   backWallMotif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex";
   windowsEnabled: boolean;
   windowSillM: number;
+  windowTrimColor: string;
 }) {
   // Walls are built edge-by-edge around the footprint polygon: the rearmost
   // edge is the solid feature wall (logo + video live there), the frontmost
@@ -638,7 +642,7 @@ function Room({
         if (windowsEnabled && (circular || (i !== backEdge && sideish))) {
           return (
             <WindowedWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick}
-              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
+              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={windowTrimColor} />
           );
         }
         if (i === backEdge) {
@@ -1217,7 +1221,7 @@ function LedWall({
   let w169 = Math.min(widthM, heightM * (16 / 9));
   let h169 = w169 * (9 / 16);
   const maxW = roomWidthM - 0.5;
-  const maxH = roomHeightM - 0.5;
+  const maxH = roomHeightM - 0.9;             // leaves clear gaps above + below
   if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
   if (h169 > maxH) { h169 = maxH; w169 = h169 * (16 / 9); }
   const bezelD = 0.14;                       // the panel extrudes off the wall
@@ -1233,9 +1237,10 @@ function LedWall({
     } catch { /* cross-origin throws — ignore */ }
   }, [videoMuted, videoVolume]);
   // Sit just in front of the back wall's inner face (wall thickness 0.08),
-  // proud of it by the bezel's half-depth, and centre the panel on the wall.
+  // proud of it by the bezel's half-depth. Anchored ~0.5m off the floor so
+  // the (clamped) panel always clears the ceiling.
   const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
-  const cy = platformHeightM + roomHeightM * 0.5;
+  const cy = platformHeightM + 0.5 + h169 / 2;
   return (
     <group position={[0, cy, z]}>
       {/* Outer dark bezel frame — extruded off the back wall */}

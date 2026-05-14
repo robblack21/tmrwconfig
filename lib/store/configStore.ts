@@ -336,6 +336,12 @@ export const useConfig = create<ConfigState>((set, get) => ({
         const shape = get().shape;
         const tier = patch.tier ?? get().tier;
         const b = bounds(shape, tier);
+        // A kit-declared tier resets the footprint to that tier's defaults
+        // (explicit defaultWidthM / defaultDepthM below still override).
+        if (kit.scene?.defaultTier) {
+          patch.widthM = b.widthM.default;
+          patch.depthM = b.depthM.default;
+        }
         if (kit.scene?.defaultWidthM !== undefined) {
           patch.widthM = clamp(kit.scene.defaultWidthM, b.widthM.min, b.widthM.max);
         }

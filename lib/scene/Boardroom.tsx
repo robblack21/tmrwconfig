@@ -44,14 +44,20 @@ const CHAIR_FACE_OFFSET = Math.PI;
 // requested length × width footprint with the height pinned to standard.
 
 export function BoardroomTable({
-  variant, lengthM, widthM, position,
-}: { variant: TableVariant; lengthM: number; widthM: number; position: [number, number, number] }) {
+  variant, lengthM, widthM, position, tintHex,
+}: { variant: TableVariant; lengthM: number; widthM: number; position: [number, number, number]; tintHex?: string }) {
   const gltf = useGLTF(TABLE_VARIANTS[variant]);
   const { node, scale, rotY } = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
     s.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+      if (m.isMesh) {
+        m.castShadow = true; m.receiveShadow = true;
+        if (tintHex) {
+          const mat = m.material as THREE.MeshStandardMaterial | undefined;
+          if (mat && "color" in mat) { const nx = mat.clone(); nx.color = new THREE.Color(tintHex); m.material = nx; }
+        }
+      }
     });
     s.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(s);
@@ -71,7 +77,7 @@ export function BoardroomTable({
       scale: [widthM / extentAlongX, TABLE_HEIGHT_M / size.y, lengthM / extentAlongZ] as [number, number, number],
       rotY: rotateToZ ? Math.PI / 2 : 0,
     };
-  }, [gltf, lengthM, widthM, variant]);
+  }, [gltf, lengthM, widthM, variant, tintHex]);
   return (
     <group position={position}>
       <group scale={scale}>
@@ -86,17 +92,23 @@ export function BoardroomTable({
 // ── Chair ────────────────────────────────────────────────────────────────────
 
 function BoardroomChair({
-  url, position, rotationY,
-}: { url: string; position: [number, number, number]; rotationY: number }) {
+  url, position, rotationY, tintHex,
+}: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string }) {
   const gltf = useGLTF(url);
   const node = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
     s.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+      if (m.isMesh) {
+        m.castShadow = true; m.receiveShadow = true;
+        if (tintHex) {
+          const mat = m.material as THREE.MeshStandardMaterial | undefined;
+          if (mat && "color" in mat) { const nx = mat.clone(); nx.color = new THREE.Color(tintHex); m.material = nx; }
+        }
+      }
     });
     return normalizeForBase(s, CHAIR_HEIGHT_M);
-  }, [gltf]);
+  }, [gltf, tintHex]);
   return (
     <group position={position} rotation-y={rotationY + CHAIR_FACE_OFFSET}>
       <primitive object={node} />
@@ -109,10 +121,10 @@ function BoardroomChair({
 // chair offset off the table edge and rotated to face the table centre.
 
 export function ChairsAroundTable({
-  count, tableLengthM, tableWidthM, chairVariant, position,
+  count, tableLengthM, tableWidthM, chairVariant, position, tintHex,
 }: {
   count: number; tableLengthM: number; tableWidthM: number;
-  chairVariant: ChairVariant; position: [number, number, number];
+  chairVariant: ChairVariant; position: [number, number, number]; tintHex?: string;
 }) {
   const url = CHAIR_VARIANTS[chairVariant];
   const slots = useMemo(() => {
@@ -137,7 +149,7 @@ export function ChairsAroundTable({
   return (
     <group position={position}>
       {slots.map((s, i) => (
-        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} />
+        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} />
       ))}
     </group>
   );
