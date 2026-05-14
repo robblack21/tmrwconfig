@@ -13,7 +13,7 @@ type OrbitControlsLike = { target: THREE.Vector3; update: () => void };
  *  the rest as the user resizes. */
 export const CAMERA_PRESETS: Record<string, { pos: [number, number, number]; target: [number, number, number]; fov: number }> = {
   // Inside the room — 3/4 view from a front corner, across the table.
-  hero:    { pos: [4.4, 2.1, 3.0],  target: [-0.6, 0.9, -0.6], fov: 42 },
+  hero:    { pos: [4.4, 2.1, 3.0],  target: [-0.6, 0.9, -0.6], fov: 40 },
   // From just inside the door, looking down the table at the back / video wall.
   front:   { pos: [0, 1.85, 3.2],   target: [0, 1.3, -3.4],    fov: 46 },
   // Along one side wall, looking across to the windowed wall opposite.
@@ -56,6 +56,9 @@ export function CameraSync() {
 
   // Target state being animated toward; null when at-rest.
   const animRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3; t: number } | null>(null);
+  // Entry runs exactly once — guarded by a ref so dep changes (controls
+  // arriving after mount, the store flag flipping) can't re-run it.
+  const entryFiredRef = useRef(false);
 
   // Apply FOV whenever the slider changes.
   useEffect(() => {
@@ -66,22 +69,31 @@ export function CameraSync() {
     }
   }, [cameraFov, camera]);
 
-  // First-load entry: snap to wide-pulled-back view, then animate to hero.
+  // First-load entry: snap to a wide pulled-back view, then animate to hero.
+  // The hero-transition timer is fire-and-forget — deliberately NOT cleared on
+  // cleanup, since a dep change (controls arriving, the flag flipping) would
+  // otherwise cancel it and leave the camera stuck in the dollied entry pose.
   useEffect(() => {
-    if (cameraEntryFired) return;
+    if (entryFiredRef.current || cameraEntryFired) return;
+    entryFiredRef.current = true;
     const cam = camera as THREE.PerspectiveCamera;
+    const ctrl = controls as unknown as OrbitControlsLike | null;
     if (cam.isPerspectiveCamera) {
       cam.position.set(...CAMERA_ENTRY.pos);
       cam.fov = CAMERA_ENTRY.fov;
       cam.lookAt(...CAMERA_ENTRY.target);
       cam.updateProjectionMatrix();
     }
+    // Sync the orbit pivot to the look-at target so OrbitControls rotates
+    // around what the camera is actually facing — not a stale origin.
+    if (ctrl?.target) {
+      ctrl.target.set(...CAMERA_ENTRY.target);
+      ctrl.update();
+    }
     apply({ type: "camera.setFov", value: CAMERA_ENTRY.fov });
     apply({ type: "camera.markEntryFired" });
-    // Trigger hero preset after a short pause so the entry pose is held briefly
-    const t = setTimeout(() => apply({ type: "camera.gotoPreset", preset: "hero" }), 350);
-    return () => clearTimeout(t);
-  }, [cameraEntryFired, camera, apply]);
+    setTimeout(() => apply({ type: "camera.gotoPreset", preset: "hero" }), 350);
+  }, [cameraEntryFired, camera, controls, apply]);
 
   // Trigger a preset move when cameraPreset is set; consume + clear it.
   useEffect(() => {

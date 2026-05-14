@@ -132,8 +132,12 @@ export function Scene() {
     gl.shadowMap.needsUpdate = true;
   }, [gl]);
 
-  // Pendant suspension — well below truss canopy so they read as separate elements
-  const pendantYM = Math.max(wallHeightM + 0.4, trussTopM - 1.2) + pendantYOffsetM;
+  // Pendant suspension — hangs from the ceiling when the room is enclosed,
+  // otherwise floats below the truss canopy (open / exhibition look).
+  const pendantYM = (ceilingEnabled
+    ? platformHeightM + wallHeightM - 0.95
+    : Math.max(wallHeightM + 0.4, trussTopM - 1.2)
+  ) + pendantYOffsetM;
 
   return (
     <>
@@ -217,17 +221,20 @@ export function Scene() {
 
       {/* Corner pillars — the structural columns the room is framed on. */}
       <TimedReveal delay={200}>
-        <CornerPillars widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} color={kit.palette.neutralDark} />
+        <CornerPillars shape={shape} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} color={kit.palette.neutralDark} />
       </TimedReveal>
 
-      {/* Ceiling slab — enclosed boardroom. Toggle off for an open / exhibition
-          look (which also reveals the truss canopy + pendant above). */}
+      {/* Ceiling — enclosed boardroom. Toggle off for an open / exhibition
+          look (which also reveals the truss canopy above). */}
       {ceilingEnabled && (
         <TimedReveal delay={250}>
-          <Ceiling widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} accent={kit.palette.accent} />
+          <Ceiling shape={shape} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
         </TimedReveal>
       )}
 
+      {/* Brand logo — prominent inside the room (migrates to the left flank
+          when the video wall occupies the back wall), plus an exterior sign
+          on the back wall's outer face so the brand reads from outside too. */}
       <Suspense fallback={null}>
         <BrandLogoOnWall
           kit={kit}
@@ -238,8 +245,20 @@ export function Scene() {
           glow={logoGlow}
           extrusionM={logoExtrusionM}
           emissive={logoEmissive}
-          // When video wall is on, logo migrates to the left flank so they don't fight.
           placement={ledWallEnabled ? "flank-left" : "back-centre"}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <BrandLogoOnWall
+          kit={kit}
+          widthM={widthM}
+          depthM={depthM}
+          wallHeightM={wallHeightM}
+          platformHeightM={platformHeightM}
+          glow={logoGlow}
+          extrusionM={logoExtrusionM}
+          emissive={logoEmissive}
+          placement="back-exterior"
         />
       </Suspense>
 
@@ -251,13 +270,15 @@ export function Scene() {
             backWallZ={-depthM / 2}
             widthM={ledWallWidthM}
             heightM={ledWallHeightM}
-            yBaseM={platformHeightM + 0.2}
+            roomWidthM={widthM}
+            roomHeightM={wallHeightM}
+            platformHeightM={platformHeightM}
             brightness={ledWallBrightness}
           />
         </Suspense>
       )}
 
-      {/* Truss + pendant belong to the open / exhibition look — hidden once the
+      {/* The truss canopy is the open / exhibition rig — hidden once the
           ceiling encloses the room. */}
       {!ceilingEnabled && (
         <TimedReveal delay={300}>
@@ -265,7 +286,9 @@ export function Scene() {
         </TimedReveal>
       )}
 
-      {!ceilingEnabled && pendantEnabled && (
+      {/* The branded pendant stays in both modes — it hangs from the ceiling
+          when enclosed, from the truss when open (see pendantYM above). */}
+      {pendantEnabled && (
         <TimedReveal delay={450}>
           <PendantWithLogo
             shape={pendantShape}
@@ -394,6 +417,8 @@ export function Scene() {
         far={6}
       />
 
+      {/* OrbitControls owns no static target — CameraSync is the single source
+          of truth for the orbit pivot, so it stays synced to the look-at. */}
       <OrbitControls
         makeDefault
         enableDamping
@@ -401,10 +426,9 @@ export function Scene() {
         zoomSpeed={0.3}
         rotateSpeed={0.85}
         panSpeed={0.7}
-        minDistance={3}
+        minDistance={2}
         maxDistance={80}
         maxPolarAngle={Math.PI / 2 - 0.04}
-        target={[0, wallHeightM * 0.5, 0]}
       />
       <Flycam speed={2} />
       <PerfMonitor />
@@ -518,8 +542,59 @@ function PbrFloor({ isDark }: { isDark: boolean }) {
 
 // ── Walls ───────────────────────────────────────────────────────────────────
 
+type FootPt = [number, number];   // [x, z] in metres, room-centred
+
+/** Footprint polygon for each room shape, as XZ points. Every shape fits
+ *  inside the width × depth bounding box. */
+function footprintPolygon(shape: FootprintShape, w: number, d: number): FootPt[] {
+  const hw = w / 2, hd = d / 2;
+  switch (shape) {
+    case "L": {
+      const bw = w * 0.42, bd = d * 0.45;            // bite from the front-right
+      return [[-hw, -hd], [hw, -hd], [hw, hd - bd], [hw - bw, hd - bd], [hw - bw, hd], [-hw, hd]];
+    }
+    case "invertedL": {
+      const bw = w * 0.42, bd = d * 0.45;            // bite from the front-left
+      return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw + bw, hd], [-hw + bw, hd - bd], [-hw, hd - bd]];
+    }
+    case "U": {
+      const bw = w * 0.34, bd = d * 0.58;            // bite from the front-centre
+      return [[-hw, -hd], [hw, -hd], [hw, hd], [bw / 2, hd], [bw / 2, hd - bd], [-bw / 2, hd - bd], [-bw / 2, hd], [-hw, hd]];
+    }
+    case "circular": {
+      const r = Math.min(hw, hd);
+      const n = 32;
+      const out: FootPt[] = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 - Math.PI / 2;   // first vertex at -Z (back)
+        out.push([Math.cos(a) * r, Math.sin(a) * r]);
+      }
+      return out;
+    }
+    // rectangle / corner / pavilion — a plain rectangle bounding box
+    default:
+      return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]];
+  }
+}
+
+/** Even-odd point-in-polygon test (XZ plane). */
+function pointInPolygon(x: number, z: number, poly: FootPt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i]!;
+    const [xj, zj] = poly[j]!;
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Pavilion atrium footprint — a centred rectangle, ~42% of the room. */
+function atriumSize(w: number, d: number): [number, number] {
+  return [w * 0.42, d * 0.42];
+}
+
 function Room({
-  widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
+  shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
   backWallGraphic, backWallMotif, windowsEnabled, windowSillM,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
@@ -529,62 +604,98 @@ function Room({
   windowsEnabled: boolean;
   windowSillM: number;
 }) {
-  // Enclosed boardroom: a solid feature wall at the back (logo + video live
-  // there), glazed side walls, and a front wall with a central door opening.
-  // The room is framed on the four corner pillars rendered separately.
+  // Walls are built edge-by-edge around the footprint polygon: the rearmost
+  // edge is the solid feature wall (logo + video live there), the frontmost
+  // edge carries the door opening, side-ish edges are ribbon-windowed.
   const thick = 0.08;
   const platformTop = platformHeightM;
-  const wallY = wallHeightM / 2 + platformTop;
+  const poly = footprintPolygon(shape, widthM, depthM);
+  const n = poly.length;
+  const circular = shape === "circular";
 
-  const backWallProps = {
-    w: widthM, h: wallHeightM, d: thick,
-    pos: [0, wallY, -depthM / 2 + thick / 2] as [number, number, number],
-    color: kitPrimary,
-    accent: kitAccent,
-    graphicUrl: backWallGraphic,
-    motif: backWallMotif,
-  };
-
-  // Door opening in the front wall — centred, sized to the room.
-  const doorW = Math.min(1.3, widthM * 0.22);
-  const doorH = Math.min(2.25, wallHeightM - 0.35);
-  const frontSegW = (widthM - doorW) / 2;
-  const headerH = wallHeightM - doorH;
+  let doorEdge = 0, backEdge = 0, maxZ = -Infinity, minZ = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i]!, b = poly[(i + 1) % n]!;
+    const midZ = (a[1] + b[1]) / 2;
+    if (midZ > maxZ) { maxZ = midZ; doorEdge = i; }
+    if (midZ < minZ) { minZ = midZ; backEdge = i; }
+  }
 
   return (
     <group>
-      {/* Back — solid feature wall */}
-      <BackWallPanel {...backWallProps} />
+      {poly.map((a, i) => {
+        const b = poly[(i + 1) % n]!;
+        const dx = b[0] - a[0], dz = b[1] - a[1];
+        const len = Math.hypot(dx, dz);
+        if (len < 0.05) return null;
+        const mid: [number, number, number] = [(a[0] + b[0]) / 2, platformTop, (a[1] + b[1]) / 2];
+        const rotY = Math.atan2(-dz, dx);
+        const sideish = Math.abs(dz) >= Math.abs(dx);
 
-      {/* Side walls — solid, or ribbon-windowed when windows are enabled */}
-      {windowsEnabled ? (
-        <>
-          <WindowedWall lengthM={depthM} wallHeightM={wallHeightM} thick={thick}
-            position={[-widthM / 2 + thick / 2, platformTop, 0]} rotationY={Math.PI / 2}
-            sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
-          <WindowedWall lengthM={depthM} wallHeightM={wallHeightM} thick={thick}
-            position={[widthM / 2 - thick / 2, platformTop, 0]} rotationY={-Math.PI / 2}
-            sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
-        </>
-      ) : (
-        <>
-          <WallPanel w={thick} h={wallHeightM} d={depthM} pos={[-widthM / 2 + thick / 2, wallY, 0]} color={kitPrimary} />
-          <WallPanel w={thick} h={wallHeightM} d={depthM} pos={[widthM / 2 - thick / 2, wallY, 0]} color={kitPrimary} />
-        </>
+        if (i === doorEdge) {
+          return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} />;
+        }
+        if (windowsEnabled && (circular || (i !== backEdge && sideish))) {
+          return (
+            <WindowedWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick}
+              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
+          );
+        }
+        if (i === backEdge) {
+          return (
+            <group key={i} position={mid} rotation-y={rotY}>
+              <BackWallPanel w={len} h={wallHeightM} d={thick} pos={[0, wallHeightM / 2, 0]}
+                color={kitPrimary} accent={kitAccent} graphicUrl={backWallGraphic} motif={backWallMotif} />
+            </group>
+          );
+        }
+        return (
+          <group key={i} position={mid} rotation-y={rotY}>
+            <WallPanelPlaster w={len} h={wallHeightM} d={thick} pos={[0, wallHeightM / 2, 0]} color={kitPrimary} />
+          </group>
+        );
+      })}
+
+      {/* Pavilion — a low parapet ring framing the open central atrium. */}
+      {shape === "pavilion" && (() => {
+        const [aw, ad] = atriumSize(widthM, depthM);
+        const h = Math.min(1.1, wallHeightM * 0.4);
+        const hw = aw / 2, hd = ad / 2;
+        const ring: { pos: [number, number, number]; rotY: number; len: number }[] = [
+          { pos: [0, platformTop, -hd], rotY: 0, len: aw },
+          { pos: [0, platformTop, hd], rotY: 0, len: aw },
+          { pos: [-hw, platformTop, 0], rotY: Math.PI / 2, len: ad },
+          { pos: [hw, platformTop, 0], rotY: Math.PI / 2, len: ad },
+        ];
+        return ring.map((e, i) => (
+          <group key={`atrium-${i}`} position={e.pos} rotation-y={e.rotY}>
+            <WallPanelPlaster w={e.len} h={h} d={thick} pos={[0, h / 2, 0]} color={kitPrimary} />
+          </group>
+        ));
+      })()}
+    </group>
+  );
+}
+
+// Wall along an edge with a central door opening — two segments + a header,
+// built in a local frame: `lengthM` runs along local X, `wallHeightM` up Y.
+function DoorEdgeWall({
+  lengthM, wallHeightM, thick, position, rotationY, color,
+}: {
+  lengthM: number; wallHeightM: number; thick: number;
+  position: [number, number, number]; rotationY: number; color: string;
+}) {
+  const doorW = Math.min(1.3, lengthM * 0.6);
+  const doorH = Math.min(2.25, wallHeightM - 0.35);
+  const segW = Math.max(0.02, (lengthM - doorW) / 2);
+  const headerH = wallHeightM - doorH;
+  return (
+    <group position={position} rotation-y={rotationY}>
+      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[-(doorW / 2 + segW / 2), wallHeightM / 2, 0]} color={color} />
+      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[doorW / 2 + segW / 2, wallHeightM / 2, 0]} color={color} />
+      {headerH > 0.05 && (
+        <WallPanelPlaster w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
       )}
-
-      {/* Front wall — two segments either side of a central door opening,
-          plus a header above the door. */}
-      <group>
-        <WallPanel w={frontSegW} h={wallHeightM} d={thick}
-          pos={[-(doorW / 2 + frontSegW / 2), wallY, depthM / 2 - thick / 2]} color={kitPrimary} />
-        <WallPanel w={frontSegW} h={wallHeightM} d={thick}
-          pos={[doorW / 2 + frontSegW / 2, wallY, depthM / 2 - thick / 2]} color={kitPrimary} />
-        {headerH > 0.05 && (
-          <WallPanel w={doorW} h={headerH} d={thick}
-            pos={[0, platformTop + doorH + headerH / 2, depthM / 2 - thick / 2]} color={kitPrimary} />
-        )}
-      </group>
     </group>
   );
 }
@@ -722,29 +833,58 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
 // ── Ceiling ─────────────────────────────────────────────────────────────────
 
 function Ceiling({
-  widthM, depthM, wallHeightM, platformHeightM, accent,
-}: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; accent: string }) {
+  shape, widthM, depthM, wallHeightM, platformHeightM,
+}: { shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
   const y = platformHeightM + wallHeightM;
-  const slabT = 0.14;
-  // Recessed downlight grid — ~2.4m spacing, inset from the walls.
+  const poly = footprintPolygon(shape, widthM, depthM);
+  const isPavilion = shape === "pavilion";
+
+  // Ceiling surface — a flat polygon matching the footprint, with a hole over
+  // the atrium for the pavilion shape.
+  const geom = useMemo(() => {
+    const s = new THREE.Shape();
+    poly.forEach(([x, z], i) => (i === 0 ? s.moveTo(x, z) : s.lineTo(x, z)));
+    s.closePath();
+    if (isPavilion) {
+      const [aw, ad] = atriumSize(widthM, depthM);
+      const hole = new THREE.Path();
+      hole.moveTo(-aw / 2, -ad / 2);
+      hole.lineTo(aw / 2, -ad / 2);
+      hole.lineTo(aw / 2, ad / 2);
+      hole.lineTo(-aw / 2, ad / 2);
+      hole.closePath();
+      s.holes.push(hole);
+    }
+    return new THREE.ShapeGeometry(s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shape, widthM, depthM]);
+
+  // Recessed downlights — a grid clipped to the footprint polygon.
   const cols = Math.max(1, Math.round((widthM - 2) / 2.4));
   const rows = Math.max(1, Math.round((depthM - 2) / 2.4));
-  const gridPos = (i: number, n: number, span: number) => (n <= 1 ? 0 : -span / 2 + (i * span) / (n - 1));
+  const gridPos = (i: number, m: number, span: number) => (m <= 1 ? 0 : -span / 2 + (i * span) / (m - 1));
   const lights: [number, number][] = [];
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      lights.push([gridPos(i, cols, widthM - 2), gridPos(j, rows, depthM - 2)]);
+      const x = gridPos(i, cols, widthM - 2);
+      const z = gridPos(j, rows, depthM - 2);
+      if (!pointInPolygon(x, z, poly)) continue;
+      if (isPavilion) {
+        const [aw, ad] = atriumSize(widthM, depthM);
+        if (Math.abs(x) < aw / 2 && Math.abs(z) < ad / 2) continue;   // over the open void
+      }
+      lights.push([x, z]);
     }
   }
+
   return (
     <group>
-      {/* Ceiling slab — castShadow off so the key light still reaches the room;
-          the underside reads as lit via the recessed downlights below. */}
-      <mesh position={[0, y + slabT / 2, 0]} receiveShadow castShadow={false}>
-        <boxGeometry args={[widthM, slabT, depthM]} />
+      {/* Ceiling surface — castShadow off so the key light still reaches the
+          room; the underside reads as lit via the recessed downlights below. */}
+      <mesh geometry={geom} position={[0, y, 0]} rotation-x={Math.PI / 2} receiveShadow castShadow={false}>
         <meshStandardMaterial color="#e9eaee" roughness={0.92} metalness={0.02} side={THREE.DoubleSide} />
       </mesh>
-      {/* Recessed downlights flush with the slab underside */}
+      {/* Recessed downlights flush with the ceiling underside */}
       {lights.map(([x, z], i) => (
         <mesh key={i} position={[x, y - 0.012, z]} rotation-x={Math.PI / 2}>
           <circleGeometry args={[0.16, 20]} />
@@ -753,11 +893,6 @@ function Ceiling({
       ))}
       {/* Soft fill so the downlights actually pool light into the room */}
       <pointLight position={[0, y - 0.5, 0]} intensity={6} distance={Math.max(widthM, depthM) * 1.2} decay={1.6} color="#fff4e2" />
-      {/* Faint accent cove around the slab edge */}
-      <mesh position={[0, y - 0.04, 0]}>
-        <boxGeometry args={[widthM - 0.3, 0.02, depthM - 0.3]} />
-        <meshStandardMaterial color={accent} emissive={new THREE.Color(accent)} emissiveIntensity={0.15} toneMapped={false} transparent opacity={0.5} />
-      </mesh>
     </group>
   );
 }
@@ -767,17 +902,36 @@ function Ceiling({
 // corner. Carried over from the trade-show system's corner-pillar logic.
 
 function CornerPillars({
-  widthM, depthM, wallHeightM, platformHeightM, color,
-}: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; color: string }) {
+  shape, widthM, depthM, wallHeightM, platformHeightM, color,
+}: { shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; color: string }) {
   const p = 0.18;
   const y = platformHeightM + wallHeightM / 2;
-  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+  const pts: FootPt[] = [];
+  if (shape === "circular") {
+    // A ring of eight columns around the rotunda.
+    const r = Math.min(widthM, depthM) / 2 - p / 2;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+    }
+  } else {
+    // One pillar per footprint vertex, nudged inward off the wall centreline.
+    for (const [x, z] of footprintPolygon(shape, widthM, depthM)) {
+      pts.push([x - Math.sign(x) * (p / 2), z - Math.sign(z) * (p / 2)]);
+    }
+    if (shape === "pavilion") {
+      const [aw, ad] = atriumSize(widthM, depthM);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+        pts.push([sx * (aw / 2 - p / 2), sz * (ad / 2 - p / 2)]);
+      }
+    }
+  }
   return (
     <group>
-      {corners.map(([sx, sz], i) => (
+      {pts.map(([x, z], i) => (
         <RoundedBox
           key={i}
-          position={[sx * (widthM / 2 - p / 2), y, sz * (depthM / 2 - p / 2)]}
+          position={[x, y, z]}
           args={[p, wallHeightM, p]}
           radius={0.02}
           smoothness={3}
@@ -793,7 +947,7 @@ function CornerPillars({
 
 // ── Logos ───────────────────────────────────────────────────────────────────
 
-type LogoPlacement = "back-centre" | "flank-left" | "flank-right";
+type LogoPlacement = "back-centre" | "flank-left" | "flank-right" | "back-exterior";
 
 function BrandLogoOnWall({
   kit, widthM, depthM, wallHeightM, platformHeightM, glow, extrusionM, emissive, placement = "back-centre",
@@ -807,7 +961,9 @@ function BrandLogoOnWall({
   if (!url) return null;
   const yCentre = wallHeightM * 0.55 + platformHeightM;
   const accent = kit.palette.neutralLight;
-  const sideTint = kit.palette.primary;
+  // Sign panel contrasts with the logo: a light panel for dark/colour marks,
+  // a dark panel for inverted (white) marks — so the logo always reads.
+  const sideTint = invert ? kit.palette.neutralDark : kit.palette.neutralLight;
   const boost = glow * 0.6;
 
   if (placement === "back-centre") {
@@ -827,6 +983,29 @@ function BrandLogoOnWall({
         invert={invert}
         chroma={chroma}
         maxWidthM={Math.min(widthM * 0.45, 3.2)}
+      />
+    );
+  }
+  if (placement === "back-exterior") {
+    // Bold logo on the back wall's OUTER face — reads the brand from outside
+    // the room. Sits behind the wall, facing away from it.
+    return (
+      <LogoSign
+        url={url}
+        viewBox={kit.logos.primary.viewBox}
+        widthM={widthM}
+        heightM={wallHeightM}
+        anchorZ={-depthM / 2}
+        faceDir={-1}
+        y={yCentre}
+        extrusionM={extrusionM}
+        accent={accent}
+        sideTint={sideTint}
+        emissiveBoost={boost}
+        emissive={emissive}
+        invert={invert}
+        chroma={chroma}
+        maxWidthM={Math.min(widthM * 0.6, 4.5)}
       />
     );
   }
@@ -850,7 +1029,7 @@ function BrandLogoOnWall({
       emissive={emissive}
       invert={invert}
       chroma={chroma}
-      maxWidthM={Math.min(depthM * 0.35, 2.4)}
+      maxWidthM={Math.min(depthM * 0.5, 3.4)}
     />
   );
 }
@@ -902,7 +1081,7 @@ function LogoSignFlank({
  * so the logo reads as ink-on-brand, not as a cut-out into the wall.
  */
 function LogoSign({
-  url, viewBox, widthM, heightM, anchorZ, y, extrusionM, sideTint, maxWidthM, emissive = 1.2, invert = false, chroma = "",
+  url, viewBox, widthM, heightM, anchorZ, y, extrusionM, sideTint, maxWidthM, emissive = 1.2, invert = false, chroma = "", faceDir = 1,
 }: {
   url: string;
   viewBox: [number, number, number, number];
@@ -922,6 +1101,8 @@ function LogoSign({
   chroma?: "white" | "black" | "";
   accent?: string;
   emissiveBoost?: number;
+  /** +1 = sign faces +Z (into the room); -1 = faces -Z (exterior signage). */
+  faceDir?: 1 | -1;
 }) {
   const tex = useLogoTexture(url, invert, chroma);
   const aspect = viewBox[2] / Math.max(viewBox[3], 1);
@@ -929,10 +1110,10 @@ function LogoSign({
   const targetHeightM = Math.min(targetWidthM / aspect, heightM * 0.4);
   const finalWidthM = targetHeightM * aspect;
   const d = Math.max(0.0001, extrusionM);
-  const z = anchorZ + d / 2 + 0.005;
+  const z = anchorZ + faceDir * (d / 2 + 0.005);
 
   return (
-    <group position={[0, y, z]}>
+    <group position={[0, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[finalWidthM, targetHeightM, d]} />
         <meshPhysicalMaterial color={sideTint} roughness={0.5} metalness={0.05} clearcoat={0.25} clearcoatRoughness={0.3} />
@@ -1027,15 +1208,19 @@ function KenBurnsLogoInner({ url, w, h, meshRef, invert = false, chroma = "" }: 
 // ── LED / Video wall ────────────────────────────────────────────────────────
 
 function LedWall({
-  kit, backWallZ, widthM, heightM, yBaseM, brightness,
+  kit, backWallZ, widthM, heightM, roomWidthM, roomHeightM, platformHeightM, brightness,
 }: {
-  kit: BrandKit; backWallZ: number; widthM: number; heightM: number; yBaseM: number; brightness: number;
+  kit: BrandKit; backWallZ: number; widthM: number; heightM: number;
+  roomWidthM: number; roomHeightM: number; platformHeightM: number; brightness: number;
 }) {
-  // Force a 16:9 aspect on whichever axis is the limiting one, so the bezel
-  // matches the YouTube iframe's natural ratio. Take the smaller of the two
-  // requested dims as the constraint.
-  const w169 = Math.min(widthM, heightM * (16 / 9));
-  const h169 = w169 * (9 / 16);
+  // Requested 16:9 panel, then clamped so it always fits inside the back wall.
+  let w169 = Math.min(widthM, heightM * (16 / 9));
+  let h169 = w169 * (9 / 16);
+  const maxW = roomWidthM - 0.5;
+  const maxH = roomHeightM - 0.5;
+  if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
+  if (h169 > maxH) { h169 = maxH; w169 = h169 * (16 / 9); }
+  const bezelD = 0.14;                       // the panel extrudes off the wall
   const videoVolume = useConfig((s) => s.videoVolume);
   const videoMuted = useConfig((s) => s.videoMuted);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -1047,15 +1232,15 @@ function LedWall({
       w.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [videoVolume] }), "*");
     } catch { /* cross-origin throws — ignore */ }
   }, [videoMuted, videoVolume]);
-  // Mount well in front of the back wall (was +0.09 — too close, the wall's
-  // thickness was eating the LED panel; now +0.6 leaves clear daylight).
-  const z = backWallZ + 0.6;
-  const cy = yBaseM + h169 / 2;
+  // Sit just in front of the back wall's inner face (wall thickness 0.08),
+  // proud of it by the bezel's half-depth, and centre the panel on the wall.
+  const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
+  const cy = platformHeightM + roomHeightM * 0.5;
   return (
     <group position={[0, cy, z]}>
-      {/* Outer dark bezel frame — flush with the 16:9 panel */}
+      {/* Outer dark bezel frame — extruded off the back wall */}
       <mesh receiveShadow castShadow>
-        <boxGeometry args={[w169, h169, 0.06]} />
+        <boxGeometry args={[w169, h169, bezelD]} />
         <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
       </mesh>
 
@@ -1063,7 +1248,7 @@ function LedWall({
       {kit.scene?.youtubeId ? (
         <Html
           transform
-          position={[0, 0, 0.035]}
+          position={[0, 0, bezelD / 2 + 0.006]}
           distanceFactor={1}
           occlude="blending"
           style={{ pointerEvents: "auto" }}
@@ -1096,7 +1281,7 @@ function LedWall({
       ) : (
         <>
           {/* Emissive fallback panel — brand colour wash */}
-          <mesh position={[0, 0, 0.034]}>
+          <mesh position={[0, 0, bezelD / 2 + 0.004]}>
             <planeGeometry args={[w169, h169]} />
             <meshStandardMaterial
               color={kit.palette.primary}
@@ -1106,7 +1291,7 @@ function LedWall({
             />
           </mesh>
           {/* Accent vignette — soft secondary colour wash on the bottom */}
-          <mesh position={[0, -h169 * 0.32, 0.035]}>
+          <mesh position={[0, -h169 * 0.32, bezelD / 2 + 0.006]}>
             <planeGeometry args={[w169 * 0.96, h169 * 0.35]} />
             <meshStandardMaterial
               color={kit.palette.accent}
@@ -1408,7 +1593,7 @@ function PendantWithLogo({ shape, widthM, depthM, heightM, yPositionM, extrusion
             availW={f.w}
             availH={f.h}
             extrusionM={extrusionM}
-            sideTint={kit.palette.neutralLight}
+            sideTint={kit.scene?.invertLogo ? kit.palette.neutralDark : kit.palette.neutralLight}
             emissive={emissive}
             invert={!!kit.scene?.invertLogo}
             chroma={kit.scene?.logoChroma ?? ""}

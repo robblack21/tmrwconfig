@@ -34,9 +34,9 @@ useGLTF.preload(CHAIR_VARIANTS.studio);
 const TABLE_HEIGHT_M = 0.74;        // standard boardroom-table height
 const CHAIR_HEIGHT_M = 1.05;        // office chair, floor to top of backrest
 
-// Some chair GLBs face away from +Z in their bind pose. The formation rotates
-// each chair to face the table; flip this if every chair faces outward.
-const CHAIR_FACE_OFFSET = 0;
+// The ny_studio chair GLB faces away from +Z in its bind pose, so the
+// formation rotations land it facing outward — flip it 180° to face the table.
+const CHAIR_FACE_OFFSET = Math.PI;
 
 // ── Table ────────────────────────────────────────────────────────────────────
 // Non-parametric resize: the GLB is recentred, its base pinned to the floor,

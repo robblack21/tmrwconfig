@@ -98,54 +98,62 @@ export function useWallTextures() {
 }
 
 /**
- * Logo as an alpha-mapped decal. Source PNG should have transparent background.
- * `invert` flips RGB (for dark logos on dark walls — Neura).
- * `chromaKey` is "white" or "black" — pixels near that colour are made transparent.
- * Used for JPGs that have a flat background (e.g. Nissan).
+ * Logo as an alpha-mapped decal.
+ *
+ * The source is always rasterised through a 2D canvas onto a transparent
+ * ground — raw SVG textures were uploading with their transparent regions as
+ * opaque black, so logos read as ink-on-black instead of ink-on-brand. Going
+ * through the canvas preserves true alpha and also hosts the optional passes:
+ *   `invert`   — flips RGB (dark marks that need to read on a dark wall).
+ *   `chromaKey`— "white" / "black": pixels near that colour become transparent
+ *                (for JPG logos with a flat baked background, e.g. the TMRW mark).
  */
 export function useLogoTexture(url: string, invert = false, chromaKey: "white" | "black" | "" = "") {
   const tex = useTexture(url);
   return useMemo(() => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    if (!invert && !chromaKey) {
+    const img = tex.image as (HTMLImageElement | HTMLCanvasElement) | undefined;
+    if (!img || typeof document === "undefined") {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
       tex.needsUpdate = true;
       return tex;
     }
-    const img = tex.image as HTMLImageElement | HTMLCanvasElement | undefined;
-    if (!img || !("width" in img) || !img.width) {
-      tex.needsUpdate = true;
-      return tex;
-    }
+    // Rasterise at up to 1024px on the long edge. SVGs ship with a tiny
+    // intrinsic size; drawing scaled keeps them crisp (vector source).
+    const natW = (img as HTMLImageElement).naturalWidth || img.width || 1;
+    const natH = (img as HTMLImageElement).naturalHeight || img.height || 1;
+    const k = 1024 / Math.max(natW, natH, 1);
+    const cw = Math.max(2, Math.round(natW * k));
+    const ch = Math.max(2, Math.round(natH * k));
     const canvas = document.createElement("canvas");
-    canvas.width = img.width;
-    canvas.height = img.height;
+    canvas.width = cw;
+    canvas.height = ch;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return tex;
-    ctx.drawImage(img as CanvasImageSource, 0, 0);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const px = data.data;
-    const keyHi = 235;  // brightness above which white is keyed out
-    const keyLo = 25;   // brightness below which black is keyed out
-    for (let i = 0; i < px.length; i += 4) {
-      const r = px[i]!, g = px[i + 1]!, b = px[i + 2]!;
-      if (chromaKey === "white" && r > keyHi && g > keyHi && b > keyHi) {
-        px[i + 3] = 0;     // make near-white transparent
-        continue;
-      }
-      if (chromaKey === "black" && r < keyLo && g < keyLo && b < keyLo) {
-        px[i + 3] = 0;
-        continue;
-      }
-      if (invert) {
-        px[i]     = 255 - r;
-        px[i + 1] = 255 - g;
-        px[i + 2] = 255 - b;
-      }
+    if (!ctx) {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      tex.needsUpdate = true;
+      return tex;
     }
-    ctx.putImageData(data, 0, 0);
+    ctx.clearRect(0, 0, cw, ch);                       // transparent ground
+    ctx.drawImage(img as CanvasImageSource, 0, 0, cw, ch);
+    if (invert || chromaKey) {
+      const data = ctx.getImageData(0, 0, cw, ch);
+      const px = data.data;
+      const keyHi = 235;  // brightness above which white is keyed out
+      const keyLo = 25;   // brightness below which black is keyed out
+      for (let i = 0; i < px.length; i += 4) {
+        const r = px[i]!, g = px[i + 1]!, b = px[i + 2]!;
+        if (chromaKey === "white" && r > keyHi && g > keyHi && b > keyHi) { px[i + 3] = 0; continue; }
+        if (chromaKey === "black" && r < keyLo && g < keyLo && b < keyLo) { px[i + 3] = 0; continue; }
+        if (invert) {
+          px[i] = 255 - r;
+          px[i + 1] = 255 - g;
+          px[i + 2] = 255 - b;
+        }
+      }
+      ctx.putImageData(data, 0, 0);
+    }
     const out = new THREE.CanvasTexture(canvas);
     out.colorSpace = THREE.SRGBColorSpace;
     out.anisotropy = 8;

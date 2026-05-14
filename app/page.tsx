@@ -6,14 +6,13 @@ import { Slider } from "@/lib/ui/Slider";
 import { Section } from "@/lib/ui/Section";
 import { CameraPanel } from "@/lib/ui/CameraPanel";
 import { ColourPalette } from "@/lib/ui/ColourPalette";
-import { BomSettingsButton } from "@/lib/ui/BomSettings";
 import { SceneCanvas } from "@/lib/scene";
 import { HDRI_OPTIONS } from "@/lib/scene/Scene";
 import { asset } from "@/lib/assetPath";
 import { SceneLoadingOverlay } from "@/lib/scene/SceneReveal";
 import { HomeView } from "@/lib/views/HomeView";
-import { deriveBom } from "@/lib/bom/derive";
-import { openInvoiceWindow } from "@/lib/bom/invoice";
+import { deriveInventory, prettyAssetName } from "@/lib/bom/derive";
+import type { InventoryGroup } from "@/lib/bom/derive";
 import { useConfig, useBrandKit, useTierBounds } from "@/lib/store/configStore";
 import { seedBrandKitList } from "@/lib/fixtures/brandKits";
 import type { PendantShape, SizeTier } from "@/lib/schemas";
@@ -44,9 +43,9 @@ export default function Page() {
     exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
-    bomRateOverrides, hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
+    hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
     highDpr, floorStyle, radiatingRadiusM, radiatingYOffsetM, radiatingColor, renderMode,
-    maximiseReuse, apply,
+    apply,
   } = useConfig();
   const kit = useBrandKit();
   const tierBounds = useTierBounds();
@@ -64,18 +63,16 @@ export default function Page() {
   const wallHeightMax = Math.min(4.5, trussTopM - 0.5);
   const trussTopMin = Math.max(3.0, wallHeightM + 0.5);
 
-  // Live BOM — quantities derived from config, rates overridable in settings modal.
-  const bom = deriveBom(
-    { widthM, depthM, wallHeightM, trussTopM, platformHeightM,
-      pendantEnabled, pendantShape, pendantWidthM, pendantDepthM,
-      ledWallEnabled, ledWallWidthM, ledWallHeightM, plantCount,
-      sofaCount, noDefaultDressing: !!kit.scene?.noDefaultDressing },
-    bomRateOverrides
+  // Live inventory — a plain list of what's in the room, derived from config.
+  const inventory = deriveInventory({
+    windowsEnabled, ceilingEnabled, ledWallEnabled, pendantEnabled, pendantShape,
+    chairCount, tableVariant, chairVariant, plantCount, sofaCount,
+    heroProps: (kit.scene?.props as Array<{ url?: string }> | undefined) ?? [],
+  });
+  const totalItems = inventory.reduce(
+    (sum, g) => sum + g.nodes.reduce((n, x) => n + (x.count ?? 1), 0),
+    0,
   );
-  const areaM2 = widthM * depthM;
-  const totalLow = bom.grandLow;
-  const totalHigh = bom.grandHigh;
-  const reuse = maximiseReuse ? 86 : !pendantEnabled ? 80 : pendantShape === "ring" ? 68 : pendantShape === "squircle" ? 74 : 78;
 
   const [bomExpanded, setBomExpanded] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -281,8 +278,18 @@ export default function Page() {
           <PillRow
             options={[
               { value: "rectangle", label: "Rect" },
-              { value: "corner", label: "Corner" },
-              { value: "L", label: "L-shape" },
+              { value: "L",         label: "L" },
+              { value: "invertedL", label: "Inv L" },
+            ]}
+            value={shape}
+            onSelect={(v) => apply({ type: "footprint.setShape", shape: v as typeof shape })}
+          />
+          <PillRow
+            className="mt-1"
+            options={[
+              { value: "U",        label: "U" },
+              { value: "circular", label: "Round" },
+              { value: "pavilion", label: "Atrium" },
             ]}
             value={shape}
             onSelect={(v) => apply({ type: "footprint.setShape", shape: v as typeof shape })}
@@ -596,15 +603,17 @@ export default function Page() {
         <Section label="Custom props" defaultOpen={false}>
           {Array.isArray(kit.scene?.props) && kit.scene.props.length > 0 ? (
             <div className="flex flex-col gap-0.5">
-              {(kit.scene.props as Array<{ kind?: string }>).map((p, i) => (
-                <div key={i} className="t-label flex items-center justify-between">
-                  <span className="truncate">{p.kind ?? "—"}</span>
-                  <span className="text-[0.55rem] opacity-50">#{i + 1}</span>
+              {(kit.scene.props as Array<{ kind?: string; url?: string }>).map((p, i) => (
+                <div key={i} className="t-label flex items-center justify-between gap-2">
+                  <span className="truncate" title={p.url ? prettyAssetName(p.url) : p.kind}>
+                    {p.url ? prettyAssetName(p.url) : (p.kind ?? "—")}
+                  </span>
+                  <span className="text-[0.55rem] opacity-50 flex-shrink-0">#{i + 1}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="t-label opacity-60">No kit-specific props.</div>
+            <div className="t-label opacity-60">No kit-specific props for this room.</div>
           )}
         </Section>
 
@@ -612,29 +621,20 @@ export default function Page() {
             finish moved back to the left dock too. */}
       </Card>
 
-      {/* BOM panel — bottom right, resizable */}
+      {/* Inventory panel — bottom right. A plain list of what's in the room
+          plus each item's addressable subnodes. No costs. */}
       <Card
         className="ui-overlay absolute right-3 bottom-3 flex flex-col panel-glass"
         radius="md"
         variant="panel"
         style={bomExpanded
-          ? { width: "min(880px, calc(100vw - 24px))", height: "calc(100vh - 80px)" }
+          ? { width: "min(420px, calc(100vw - 24px))", height: "calc(100vh - 80px)" }
           : { width: "240px", height: "188px" }}
       >
-        {/* Resize handle removed — expanded BOM now fills the viewport
-            (height: calc(100vh - 80px)) and shouldn't be resizable. */}
         <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between border-b border-[color:var(--color-border-soft)]">
-          <span className="t-label">Bill of materials</span>
-          <div className="flex items-center gap-0.5">
-            <BomSettingsButton />
-            <button
-              onClick={() => openInvoiceWindow(bom.lines, bom.byCategory, bom.grandLow, bom.grandHigh, { client: kit.name, areaM2, reuse })}
-              className="px-2 h-5 rounded-[4px] hover:bg-[color:var(--color-surface-sub)] grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-accent)] transition-colors text-[0.6rem] uppercase tracking-wider"
-              aria-label="Generate invoice"
-              title="Open a printable invoice in a new tab"
-            >
-              Invoice
-            </button>
+          <span className="t-label">Inventory</span>
+          <div className="flex items-center gap-1.5">
+            <span className="t-num text-[0.6rem] text-[color:var(--color-text-soft)]">{totalItems} items</span>
             <button
               onClick={() => setBomExpanded((v) => !v)}
               className="w-5 h-5 rounded-[4px] hover:bg-[color:var(--color-surface-sub)] grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)] transition-colors"
@@ -648,106 +648,62 @@ export default function Page() {
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 py-2 scroll-pretty">
-          {bomExpanded ? <BomSpreadsheet bom={bom} /> : <BomCompact bom={bom} />}
-          <div className="pt-2 mt-2 border-t border-[color:var(--color-border-soft)] flex items-center justify-between">
-            <span className="t-label">Reuse</span>
-            <div className="flex items-center gap-2">
-              <div className="w-16 h-[3px] rounded-full neumorph-inset overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: kit.palette.accent }}
-                  animate={{ width: `${reuse}%` }}
-                  transition={{ type: "spring", stiffness: 320, damping: 28 }}
-                />
-              </div>
-              <span className="t-num" style={{ color: kit.palette.accent }}>{reuse}%</span>
-            </div>
-          </div>
-          <button
-            onClick={() => apply({ type: "brandKit.toggleMaximiseReuse", value: !maximiseReuse })}
-            className={
-              "mt-1 w-full h-6 rounded-[6px] text-[0.7rem] transition-all " +
-              (maximiseReuse
-                ? "neumorph-inset text-[color:var(--color-accent)]"
-                : "neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]")
-            }
-          >
-            {maximiseReuse ? "✓ optimise" : "optimise"}
-          </button>
+          <InventoryView groups={inventory} expanded={bomExpanded} />
         </div>
 
-        <div className="px-3 py-2 border-t border-[color:var(--color-border-soft)]">
-          <div className="flex items-baseline justify-between">
-            <span className="t-row">Total</span>
-            <span className="t-num">€{(totalLow / 1000).toFixed(1)}k–{(totalHigh / 1000).toFixed(1)}k</span>
-          </div>
-          <div className="flex items-baseline justify-between mt-0.5 t-label">
-            <span>{Math.round(areaM2)} m² · {kit.name}</span>
-            <span>33% margin</span>
-          </div>
+        <div className="px-3 py-2 border-t border-[color:var(--color-border-soft)] flex items-baseline justify-between">
+          <span className="t-row">{kit.name}</span>
+          <span className="t-label">{Math.round(widthM * depthM)} m² · {totalItems} items</span>
         </div>
       </Card>
     </main>
   );
 }
 
-// ── BOM views (resolved-line driven) ─────────────────────────────────────────
+// ── Inventory view ───────────────────────────────────────────────────────────
 
-type Bom = ReturnType<typeof deriveBom>;
-
-const CATEGORY_ORDER: { id: "materials" | "labour" | "services" | "logistics"; label: string }[] = [
-  { id: "materials", label: "Materials" },
-  { id: "labour",    label: "Labour" },
-  { id: "services",  label: "Services" },
-  { id: "logistics", label: "Logistics" },
-];
-
-function BomCompact({ bom }: { bom: Bom }) {
+function InventoryView({ groups, expanded }: { groups: InventoryGroup[]; expanded: boolean }) {
+  if (!expanded) {
+    return (
+      <div className="space-y-1.5">
+        {groups.map((g) => {
+          const total = g.nodes.reduce((n, x) => n + (x.count ?? 1), 0);
+          return (
+            <div key={g.id} className="flex items-baseline justify-between">
+              <span className="t-label">{g.label}</span>
+              <span className="t-num">{total}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
-    <div className="space-y-2">
-      {CATEGORY_ORDER.map((c) => (
-        <div key={c.id} className="flex items-baseline justify-between">
-          <span className="t-label">{c.label}</span>
-          <span className="t-num">€{bom.byCategory[c.id].toLocaleString("en-DE")}</span>
+    <div className="space-y-3.5">
+      {groups.map((g) => (
+        <div key={g.id}>
+          <div className="t-label uppercase tracking-wider mb-1 text-[color:var(--color-accent)]">{g.label}</div>
+          <div className="space-y-1.5">
+            {g.nodes.map((n, i) => (
+              <div key={i}>
+                <div className="flex items-baseline justify-between t-row">
+                  <span className="truncate pr-2" title={n.label}>{n.label}</span>
+                  {n.count != null && (
+                    <span className="t-num text-[color:var(--color-text-soft)] flex-shrink-0">×{n.count}</span>
+                  )}
+                </div>
+                {n.subnodes && n.subnodes.length > 0 && (
+                  <div className="pl-3 mt-0.5 flex flex-wrap gap-x-2.5 gap-y-0.5">
+                    {n.subnodes.map((s, j) => (
+                      <span key={j} className="t-label text-[0.62rem] opacity-70">· {s}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function BomSpreadsheet({ bom }: { bom: Bom }) {
-  return (
-    <div className="t-row space-y-3">
-      <div className="grid grid-cols-[1fr_28px_28px_60px_64px] gap-1 px-1 pb-1 border-b border-[color:var(--color-border-soft)] t-label">
-        <span>Item</span>
-        <span className="text-right">Qty</span>
-        <span className="text-right">U.</span>
-        <span className="text-right">Rate</span>
-        <span className="text-right">Total</span>
-      </div>
-      {CATEGORY_ORDER.map((c) => {
-        const lines = bom.lines.filter((l) => l.category === c.id && l.qty > 0);
-        if (lines.length === 0) return null;
-        return (
-          <div key={c.id}>
-            <div className="flex items-baseline justify-between px-1 mb-1">
-              <span className="t-label">{c.label}</span>
-              <span className="t-num text-[color:var(--color-text-soft)]">€{bom.byCategory[c.id].toLocaleString("en-DE")}</span>
-            </div>
-            <div className="space-y-[2px]">
-              {lines.map((l) => (
-                <div key={l.id} className="grid grid-cols-[1fr_28px_28px_60px_64px] gap-1 px-1 py-[2px] hover:bg-[color:var(--color-surface-sub)]/60 rounded-[3px]">
-                  <span className="truncate" title={l.label}>{l.label}</span>
-                  <span className="t-num text-right">{Number.isInteger(l.qty) ? l.qty : l.qty.toFixed(1)}</span>
-                  <span className="t-label text-right">{l.unit}</span>
-                  <span className="t-num text-right">€{l.rateResolved}</span>
-                  <span className="t-num text-right">€{l.total.toLocaleString("en-DE")}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

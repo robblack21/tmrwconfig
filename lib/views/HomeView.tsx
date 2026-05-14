@@ -17,7 +17,7 @@ export function HomeView({ onChoose }: { onChoose: (kitId: string) => void }) {
         <img
           src={asset("/logos/tmrwwhite.jpg")}
           alt="TMRW Foundation"
-          className="h-16 w-auto mb-3"
+          className="h-40 w-auto -ml-2 mb-2"
           style={{ mixBlendMode: "multiply" }}
         />
         <h1 className="text-[2.2rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>

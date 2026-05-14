@@ -177,25 +177,25 @@ const mercedes: BrandKit = {
   scene: { youtubeId: "HLy2IXCrpYw" },
 };
 
-// ── Meta ─────────────────────────────────────────────────────────────────────
-// NOTE: /logos/Meta_logo.svg + /components/brand-hero/meta/ are expected but
-// not yet on disk (the asset folders currently carry samsung/microsoft). The
-// kit references the canonical paths so it lights up once those land.
-const meta: BrandKit = {
-  id: "brand.meta",
-  name: "Meta",
-  palette: { primary: "#0668E1", secondary: "#FFFFFF", accent: "#00C6FF", neutralLight: "#EBF2FE", neutralDark: "#0A1F44" },
-  derivation: "complementary",
-  logos: logoSet("/logos/Meta_logo.svg", [0, 0, 800, 160]),
+// ── Samsung ──────────────────────────────────────────────────────────────────
+// NOTE: youtubeId is a placeholder — Samsung needs its own brand video. The
+// brand-hero/samsung/ folder is currently empty so the room renders no hero
+// props yet.
+const samsung: BrandKit = {
+  id: "brand.samsung",
+  name: "Samsung",
+  palette: { primary: "#1428A0", secondary: "#FFFFFF", accent: "#1428A0", neutralLight: "#EAF0FF", neutralDark: "#0A1633" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Samsung_logo.svg", [0, 0, 7051, 1080]),
   typography: fonts("Inter", "Inter"),
   motifs: [],
   phrases: [
-    { de: "Das Metaverse ist da.", en: "The metaverse is here." },
-    { de: "Menschen verbinden.", en: "Bringing people together." },
+    { de: "Do what you can't.", en: "Do what you can't." },
+    { de: "Inspire the world, create the future.", en: "Inspire the world, create the future." },
   ],
   rules: RULES,
   intents: backWallIntent("primary"),
-  pendant: { preferredShape: "innerCurve", alternates: ["innerCurve", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
   scene: { youtubeId: "LIvpjFZwx4Q" },
 };
 
@@ -340,13 +340,13 @@ export const tmrwBlank: BrandKit = {
 // In-app brand picker grid — order is the homepage / dock order.
 export const seedBrandKitList: BrandKit[] = [
   apple, bmw, disney, ferrari, google, louisvuitton, mercedes,
-  meta, netflix, nike, nvidia, rolex, tesla, tmrw,
+  samsung, netflix, nike, nvidia, rolex, tesla, tmrw,
 ];
 
 // Convenience map (blank template included).
 export const seedBrandKits = {
   tmrwBlank, apple, bmw, disney, ferrari, google, louisvuitton, mercedes,
-  meta, netflix, nike, nvidia, rolex, tesla, tmrw,
+  samsung, netflix, nike, nvidia, rolex, tesla, tmrw,
 };
 
 // Lookup including the blank template (not part of the picker grid).
@@ -417,6 +417,13 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
     { file: "invicta_watch.glb",  heightM: 0.34, plinth: true },
   ],
   "brand.tesla": [{ file: "tesla_2018_model_3.glb", heightM: 1.40 }],
+  "brand.louisvuitton": [
+    { file: "louis_vuitton_gold_logo.glb",               heightM: 0.55, plinth: true },
+    { file: "luxury_monogram_leather_messenger_bag.glb", heightM: 0.45, plinth: true },
+    { file: "glasses-mesh_louis_vuitton.glb",            heightM: 0.16, plinth: true },
+    { file: "louis_vuitton_contrast_trim.glb",           heightM: 0.50, plinth: true },
+  ],
+  "brand.tmrw": [{ file: "earth__terra_-_downloadable_model.glb", heightM: 1.30 }],
 };
 
 function buildHeroProps(slug: string, specs: HeroSpec[]) {

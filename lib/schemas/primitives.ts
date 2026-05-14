@@ -18,7 +18,9 @@ export type Bilingual = z.infer<typeof Bilingual>;
 
 // ── Stand shape / tier ─────────────────────────────────────────────────────────
 
-export const FootprintShape = z.enum(["rectangle", "corner", "L"]);
+export const FootprintShape = z.enum([
+  "rectangle", "corner", "L", "invertedL", "U", "circular", "pavilion",
+]);
 export type FootprintShape = z.infer<typeof FootprintShape>;
 
 export const SizeTier = z.enum(["S", "M", "L"]);
@@ -42,6 +44,28 @@ export const standardSizeTiers = {
     S: { widthM: { min: 4, max: 5, default: 4 }, depthM: { min: 4, max: 5, default: 4 }, areaBandM2: [28, 48] as const },
     M: { widthM: { min: 8, max: 11, default: 9 }, depthM: { min: 8, max: 11, default: 9 }, areaBandM2: [48, 112] as const },
     L: { widthM: { min: 13, max: 40, default: 14 }, depthM: { min: 13, max: 20, default: 14 }, areaBandM2: [112, 800] as const },
+  },
+  // The remaining shapes all fit inside a width × depth bounding box, so they
+  // reuse the rectangle tier bounds.
+  invertedL: {
+    S: { widthM: { min: 6, max: 10, default: 8 }, depthM: { min: 6, max: 8, default: 6 }, areaBandM2: [36, 80] as const },
+    M: { widthM: { min: 10, max: 12, default: 12 }, depthM: { min: 8, max: 10, default: 8 }, areaBandM2: [80, 144] as const },
+    L: { widthM: { min: 14, max: 40, default: 16 }, depthM: { min: 10, max: 20, default: 12 }, areaBandM2: [144, 800] as const },
+  },
+  U: {
+    S: { widthM: { min: 6, max: 10, default: 8 }, depthM: { min: 6, max: 8, default: 6 }, areaBandM2: [36, 80] as const },
+    M: { widthM: { min: 10, max: 12, default: 12 }, depthM: { min: 8, max: 10, default: 8 }, areaBandM2: [80, 144] as const },
+    L: { widthM: { min: 14, max: 40, default: 16 }, depthM: { min: 10, max: 20, default: 12 }, areaBandM2: [144, 800] as const },
+  },
+  circular: {
+    S: { widthM: { min: 6, max: 9, default: 8 }, depthM: { min: 6, max: 9, default: 8 }, areaBandM2: [28, 64] as const },
+    M: { widthM: { min: 9, max: 12, default: 10 }, depthM: { min: 9, max: 12, default: 10 }, areaBandM2: [64, 113] as const },
+    L: { widthM: { min: 12, max: 30, default: 14 }, depthM: { min: 12, max: 30, default: 14 }, areaBandM2: [113, 700] as const },
+  },
+  pavilion: {
+    S: { widthM: { min: 8, max: 11, default: 10 }, depthM: { min: 8, max: 11, default: 9 }, areaBandM2: [64, 121] as const },
+    M: { widthM: { min: 12, max: 16, default: 14 }, depthM: { min: 10, max: 13, default: 11 }, areaBandM2: [120, 208] as const },
+    L: { widthM: { min: 18, max: 40, default: 20 }, depthM: { min: 12, max: 22, default: 14 }, areaBandM2: [216, 880] as const },
   },
 } as const;
 
