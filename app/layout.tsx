@@ -10,8 +10,8 @@ const tektur = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "ET Global — Brand Space Configurator",
-  description: "Design-to-cost configurator for ET Global trade-fair stands.",
+  title: "TMRW Foundation — Boardroom Configurator",
+  description: "Configure branded office and boardroom spaces — walls, windows, ceiling, furniture.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

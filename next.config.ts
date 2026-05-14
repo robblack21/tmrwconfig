@@ -8,7 +8,7 @@ import type { NextConfig } from "next";
 // runtime code via NEXT_PUBLIC_BASE_PATH so the asset() helper can prefix
 // hard-coded `/glb/…`, `/logos/…` paths that Next doesn't rewrite for us.
 const isProd = process.env.NODE_ENV === "production";
-const basePath = isProd ? "/etglobal" : "";
+const basePath = isProd ? "/tmrwconfig" : "";
 
 const config: NextConfig = {
   reactStrictMode: true,

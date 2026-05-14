@@ -41,6 +41,14 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.setCircularScreen"), value: z.boolean() }),
   z.object({ type: z.literal("scene.setWraparoundScreen"), value: z.boolean() }),
 
+  // Boardroom geometry
+  z.object({ type: z.literal("room.setWindowsEnabled"), value: z.boolean() }),
+  z.object({ type: z.literal("room.setCeilingEnabled"), value: z.boolean() }),
+  z.object({ type: z.literal("room.setWindowSill"), value: z.number() }),
+  z.object({ type: z.literal("boardroom.setTableLength"), value: z.number() }),
+  z.object({ type: z.literal("boardroom.setTableWidth"), value: z.number() }),
+  z.object({ type: z.literal("boardroom.setChairCount"), value: z.number().int() }),
+
   z.object({ type: z.literal("ledWall.setEnabled"), enabled: z.boolean() }),
   z.object({ type: z.literal("ledWall.setWidth"), value: z.number() }),
   z.object({ type: z.literal("ledWall.setHeight"), value: z.number() }),

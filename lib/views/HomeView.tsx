@@ -6,8 +6,8 @@ import { asset } from "@/lib/assetPath";
 
 /**
  * Brand homepage — a grid of squircle tiles. The first tile is "Create new"
- * (uses ET Global as a template and starts blank); the rest are the seeded
- * brand kits. Picking one fires `onChoose(kitId)`.
+ * (starts from a blank TMRW template); the rest are the seeded brand kits.
+ * Picking one fires `onChoose(kitId)`.
  */
 export function HomeView({ onChoose }: { onChoose: (kitId: string) => void }) {
   return (
@@ -15,15 +15,16 @@ export function HomeView({ onChoose }: { onChoose: (kitId: string) => void }) {
       <div className="max-w-[1200px] mx-auto px-8 py-12">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={asset("/logos/etgloballogotrans.webp")}
-          alt="ET Global"
-          className="h-10 w-auto mb-2"
+          src={asset("/logos/tmrwwhite.jpg")}
+          alt="TMRW Foundation"
+          className="h-16 w-auto mb-3"
+          style={{ mixBlendMode: "multiply" }}
         />
         <h1 className="text-[2.2rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>
-          Brand space configurator
+          Boardroom configurator
         </h1>
         <p className="t-label mb-10 max-w-xl">
-          Pick a brand to load its stand template, or start fresh from the ET Global blank.
+          Pick a brand to load its boardroom, or start fresh from a blank TMRW room.
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-5">
@@ -59,7 +60,7 @@ function CreateNewTile({ onClick }: { onClick: () => void }) {
             Create new brand
           </div>
           <div className="t-label mt-1">
-            From ET Global template
+            From a blank TMRW room
           </div>
         </div>
       </div>
@@ -81,18 +82,19 @@ function BrandTile({ kit, onClick }: { kit: BrandKit; onClick: () => void }) {
       {/* Top — accent strip */}
       <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: kit.palette.accent }} />
 
-      {/* Logo container */}
-      <div className="absolute inset-x-6 top-1/2 -translate-y-1/2 flex items-center justify-center">
+      {/* Logo container — white card so any logo colour reads on the brand tile */}
+      <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 flex items-center justify-center">
         {rasterUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={rasterUrl}
-            alt={kit.name}
-            className="max-h-[40%] max-w-[80%] w-auto h-auto object-contain"
-            style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.25))" }}
-          />
+          <div className="w-full aspect-[3/2] rounded-2xl bg-white grid place-items-center px-4 py-3 shadow-[0_4px_16px_rgba(0,0,0,0.25)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={rasterUrl}
+              alt={kit.name}
+              className="max-h-full max-w-full w-auto h-auto object-contain"
+            />
+          </div>
         ) : (
-          <span className="text-2xl text-white">{kit.name}</span>
+          <span className="text-2xl" style={{ color: kit.palette.neutralLight }}>{kit.name}</span>
         )}
       </div>
 

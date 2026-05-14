@@ -23,7 +23,7 @@ rm -rf .git
 git init -q
 git checkout -q -b gh-pages
 git add -A
-git -c user.email=deploy@etglobal -c user.name=deploy commit -q -m "deploy: $SHA"
+git -c user.email=deploy@tmrwconfig -c user.name=deploy commit -q -m "deploy: $SHA"
 git remote add origin "$REMOTE_URL"
 git push -f origin gh-pages
-echo "Deployed $SHA to gh-pages → https://robblack21.github.io/etglobal/"
+echo "Deployed $SHA to gh-pages → $REMOTE_URL"

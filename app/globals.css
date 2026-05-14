@@ -13,7 +13,7 @@
   --color-hi-light:     rgb(255 255 255 / 0.80);
   --color-hi-shadow:    rgb(0 0 0 / 0.07);
 
-  --color-accent:       #e57a2a;          /* overridden per brand kit */
+  --color-accent:       #3d7eff;          /* TMRW default — overridden per brand kit */
   --color-glass-bg:     rgb(244 242 237 / 0.62);
 
   --radius-sm:  4px;

@@ -41,6 +41,13 @@ export type ConfigState = {
   glassBalconyEnabled: boolean;       // half-height platform + glass rail
   circularScreenEnabled: boolean;     // brand-coloured disc media element on back wall
   wraparoundScreenEnabled: boolean;   // curved LED wall wrapping the back of the booth
+  // Boardroom geometry
+  windowsEnabled: boolean;            // ribbon windows on the side walls (glass shading)
+  ceilingEnabled: boolean;            // enclosed ceiling slab (off = open / exhibition look)
+  windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
+  tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
+  tableWidthM: number;                // 1.0..3.0 — boardroom table width
+  chairCount: number;                 // 0..16 — chairs arranged around the table, facing in
   // LED / video wall
   ledWallEnabled: boolean;
   ledWallWidthM: number;        // 2.0..14.0
@@ -137,6 +144,12 @@ export const useConfig = create<ConfigState>((set, get) => ({
   glassBalconyEnabled: false,
   circularScreenEnabled: false,
   wraparoundScreenEnabled: false,
+  windowsEnabled: true,
+  ceilingEnabled: true,
+  windowSillM: 0.95,
+  tableLengthM: 3.6,
+  tableWidthM: 1.4,
+  chairCount: 8,
   ledWallEnabled: true,
   ledWallWidthM: 6.0,           // sane back-wall size
   ledWallHeightM: 3.375,        // 6 / 3.375 = 16:9
@@ -166,7 +179,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   logoGlow: 1.0,
   logoExtrusionM: 0.15,
   logoEmissive: 1.2,
-  sofaCount: 2,
+  sofaCount: 0,
   coffeeTableVariant: "avarta",
   standingDisplayCount: 2,
   platformHeightM: 0.20,
@@ -264,6 +277,12 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "scene.setGlassBalcony":      { set({ glassBalconyEnabled: intent.value }); break; }
       case "scene.setCircularScreen":    { set({ circularScreenEnabled: intent.value }); break; }
       case "scene.setWraparoundScreen":  { set({ wraparoundScreenEnabled: intent.value }); break; }
+      case "room.setWindowsEnabled":     { set({ windowsEnabled: intent.value }); break; }
+      case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
+      case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
+      case "boardroom.setTableLength":   { set({ tableLengthM: clamp(intent.value, 2.0, 8.0) }); break; }
+      case "boardroom.setTableWidth":    { set({ tableWidthM: clamp(intent.value, 1.0, 3.0) }); break; }
+      case "boardroom.setChairCount":    { set({ chairCount: Math.round(clamp(intent.value, 0, 16)) }); break; }
       case "ledWall.setEnabled": {
         set({ ledWallEnabled: intent.enabled });
         break;
@@ -316,9 +335,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
         if (kit.scene?.defaultDepthM !== undefined) {
           patch.depthM = clamp(kit.scene.defaultDepthM, b.depthM.min, b.depthM.max);
         }
-        // Pendant colour override comes from the kit (ET Global wants off-
-        // white pendants instead of graphite primary, etc.). Falls back to
-        // the kit primary if unset.
+        // Pendant colour override comes from the kit when it declares one.
+        // Falls back to the kit primary if unset.
         const co = { ...get().colourOverrides };
         co.pendant = kit.scene?.defaultPendantColor ?? null;
         patch.colourOverrides = co;
@@ -380,6 +398,12 @@ export const useConfig = create<ConfigState>((set, get) => ({
           trussTopM: 5.5,
           platformHeightM: 0.2,
           pendantHeightM: 1.0,
+          windowsEnabled: true,
+          ceilingEnabled: true,
+          windowSillM: 0.95,
+          tableLengthM: 3.6,
+          tableWidthM: 1.4,
+          chairCount: 8,
         });
         break;
       }

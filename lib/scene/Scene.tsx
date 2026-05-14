@@ -1,13 +1,12 @@
 "use client";
 import { Suspense, useMemo, useEffect, useRef } from "react";
-import { Environment, OrbitControls, ContactShadows, RoundedBox, Html, useTexture } from "@react-three/drei";
+import { Environment, OrbitControls, ContactShadows, RoundedBox, Html } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useConfig, useBrandKit } from "@/lib/store/configStore";
 import type { PendantShape, FootprintShape } from "@/lib/schemas";
-import { TvOnStand, Counter, Sofa, CoffeeTable, Plant, JewelryDisplay } from "./Props";
+import { Sofa, CoffeeTable, Plant } from "./Props";
 import { useFloorTextures, useWallTextures, useParquetTextures, useLogoTexture } from "./Textures";
-import { useBlackQuadratedTextures, StandingDisplays, ChronographHero, FairyLights, NissanPatrolHero, StillForklift } from "./KitProps";
 import { useWallGraphic, useMotifTexture } from "./WallGraphics";
 import { LightShafts, LightboxLogo, RadiatingRig, GlassBalcony, CircularScreen, WraparoundScreen } from "./HeroElements";
 import { TimedReveal } from "./SceneReveal";
@@ -90,6 +89,12 @@ export function Scene() {
   const coffeeTableVariant = useConfig((s) => s.coffeeTableVariant);
   const standingDisplayCount = useConfig((s) => s.standingDisplayCount);
   const platformHeightM = useConfig((s) => s.platformHeightM);
+  const windowsEnabled = useConfig((s) => s.windowsEnabled);
+  const ceilingEnabled = useConfig((s) => s.ceilingEnabled);
+  const windowSillM = useConfig((s) => s.windowSillM);
+  const tableLengthM = useConfig((s) => s.tableLengthM);
+  const tableWidthM = useConfig((s) => s.tableWidthM);
+  const chairCount = useConfig((s) => s.chairCount);
   const colourOverrides = useConfig((s) => s.colourOverrides);
   const shape = useConfig((s) => s.shape);
   const exposure = useConfig((s) => s.exposure);
@@ -191,7 +196,7 @@ export function Scene() {
 
       <TimedReveal delay={150}>
         <Suspense fallback={null}>
-          <Walls
+          <Room
             shape={shape}
             widthM={widthM}
             depthM={depthM}
@@ -201,10 +206,24 @@ export function Scene() {
             kitAccent={kit.palette.accent}
             backWallGraphic={kit.scene?.wallGraphic}
             backWallMotif={kit.scene?.wallMotif}
-            useQuadratedTexture={kit.id === "brand.swisskrono"}
+            windowsEnabled={windowsEnabled}
+            windowSillM={windowSillM}
           />
         </Suspense>
       </TimedReveal>
+
+      {/* Corner pillars — the structural columns the room is framed on. */}
+      <TimedReveal delay={200}>
+        <CornerPillars widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} color={kit.palette.neutralDark} />
+      </TimedReveal>
+
+      {/* Ceiling slab — enclosed boardroom. Toggle off for an open / exhibition
+          look (which also reveals the truss canopy + pendant above). */}
+      {ceilingEnabled && (
+        <TimedReveal delay={250}>
+          <Ceiling widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} accent={kit.palette.accent} />
+        </TimedReveal>
+      )}
 
       <Suspense fallback={null}>
         <BrandLogoOnWall
@@ -303,217 +322,62 @@ export function Scene() {
         <WraparoundScreen kit={kit} widthM={widthM} depthM={depthM} heightM={wallHeightM * 0.8} yBaseM={platformHeightM + 0.4} />
       )}
 
-      {/* Brand-specific hero props */}
-      {kit.id === "brand.lecole" && (
-        <group position={[0, platformHeightM, -depthM / 2 + 1.5]}>
-          {/* Sideboard — slim dark anthracite plinth.
-              Box geometry is centred at its mesh origin → lift Y by half the
-              plinth height so its bottom sits flush with the platform. */}
-          <mesh position={[0, 0.475, 0]} castShadow receiveShadow>
-            <boxGeometry args={[1.6, 0.95, 0.55]} />
-            <meshPhysicalMaterial color="#1a1410" roughness={0.42} metalness={0.06} clearcoat={0.35} />
-          </mesh>
-          {/* Brushed-brass top edge */}
-          <mesh position={[0, 0.955, 0]}>
-            <boxGeometry args={[1.62, 0.015, 0.57]} />
-            <meshStandardMaterial color="#C8A45C" roughness={0.32} metalness={0.85} />
-          </mesh>
-          {/* Jewellery glb on top, scaled half */}
-          <Suspense fallback={null}>
-            <JewelryDisplay position={[0, 0.97, 0]} heightM={0.6} />
-          </Suspense>
-        </group>
-      )}
-
-      {/* TAG Heuer — chronograph hero on a taller plinth so the watch reads
-          at eye line. Plinth lifted to ~1.4m, watch enlarged. */}
-      {kit.id === "brand.tagheuer" && (
-        <group position={[0, platformHeightM, -depthM / 2 + 1.5]}>
-          <mesh castShadow receiveShadow position={[0, 0.7, 0]}>
-            <boxGeometry args={[1.4, 1.4, 0.55]} />
-            <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.5} clearcoatRoughness={0.15} />
-          </mesh>
-          {/* Brushed steel top */}
-          <mesh position={[0, 1.4 + 0.0075, 0]}>
-            <boxGeometry args={[1.42, 0.015, 0.57]} />
-            <meshStandardMaterial color="#c8ccd2" roughness={0.28} metalness={0.95} />
-          </mesh>
-          <Suspense fallback={null}>
-            <ChronographHero position={[0, 1.41, 0]} heightM={0.85} />
-          </Suspense>
-          {/* Warm rim light */}
-          <pointLight position={[0, 2.1, 0.4]} intensity={3} distance={2.4} decay={1.4} color={kit.palette.accent} />
-        </group>
-      )}
-
-      {/* Nissan — Patrol parked centre-LEFT, facing camera (rotated 180° vs
-          the previous render). */}
-      {kit.id === "brand.nissan" && (
-        <Suspense fallback={null}>
-          <NissanPatrolHero position={[-2.5, platformHeightM, 0]} rotationY={0} heightM={2.1} />
-        </Suspense>
-      )}
-
-      {/* Still — pair of forklifts further apart (±4 m), each rotated an
-          extra 45° so they sit at an angle to the camera rather than face on. */}
-      {kit.id === "brand.still" && (
-        <Suspense fallback={null}>
-          <StillForklift position={[-4.0, platformHeightM, 0.5]} rotationY={Math.PI / 2 + Math.PI / 4}  heightM={2.0} />
-          <StillForklift position={[ 4.0, platformHeightM, 0.5]} rotationY={-Math.PI / 2 + Math.PI / 4} heightM={2.0} />
-        </Suspense>
-      )}
-
-      {/* NRWA — fairy lights strung beneath the tent canopy + a Skip-the-Bin
-          mascot banner hanging from the canopy ridge. */}
-      {kit.id === "brand.nrwa" && (
-        <>
-          <FairyLights
-            widthM={widthM + 0.6}
-            depthM={depthM + 0.1}
-            heightM={wallHeightM + 0.5 + platformHeightM}
-            count={42}
-          />
-          <Suspense fallback={null}>
-            <NrwaHangingBanner
-              y={platformHeightM + wallHeightM * 0.78}
-              z={depthM / 4}
-              widthM={1.8}
-              heightM={1.2}
-            />
-          </Suspense>
-        </>
-      )}
-
-      {/* Per-kit prop manifest (e.g. Swiss Krono shelf+cubes+plantwall+towers) */}
+      {/* Per-kit brand-hero assets — the GLBs in /components/brand-hero/<slug>/. */}
       <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM }} />
 
       {/* Camera sync — applies FOV + preset moves + surfaces live readouts */}
       <CameraSync />
 
-      {/* Default booth dressing — counter, vitrines, freestanding TVs, sofas
-          and plants. Suppressed when a kit brings its own bespoke set
-          (e.g. NWRA campsite, Lufthansa open lounge). */}
+      {/* Boardroom furnishing — the table + chairs are the centrepiece; plants
+          dress the corners; sofas are optional breakout seating. Suppressed
+          when a kit brings its own bespoke set. */}
       {!kit.scene?.noDefaultDressing && (
         <>
-          {/* Glass vitrines — wall-following pairs that drop out when the room
-              shrinks. Two on the back wall (left + right pairs) at wide
-              footprints; collapses to two at medium; none below 5m wide. */}
-          {(() => {
-            const vitrineCount = vitrineCountFor(widthM);
-            const slots: Array<[number, number]> = [
-              [-widthM / 2 + 1.2, -depthM / 2 + 0.9],   // back-left corner
-              [-widthM / 4,       -depthM / 2 + 0.9],   // mid-left
-              [ widthM / 4,       -depthM / 2 + 0.9],   // mid-right
-              [ widthM / 2 - 1.2, -depthM / 2 + 0.9],   // back-right corner
-            ];
-            return slots.slice(0, vitrineCount).map(([x, z], i) => (
-              <GlassVitrine
-                key={`vitrine-${i}`}
-                position={[x, platformHeightM, z]}
-                widthM={0.9}
-                depthM={0.6}
-                heightM={1.3}
-                glowColor={vitrineColor}
-              />
-            ));
-          })()}
-
-          {/* Pair of wall-mounted TVs — flanking the back wall, moved up so
-              they clear the sconces and inward so they don't crowd the side
-              walls. Count drops with booth width via tvCountFor(); when zero
-              the BOM zeroes out the TV line too. Each TV now wears a
-              brand-primary panel + ken-burns logo on its screen face so the
-              blanks-next-to-the-LED-wall finally read as branded screens. */}
-          {Array.from({ length: tvCountFor(widthM) }, (_, i) => {
-            const sx = i === 0 ? -1 : 1;          // left first, then right
-            const xPos = sx * (widthM / 2 - 1.7);
-            const yPos = platformHeightM + wallHeightM * 0.62;
-            const zPos = -depthM / 2 + 0.45;
-            // Wall monitors sized smaller (was wallHeight*0.4 / max 1.3 →
-            // looming too large beside the LED wall and hiding the brand
-            // overlay). 0.9 m monitor with a tight 16:9 panel.
-            const monitorH = 0.9;
-            const panelH = monitorH * 0.80;         // visible screen height
-            const panelW = panelH * (16 / 9);
-            return (
-              <group key={`tv-${i}`} position={[xPos, yPos, zPos]}>
-                <Suspense fallback={null}>
-                  <TvOnStand position={[0, 0, 0]} heightM={monitorH} />
-                </Suspense>
-                {/* Brand panel + ken-burns logo, in FRONT of the monitor's
-                    screen face. Z offset bumped to 0.15 so the panel clears
-                    the hanging_monitor.glb bezel geometry instead of being
-                    occluded by it. */}
-                <group position={[0, 0, 0.15]}>
-                  <mesh>
-                    <planeGeometry args={[panelW, panelH]} />
-                    <meshStandardMaterial color={monitorColor} emissive={new THREE.Color(monitorColor)} emissiveIntensity={1.1} toneMapped={false} />
-                  </mesh>
-                  <Suspense fallback={null}>
-                    <KenBurnsLogo kit={kit} availW={panelW * 0.92} availH={panelH * 0.9} />
-                  </Suspense>
-                </group>
-              </group>
-            );
-          })}
-
-          {/* Two freestanding screens with ken-burns logo — front of booth */}
+          {/* Boardroom table + chairs arranged around it, all facing inward. */}
           <Suspense fallback={null}>
-            <BrandStandingScreen kit={kit} position={[-widthM / 4, platformHeightM, depthM / 4]} />
-            <BrandStandingScreen kit={kit} position={[ widthM / 4, platformHeightM, depthM / 4]} />
+            <BoardroomTable
+              lengthM={tableLengthM}
+              widthM={tableWidthM}
+              position={[0, platformHeightM, 0]}
+              topColor={kit.palette.neutralDark}
+              legColor={kit.palette.accent}
+            />
+            <ChairsAroundTable
+              count={chairCount}
+              tableLengthM={tableLengthM}
+              tableWidthM={tableWidthM}
+              position={[0, platformHeightM, 0]}
+              seatColor={kit.palette.primary}
+              frameColor={kit.palette.neutralDark}
+            />
           </Suspense>
-          {/* Curved oval counter — bumped 50% larger so it reads as a real
-              reception desk rather than a side table. */}
-          <Suspense fallback={null}>
-            <Counter position={[0, platformHeightM, depthM / 2 - 1.5]} heightM={1.55} tintHex={counterColor} />
-          </Suspense>
-          {/* Sofas — two facing each other in the CENTRE of the room. One
-              sits south, one sits north, looking at each other across the
-              middle of the floor. Each toes slightly outward so it reads as
-              a conversation pit rather than a head-on face-off. Tint comes
-              from the active kit's primary unless overridden via the Room
-              features dock's Sofa colour swatch. */}
+
+          {/* Optional breakout seating — sofa pair against the front-right
+              corner, count-driven (0 by default for a clean boardroom). */}
           {Array.from({ length: Math.min(sofaCount, 2) }, (_, i) => {
-            // Staggered conversation pit. Sofa GLB measures roughly 2 m
-            // long × 1 m deep × 1 m tall when normalised to heightM=1.
-            // Width (x-axis) = 1 m (depth from back to front of cushions).
-            // Length (z-axis) = 2 m (the long seating edge).
-            const sx = i === 0 ? -1 : 1;            // i=0 left, i=1 right
-            const SOFA_LENGTH = 2.0;
-            const SOFA_WIDTH  = 1.0;
+            const sx = i === 0 ? -1 : 1;
             const SOFA_HEIGHT = 1.0;
-            const x = sx * (SOFA_WIDTH * 2.5) / 2;
-            const z = sx > 0 ? -SOFA_LENGTH / 2 : SOFA_LENGTH / 2;
-            const toe = -sx * 0.12;
-            const rotY = sx > 0 ? -Math.PI / 2 : Math.PI / 2;
-            // Raw +Y offset of half the sofa height — bypasses the
-            // normalize-based yLift (which wasn't catching this GLB's
-            // bind-pose dip). Lifts the visible cushion to platform level.
+            const x = sx > 0 ? widthM / 2 - 1.3 : widthM / 2 - 1.3;
+            const z = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.4);
+            const rotY = -Math.PI / 2;
             return (
               <Suspense key={`sofa-${i}`} fallback={null}>
                 <Sofa
                   position={[x, platformHeightM + SOFA_HEIGHT * 0.5, z]}
-                  rotationY={rotY + toe}
+                  rotationY={rotY}
                   heightM={SOFA_HEIGHT}
                   tintHex={sofaResolved}
                 />
               </Suspense>
             );
           })}
-          {/* Coffee table between the pair of sofas. Only renders when both
-              are on so it doesn't float alone with a single sofa. */}
           {sofaCount >= 2 && (
             <Suspense fallback={null}>
-              <CoffeeTable variant={coffeeTableVariant} position={[0, platformHeightM, 0]} heightM={0.335} />
+              <CoffeeTable variant={coffeeTableVariant} position={[widthM / 2 - 2.4, platformHeightM, depthM / 2 - 2.3]} heightM={0.335} />
             </Suspense>
           )}
 
           <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
-
-          {/* Angled standing displays — herringbone of screens flanking the
-              walkway. Suppressed automatically when the kit opts out
-              (NRWA campsite, Lufthansa open lounge bring their own dressing). */}
-          <StandingDisplays count={standingDisplayCount} widthM={widthM} depthM={depthM} platformHeightM={platformHeightM} />
         </>
       )}
 
@@ -649,16 +513,20 @@ function PbrFloor({ isDark }: { isDark: boolean }) {
 
 // ── Walls ───────────────────────────────────────────────────────────────────
 
-function Walls({
-  shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
-  backWallGraphic, backWallMotif, useQuadratedTexture,
+function Room({
+  widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
+  backWallGraphic, backWallMotif, windowsEnabled, windowSillM,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
   backWallGraphic?: string;
   backWallMotif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex";
-  useQuadratedTexture?: boolean;
+  windowsEnabled: boolean;
+  windowSillM: number;
 }) {
+  // Enclosed boardroom: a solid feature wall at the back (logo + video live
+  // there), glazed side walls, and a front wall with a central door opening.
+  // The room is framed on the four corner pillars rendered separately.
   const thick = 0.08;
   const platformTop = platformHeightM;
   const wallY = wallHeightM / 2 + platformTop;
@@ -670,47 +538,121 @@ function Walls({
     accent: kitAccent,
     graphicUrl: backWallGraphic,
     motif: backWallMotif,
-    useQuadrated: useQuadratedTexture,
   };
 
-  if (shape === "rectangle") {
-    return (
-      <group>
-        <BackWallPanel {...backWallProps} />
-        <WallPanel w={thick} h={wallHeightM} d={depthM / 2} pos={[-widthM / 2 + thick / 2, wallY, -depthM / 4]} color={kitPrimary} />
-        <WallPanel w={thick} h={wallHeightM / 2} d={depthM / 2} pos={[widthM / 2 - thick / 2, wallHeightM / 4 + platformTop, -depthM / 4]} color={kitPrimary} />
-      </group>
-    );
-  }
+  // Door opening in the front wall — centred, sized to the room.
+  const doorW = Math.min(1.3, widthM * 0.22);
+  const doorH = Math.min(2.25, wallHeightM - 0.35);
+  const frontSegW = (widthM - doorW) / 2;
+  const headerH = wallHeightM - doorH;
 
-  if (shape === "corner") {
-    return (
-      <group>
-        <BackWallPanel {...backWallProps} />
-        <WallPanel w={thick} h={wallHeightM} d={depthM} pos={[-widthM / 2 + thick / 2, wallY, 0]} color={kitPrimary} />
-      </group>
-    );
-  }
-
-  const shortArmDepth = depthM * 0.65;
   return (
     <group>
+      {/* Back — solid feature wall */}
       <BackWallPanel {...backWallProps} />
-      <WallPanel w={thick} h={wallHeightM} d={shortArmDepth} pos={[-widthM / 2 + thick / 2, wallY, -depthM / 2 + shortArmDepth / 2]} color={kitPrimary} />
-      <WallPanel w={widthM * 0.4} h={wallHeightM} d={thick} pos={[-widthM / 2 + (widthM * 0.4) / 2 - thick / 2, wallY, -depthM / 2 + shortArmDepth + thick / 2]} color={kitPrimary} />
+
+      {/* Side walls — solid, or ribbon-windowed when windows are enabled */}
+      {windowsEnabled ? (
+        <>
+          <WindowedWall lengthM={depthM} wallHeightM={wallHeightM} thick={thick}
+            position={[-widthM / 2 + thick / 2, platformTop, 0]} rotationY={Math.PI / 2}
+            sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
+          <WindowedWall lengthM={depthM} wallHeightM={wallHeightM} thick={thick}
+            position={[widthM / 2 - thick / 2, platformTop, 0]} rotationY={-Math.PI / 2}
+            sillM={windowSillM} color={kitPrimary} frameColor={kitAccent} />
+        </>
+      ) : (
+        <>
+          <WallPanel w={thick} h={wallHeightM} d={depthM} pos={[-widthM / 2 + thick / 2, wallY, 0]} color={kitPrimary} />
+          <WallPanel w={thick} h={wallHeightM} d={depthM} pos={[widthM / 2 - thick / 2, wallY, 0]} color={kitPrimary} />
+        </>
+      )}
+
+      {/* Front wall — two segments either side of a central door opening,
+          plus a header above the door. */}
+      <group>
+        <WallPanel w={frontSegW} h={wallHeightM} d={thick}
+          pos={[-(doorW / 2 + frontSegW / 2), wallY, depthM / 2 - thick / 2]} color={kitPrimary} />
+        <WallPanel w={frontSegW} h={wallHeightM} d={thick}
+          pos={[doorW / 2 + frontSegW / 2, wallY, depthM / 2 - thick / 2]} color={kitPrimary} />
+        {headerH > 0.05 && (
+          <WallPanel w={doorW} h={headerH} d={thick}
+            pos={[0, platformTop + doorH + headerH / 2, depthM / 2 - thick / 2]} color={kitPrimary} />
+        )}
+      </group>
+    </group>
+  );
+}
+
+// Side wall with a ribbon window — a solid sill panel, a glazed band using the
+// transmission glass material, and a header panel above. Built in a local
+// frame: `lengthM` runs along local X, `wallHeightM` up Y, `thick` along Z.
+function WindowedWall({
+  lengthM, wallHeightM, thick, position, rotationY, sillM, color, frameColor,
+}: {
+  lengthM: number; wallHeightM: number; thick: number;
+  position: [number, number, number]; rotationY: number;
+  sillM: number; color: string; frameColor: string;
+}) {
+  const headerM = 0.35;
+  const winH = Math.max(0.3, wallHeightM - sillM - headerM);
+  const actualHeaderH = wallHeightM - sillM - winH;
+  const winY = sillM + winH / 2;
+  const glassT = thick * 0.4;
+  const mullions = Math.max(1, Math.round(lengthM / 1.6) - 1);
+  return (
+    <group position={position} rotation-y={rotationY}>
+      {/* Sill panel */}
+      <WallPanelPlaster w={lengthM} h={sillM} d={thick} pos={[0, sillM / 2, 0]} color={color} />
+      {/* Header panel */}
+      {actualHeaderH > 0.02 && (
+        <WallPanelPlaster w={lengthM} h={actualHeaderH} d={thick} pos={[0, sillM + winH + actualHeaderH / 2, 0]} color={color} />
+      )}
+      {/* Glazing — the transmission glass band */}
+      <mesh position={[0, winY, 0]} castShadow={false} receiveShadow={false}>
+        <boxGeometry args={[lengthM - 0.06, winH, glassT]} />
+        <meshPhysicalMaterial
+          transmission={0.95}
+          roughness={0.05}
+          metalness={0}
+          ior={1.5}
+          thickness={0.04}
+          transparent
+          color="#ffffff"
+          envMapIntensity={1.4}
+          attenuationColor="#cdd8e0"
+          attenuationDistance={3}
+        />
+      </mesh>
+      {/* Frame rails (top + bottom of the glazed band) */}
+      {[sillM, sillM + winH].map((y, i) => (
+        <mesh key={i} position={[0, y, 0]}>
+          <boxGeometry args={[lengthM, 0.05, thick * 1.05]} />
+          <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+        </mesh>
+      ))}
+      {/* Vertical mullions */}
+      {Array.from({ length: mullions }, (_, i) => {
+        const x = -lengthM / 2 + ((i + 1) * lengthM) / (mullions + 1);
+        return (
+          <mesh key={`m${i}`} position={[x, winY, 0]}>
+            <boxGeometry args={[0.05, winH, thick * 1.05]} />
+            <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+          </mesh>
+        );
+      })}
     </group>
   );
 }
 
 function BackWallPanel({
-  w, h, d, pos, color, accent, graphicUrl, motif, useQuadrated,
+  w, h, d, pos, color, accent, graphicUrl, motif,
 }: {
   w: number; h: number; d: number; pos: [number, number, number]; color: string; accent: string;
-  graphicUrl?: string; motif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex"; useQuadrated?: boolean;
+  graphicUrl?: string; motif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex";
 }) {
   if (graphicUrl) return <WallPanelGraphic w={w} h={h} d={d} pos={pos} color={color} url={graphicUrl} />;
   if (motif) return <WallPanelMotif w={w} h={h} d={d} pos={pos} color={color} accent={accent} motif={motif} />;
-  if (useQuadrated) return <WallPanelQuadrated w={w} h={h} d={d} pos={pos} color={color} />;
   return <WallPanelPlaster w={w} h={h} d={d} pos={pos} color={color} />;
 }
 
@@ -772,12 +714,168 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
   );
 }
 
-function WallPanelQuadrated({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
-  const { map, normalMap, roughnessMap, aoMap } = useBlackQuadratedTextures();
+// ── Ceiling ─────────────────────────────────────────────────────────────────
+
+function Ceiling({
+  widthM, depthM, wallHeightM, platformHeightM, accent,
+}: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; accent: string }) {
+  const y = platformHeightM + wallHeightM;
+  const slabT = 0.14;
+  // Recessed downlight grid — ~2.4m spacing, inset from the walls.
+  const cols = Math.max(1, Math.round((widthM - 2) / 2.4));
+  const rows = Math.max(1, Math.round((depthM - 2) / 2.4));
+  const gridPos = (i: number, n: number, span: number) => (n <= 1 ? 0 : -span / 2 + (i * span) / (n - 1));
+  const lights: [number, number][] = [];
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      lights.push([gridPos(i, cols, widthM - 2), gridPos(j, rows, depthM - 2)]);
+    }
+  }
   return (
-    <RoundedBox position={pos} args={[w, h, d]} radius={0.012} smoothness={4} castShadow receiveShadow>
-      <meshPhysicalMaterial color={color} map={map} normalMap={normalMap} roughnessMap={roughnessMap} aoMap={aoMap} roughness={0.78} metalness={0.04} clearcoat={0.05} envMapIntensity={0.85} normalScale={new THREE.Vector2(0.5, 0.5)} />
-    </RoundedBox>
+    <group>
+      {/* Ceiling slab — castShadow off so the key light still reaches the room;
+          the underside reads as lit via the recessed downlights below. */}
+      <mesh position={[0, y + slabT / 2, 0]} receiveShadow castShadow={false}>
+        <boxGeometry args={[widthM, slabT, depthM]} />
+        <meshStandardMaterial color="#e9eaee" roughness={0.92} metalness={0.02} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Recessed downlights flush with the slab underside */}
+      {lights.map(([x, z], i) => (
+        <mesh key={i} position={[x, y - 0.012, z]} rotation-x={Math.PI / 2}>
+          <circleGeometry args={[0.16, 20]} />
+          <meshStandardMaterial color="#fff4e2" emissive="#fff4e2" emissiveIntensity={1.7} toneMapped={false} />
+        </mesh>
+      ))}
+      {/* Soft fill so the downlights actually pool light into the room */}
+      <pointLight position={[0, y - 0.5, 0]} intensity={6} distance={Math.max(widthM, depthM) * 1.2} decay={1.6} color="#fff4e2" />
+      {/* Faint accent cove around the slab edge */}
+      <mesh position={[0, y - 0.04, 0]}>
+        <boxGeometry args={[widthM - 0.3, 0.02, depthM - 0.3]} />
+        <meshStandardMaterial color={accent} emissive={new THREE.Color(accent)} emissiveIntensity={0.15} toneMapped={false} transparent opacity={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Corner pillars ──────────────────────────────────────────────────────────
+// The structural columns the room is framed on — floor-to-ceiling at each
+// corner. Carried over from the trade-show system's corner-pillar logic.
+
+function CornerPillars({
+  widthM, depthM, wallHeightM, platformHeightM, color,
+}: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; color: string }) {
+  const p = 0.18;
+  const y = platformHeightM + wallHeightM / 2;
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+  return (
+    <group>
+      {corners.map(([sx, sz], i) => (
+        <RoundedBox
+          key={i}
+          position={[sx * (widthM / 2 - p / 2), y, sz * (depthM / 2 - p / 2)]}
+          args={[p, wallHeightM, p]}
+          radius={0.02}
+          smoothness={3}
+          castShadow
+          receiveShadow
+        >
+          <meshPhysicalMaterial color={color} roughness={0.5} metalness={0.2} clearcoat={0.3} clearcoatRoughness={0.25} />
+        </RoundedBox>
+      ))}
+    </group>
+  );
+}
+
+// ── Boardroom table + chairs ────────────────────────────────────────────────
+// The configurator centrepiece. The table resizes non-parametrically (length /
+// width are independent dims of one rigid object); chairs are arranged in a
+// formation around it, every chair facing the table centre.
+
+function BoardroomTable({
+  lengthM, widthM, position, topColor, legColor,
+}: { lengthM: number; widthM: number; position: [number, number, number]; topColor: string; legColor: string }) {
+  const tableH = 0.74;
+  const topT = 0.05;
+  const panelT = 0.08;
+  const panelH = tableH - topT;
+  const legInset = Math.min(0.8, lengthM * 0.2);
+  return (
+    <group position={position}>
+      {/* Tabletop */}
+      <RoundedBox position={[0, tableH - topT / 2, 0]} args={[widthM, topT, lengthM]} radius={0.02} smoothness={4} castShadow receiveShadow>
+        <meshPhysicalMaterial color={topColor} roughness={0.28} metalness={0.12} clearcoat={0.7} clearcoatRoughness={0.12} envMapIntensity={1.2} />
+      </RoundedBox>
+      {/* Trestle end panels */}
+      {[-1, 1].map((sz) => (
+        <mesh key={sz} position={[0, panelH / 2, sz * (lengthM / 2 - legInset)]} castShadow receiveShadow>
+          <boxGeometry args={[widthM * 0.62, panelH, panelT]} />
+          <meshPhysicalMaterial color={legColor} roughness={0.4} metalness={0.55} clearcoat={0.3} />
+        </mesh>
+      ))}
+      {/* Stretcher beam tying the trestles together */}
+      <mesh position={[0, panelH * 0.45, 0]} castShadow>
+        <boxGeometry args={[widthM * 0.16, 0.06, lengthM - 2 * legInset]} />
+        <meshPhysicalMaterial color={legColor} roughness={0.4} metalness={0.55} />
+      </mesh>
+    </group>
+  );
+}
+
+function Chair({
+  position, rotationY, seatColor, frameColor,
+}: { position: [number, number, number]; rotationY: number; seatColor: string; frameColor: string }) {
+  const seatH = 0.46;
+  const seatW = 0.5;
+  const seatD = 0.5;
+  const backH = 0.55;
+  return (
+    <group position={position} rotation-y={rotationY}>
+      {/* Seat */}
+      <RoundedBox position={[0, seatH, 0]} args={[seatW, 0.08, seatD]} radius={0.03} smoothness={3} castShadow receiveShadow>
+        <meshPhysicalMaterial color={seatColor} roughness={0.55} metalness={0.05} clearcoat={0.2} />
+      </RoundedBox>
+      {/* Backrest — at the -Z side, tilted slightly back */}
+      <RoundedBox position={[0, seatH + backH / 2, -seatD / 2 + 0.04]} rotation-x={0.12} args={[seatW, backH, 0.07]} radius={0.03} smoothness={3} castShadow>
+        <meshPhysicalMaterial color={seatColor} roughness={0.55} metalness={0.05} clearcoat={0.2} />
+      </RoundedBox>
+      {/* Four legs */}
+      {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([lx, lz], i) => (
+        <mesh key={i} position={[lx * (seatW / 2 - 0.05), seatH / 2, lz * (seatD / 2 - 0.05)]} castShadow>
+          <cylinderGeometry args={[0.022, 0.022, seatH, 8]} />
+          <meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.8} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function ChairsAroundTable({
+  count, tableLengthM, tableWidthM, position, seatColor, frameColor,
+}: { count: number; tableLengthM: number; tableWidthM: number; position: [number, number, number]; seatColor: string; frameColor: string }) {
+  const slots = useMemo(() => {
+    const out: { pos: [number, number, number]; rot: number }[] = [];
+    if (count <= 0) return out;
+    const gap = 0.34;                                  // chair offset from the table edge
+    const sideX = tableWidthM / 2 + gap;
+    const endZ = tableLengthM / 2 + gap;
+    const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
+    const sideTotal = count - endN;
+    const leftN = Math.ceil(sideTotal / 2);
+    const rightN = sideTotal - leftN;
+    const spanZ = Math.max(0.01, tableLengthM - 0.8);  // keep chairs off the corners
+    const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
+    for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
+    for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+    if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
+    if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
+    return out;
+  }, [count, tableLengthM, tableWidthM]);
+  return (
+    <group position={position}>
+      {slots.map((s, i) => (
+        <Chair key={i} position={s.pos} rotationY={s.rot} seatColor={seatColor} frameColor={frameColor} />
+      ))}
+    </group>
   );
 }
 
@@ -1011,34 +1109,6 @@ function KenBurnsLogoInner({ url, w, h, meshRef, invert = false, chroma = "" }: 
       <planeGeometry args={[w, h]} />
       <meshStandardMaterial map={tex} emissiveMap={tex} emissive={new THREE.Color("#ffffff")} emissiveIntensity={1.6} color="#ffffff" transparent toneMapped={false} depthWrite={false} alphaTest={0.02} />
     </mesh>
-  );
-}
-
-// NRWA — hanging Skip-the-Bin banner suspended from the canopy ridge.
-// Two thin cables drop from above, the banner hangs between them with a
-// transparent alpha-mapped plane facing the entrance.
-function NrwaHangingBanner({ y, z, widthM, heightM }: { y: number; z: number; widthM: number; heightM: number }) {
-  const tex = useTexture(asset("/glb/brand-hero/nrwa/stbsecondpendantlogo.png"));
-  useMemo(() => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    tex.needsUpdate = true;
-  }, [tex]);
-  return (
-    <group position={[0, y, z]}>
-      {/* Two cables dropping from the canopy */}
-      {[-1, 1].map((sx) => (
-        <mesh key={sx} position={[sx * widthM * 0.4, 1.0, 0]}>
-          <cylinderGeometry args={[0.008, 0.008, 2.0, 6]} />
-          <meshStandardMaterial color="#1a1c22" roughness={0.4} metalness={0.6} />
-        </mesh>
-      ))}
-      {/* Banner — alpha-mapped, double-sided so it reads from both directions */}
-      <mesh>
-        <planeGeometry args={[widthM, heightM]} />
-        <meshBasicMaterial map={tex} transparent toneMapped={false} side={THREE.DoubleSide} depthWrite={false} alphaTest={0.05} />
-      </mesh>
-    </group>
   );
 }
 

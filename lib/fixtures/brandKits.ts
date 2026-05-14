@@ -1,762 +1,366 @@
 import type { BrandKit } from "@/lib/schemas";
 import { asset } from "@/lib/assetPath";
 
-// Seed kits — anchor values pending official-source confirmation (see memory:
-// reference_brand_links.md). Logo asset URLs are placeholders until SVGs are
-// dropped into /public/brand/<kit>/.
+// ── TMRW Foundation boardroom configurator — seed brand kits ─────────────────
+//
+// One kit per brand "room". Each kit carries: a recognisable palette, the
+// brand logo (real file in /logos/), a Google-font pairing, and the
+// brand-approved YouTube video that plays on the room's video wall.
+//
+// Palettes are auto-generated from each brand's known identity — tune freely.
+// Hero GLB assets live in /components/brand-hero/<slug>/ and are wired in
+// scene code by kit slug; see lib/scene/KitProps.
 
-const tdk: BrandKit = {
-  id: "brand.tdk",
-  name: "TDK",
-  palette: {
-    primary: "#0073C5",
-    secondary: "#FFFFFF",
-    accent: "#5BC2E7",
-    neutralLight: "#F2F4F8",
-    neutralDark: "#0B1730",
-  },
-  derivation: "splitComplementary",
-  logos: {
-    primary: { svgUrl: "/brand/tdk/logo-primary.svg", rasterUrl: "/logos/TDK_logo.png", viewBox: [0, 0, 3840, 806], capHeightFraction: 0.68, isMono: false },
-    monoLight: { svgUrl: "/brand/tdk/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.68, isMono: true },
-    monoDark: { svgUrl: "/brand/tdk/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.68, isMono: true },
-    icon: { svgUrl: "/brand/tdk/icon-diamond.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Barlow", weights: [500, 700], italic: false, source: "google", cssName: "Barlow" },
-    body: { family: "Barlow", weights: [400, 500], italic: false, source: "google", cssName: "Barlow" },
-    fallbackGoogle: { display: "Barlow", body: "Barlow" },
-  },
-  motifs: [{ kind: "chevron", angleDeg: 30, density: 0.4, scale: 1.0 }],
+type LogoTuple = [number, number, number, number];
+
+// Build the 4-slot logos object from a single asset file. We don't ship
+// separate mono / icon variants for these brands, so every slot points at the
+// same file; the scene's logoChroma / invertLogo hooks handle on-surface
+// contrast where a baked background needs keying out.
+function logoSet(file: string, viewBox: LogoTuple): BrandKit["logos"] {
+  const base = { svgUrl: file, rasterUrl: file, viewBox, capHeightFraction: 0.7 };
+  return {
+    primary:   { ...base, isMono: false },
+    monoLight: { ...base, isMono: true },
+    monoDark:  { ...base, isMono: true },
+    icon:      { ...base, isMono: false },
+  };
+}
+
+// A Google-font display/body pairing.
+function fonts(display: string, body: string): BrandKit["typography"] {
+  return {
+    display: { family: display, weights: [500, 700], italic: false, source: "google", cssName: display },
+    body:    { family: body,    weights: [400, 500], italic: false, source: "google", cssName: body },
+    fallbackGoogle: { display, body },
+  };
+}
+
+const RULES = { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] };
+
+// Standard boardroom intent — the back wall carries the brand mark. Boardrooms
+// don't lean on the old exhibition surface-branding system, so one intent is
+// enough; users can still recolour every surface from the dock.
+const backWallIntent = (role: "primary" | "secondary" | "neutralDark" | "neutralLight" = "primary") =>
+  [{ surfaceKind: "backWall" as const, treatment: "printed" as const, paletteRole: role, logoVariant: "primary" as const }];
+
+// ── Apple ────────────────────────────────────────────────────────────────────
+const apple: BrandKit = {
+  id: "brand.apple",
+  name: "Apple",
+  palette: { primary: "#1D1D1F", secondary: "#FFFFFF", accent: "#0071E3", neutralLight: "#F5F5F7", neutralDark: "#000000" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Apple_logo.svg", [0, 0, 814, 1000]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
   phrases: [
-    { de: "In allem besser.", en: "In Everything, Better." },
-    { de: "Technologie, die verbindet.", en: "Technology that connects." },
-    { de: "Hochleistung von Anfang an.", en: "Engineered for performance." },
+    { de: "Think different.", en: "Think different." },
+    { de: "Designed in California.", en: "Designed in California." },
   ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "primary", logoVariant: "primary", motifRef: { kind: "chevron", angleDeg: 30, density: 0.4, scale: 1.0 } },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "neutralDark", logoVariant: "monoLight" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "icon" },
-    { surfaceKind: "soffit", treatment: "printed", paletteRole: "primary", logoVariant: "icon" },
-    { surfaceKind: "vitrineEtch", treatment: "etched", paletteRole: "neutralLight", logoVariant: "icon" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-  ],
-  pendant: {
-    preferredShape: "rectangle",
-    alternates: ["squircle", "ring"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
+  rules: RULES,
+  intents: backWallIntent("neutralLight"),
+  pendant: { preferredShape: "squircle", alternates: ["squircle", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "u3SIKAmPXY4", wallColor: "#F5F5F7", floorColor: "#E8E8EA" },
 };
 
-const tagheuer: BrandKit = {
-  id: "brand.tagheuer",
-  name: "TAG Heuer",
-  palette: {
-    primary: "#000000",
-    secondary: "#FFFFFF",
-    accent: "#D40029",
-    neutralLight: "#F4F4F4",
-    neutralDark: "#1A1A1A",
-  },
+// ── BMW ──────────────────────────────────────────────────────────────────────
+const bmw: BrandKit = {
+  id: "brand.bmw",
+  name: "BMW",
+  palette: { primary: "#0066B1", secondary: "#FFFFFF", accent: "#1C69D4", neutralLight: "#E6EEF5", neutralDark: "#0A0E14" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/BMW_logo.svg", [0, 0, 1015, 1015]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Freude am Fahren.", en: "Sheer driving pleasure." },
+    { de: "Der ultimative Antrieb.", en: "The ultimate driving machine." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "YUOPoGO2gRI" },
+};
+
+// ── Disney ───────────────────────────────────────────────────────────────────
+const disney: BrandKit = {
+  id: "brand.disney",
+  name: "Disney",
+  palette: { primary: "#113CCF", secondary: "#FFFFFF", accent: "#F0C808", neutralLight: "#EAF0FF", neutralDark: "#0A1A4A" },
   derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/tagheuer/logo-primary.svg", rasterUrl: "/logos/TAG_Heuer_Logo.png", viewBox: [0, 0, 3840, 3322], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/tagheuer/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/tagheuer/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/tagheuer/icon-shield.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Cormorant Garamond", weights: [500, 600], italic: false, source: "google", cssName: "Cormorant Garamond" },
-    body: { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-    fallbackGoogle: { display: "Cormorant Garamond", body: "Inter" },
-  },
-  motifs: [
-    { kind: "lineGrid", spacing: 0.05, angleDeg: 0, weight: 0.5 },
-    { kind: "chevron", angleDeg: 60, density: 0.2, scale: 0.6 },
-  ],
+  logos: logoSet("/logos/Disney_logo.svg", [0, 0, 700, 294]),
+  typography: fonts("Poppins", "Inter"),
+  motifs: [],
   phrases: [
-    { de: "Don't Crack Under Pressure.", en: "Don't Crack Under Pressure." },
-    { de: "Avantgarde seit 1860.", en: "Avant-Garde Since 1860." },
-    { de: "Schweizer Präzision.", en: "Swiss Precision." },
+    { de: "Wo Träume wahr werden.", en: "Where dreams come true." },
+    { de: "Das Glücklichste auf Erden.", en: "The happiest place on earth." },
   ],
-  rules: { minLogoHeightMm: 50, safeAreaRatio: 1.2, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "backWall", treatment: "etched", paletteRole: "neutralDark", logoVariant: "primary" },
-    { surfaceKind: "vitrineEtch", treatment: "etched", paletteRole: "neutralLight", logoVariant: "icon" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralDark", logoVariant: "icon" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "neutralDark", logoVariant: "primary" },
-  ],
-  pendant: {
-    preferredShape: "none",      // pendant disabled by default for Tag Heuer
-    alternates: ["squircle"],
-    outerFaceTreatment: "etched",
-    innerFaceTreatment: "matte",
-  },
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "b-DUYQg_-AQ" },
 };
 
-const cargill: BrandKit = {
-  id: "brand.cargill",
-  name: "Cargill",
-  palette: {
-    primary: "#1B4332",
-    secondary: "#F5EFE0",
-    accent: "#E57A2A",
-    neutralLight: "#FFFFFF",
-    neutralDark: "#0C2A1F",
-  },
+// ── Ferrari ──────────────────────────────────────────────────────────────────
+const ferrari: BrandKit = {
+  id: "brand.ferrari",
+  name: "Ferrari",
+  palette: { primary: "#D40000", secondary: "#FFF200", accent: "#1A1A1A", neutralLight: "#F4F4F4", neutralDark: "#0A0A0A" },
   derivation: "triadic",
-  logos: {
-    primary: { svgUrl: "/brand/cargill/logo-primary.svg", rasterUrl: "/logos/Cargill_logo.png", viewBox: [0, 0, 3840, 1717], capHeightFraction: 0.65, isMono: false },
-    monoLight: { svgUrl: "/brand/cargill/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    monoDark: { svgUrl: "/brand/cargill/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    icon: { svgUrl: "/brand/cargill/icon-leaf.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "DM Sans", weights: [500, 700], italic: false, source: "google", cssName: "DM Sans" },
-    body: { family: "DM Sans", weights: [400, 500], italic: false, source: "google", cssName: "DM Sans" },
-    fallbackGoogle: { display: "DM Sans", body: "DM Sans" },
-  },
-  motifs: [
-    { kind: "pillCluster", pillCount: 14, sizes: [0.4, 0.6, 0.8, 1.2], spacing: 0.3 },
-    { kind: "honeycomb", hexSizeM: 0.06, fillAlpha: 0.0, edgeWeight: 0.4 },
-    { kind: "arch", cornerRadius: 0.6, legHeightFrac: 0.6 },
-  ],
-  phrases: [
-    { de: "Nahrung. Verantwortung. Zukunft.", en: "Nourishing. Responsible. Future." },
-    { de: "Globale Präsenz. Lokaler Einfluss.", en: "Global presence. Local impact." },
-    { de: "Auf das nächste Level.", en: "Next Level. Realized." },
-  ],
-  rules: { minLogoHeightMm: 70, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight", motifRef: { kind: "pillCluster", pillCount: 14, sizes: [0.4, 0.6, 0.8, 1.2], spacing: 0.3 } },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "carpetInsert", treatment: "vinyl", paletteRole: "primary", logoVariant: "skip" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "archEntry", treatment: "printed", paletteRole: "primary", logoVariant: "skip", motifRef: { kind: "honeycomb", hexSizeM: 0.06, fillAlpha: 0, edgeWeight: 0.4 } },
-    { surfaceKind: "drumTier", treatment: "printed", paletteRole: "primary", logoVariant: "skip", motifRef: { kind: "pillCluster", pillCount: 14, sizes: [0.4, 0.6, 0.8, 1.2], spacing: 0.3 } },
-  ],
-  pendant: {
-    preferredShape: "ring",
-    alternates: ["rectangle", "squircle", "ring"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-const still: BrandKit = {
-  id: "brand.still",
-  name: "STILL",
-  palette: {
-    primary: "#FF6600",            // STILL orange (anchor — confirm from official spec)
-    secondary: "#FFFFFF",
-    accent: "#222222",
-    neutralLight: "#F4F4F4",
-    neutralDark: "#0E0E0E",
-  },
-  derivation: "splitComplementary",
-  logos: {
-    primary: { svgUrl: "/brand/still/logo-primary.svg", rasterUrl: "/logos/Still-Logo.png", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/still/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/still/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/still/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Barlow Condensed", weights: [600, 700, 900], italic: false, source: "google", cssName: "Barlow Condensed" },
-    body: { family: "Barlow", weights: [400, 500], italic: false, source: "google", cssName: "Barlow" },
-    fallbackGoogle: { display: "Barlow Condensed", body: "Barlow" },
-  },
-  motifs: [
-    { kind: "chevron", angleDeg: 60, density: 0.6, scale: 1.4 },   // STILL's ACT ORANGE diagonal chevrons
-    { kind: "lineGrid", spacing: 0.08, angleDeg: 60, weight: 0.8 },
-  ],
-  phrases: [
-    { de: "Erst denken. Dann handeln.", en: "Think smart. Act orange." },
-    { de: "Logistik in Bewegung.", en: "Logistics in motion." },
-    { de: "ACT ORANGE.", en: "ACT ORANGE." },
-  ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight", motifRef: { kind: "chevron", angleDeg: 60, density: 0.6, scale: 1.4 } },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "neutralLight", logoVariant: "primary", motifRef: { kind: "chevron", angleDeg: 60, density: 0.6, scale: 1.4 } },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "soffit", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "squircle",       // soft industrial — picks up the LogiMAT 2026-93 hanging cubes vibe
-    alternates: ["rectangle", "squircle"],
-    outerFaceTreatment: "printed",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-const zeiss: BrandKit = {
-  id: "brand.zeiss",
-  name: "ZEISS",
-  palette: {
-    primary: "#0072CE",       // Zeiss Blue (anchor — confirm from brand guidelines)
-    secondary: "#FFFFFF",
-    accent: "#FFCB05",        // Zeiss yellow accent
-    neutralLight: "#F4F4F4",
-    neutralDark: "#000000",
-  },
-  derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/zeiss/logo-primary.svg", rasterUrl: "/logos/Zeiss_logo.png", viewBox: [0, 0, 1280, 1280], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/zeiss/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/zeiss/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/zeiss/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Plus Jakarta Sans", weights: [500, 700], italic: false, source: "google", cssName: "Plus Jakarta Sans" },
-    body: { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-    fallbackGoogle: { display: "Plus Jakarta Sans", body: "Inter" },
-  },
-  motifs: [
-    { kind: "lineGrid", spacing: 0.04, angleDeg: 0, weight: 0.4 },
-  ],
-  phrases: [
-    { de: "Seeing beyond.", en: "Seeing beyond." },
-    { de: "Optische Präzision.", en: "Optical precision." },
-    { de: "Engineering, gesehen.", en: "Engineering, visualised." },
-  ],
-  rules: { minLogoHeightMm: 55, safeAreaRatio: 1.1, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "vitrineEtch", treatment: "etched", paletteRole: "neutralLight", logoVariant: "icon" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "squircle",     // optical / scientific feel — soft modernist
-    alternates: ["rectangle", "squircle", "ring"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-const exacom: BrandKit = {
-  id: "brand.exacom",
-  name: "EXACOM",
-  palette: {
-    primary: "#4DAA3F",        // green chevron (anchor — confirm)
-    secondary: "#3C4046",      // charcoal grey
-    accent: "#A4D65E",          // brighter lime accent
-    neutralLight: "#FFFFFF",
-    neutralDark: "#1F2227",
-  },
-  derivation: "analogous",
-  logos: {
-    primary: { svgUrl: "/brand/exacom/logo-primary.svg", rasterUrl: "/logos/exacom-logo.png", viewBox: [0, 0, 4434, 1216], capHeightFraction: 0.65, isMono: false },
-    monoLight: { svgUrl: "/brand/exacom/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    monoDark: { svgUrl: "/brand/exacom/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    icon: { svgUrl: "/brand/exacom/icon-x.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Source Sans 3", weights: [500, 700], italic: false, source: "google", cssName: "Source Sans 3" },
-    body: { family: "Source Sans 3", weights: [400, 500], italic: false, source: "google", cssName: "Source Sans 3" },
-    fallbackGoogle: { display: "Source Sans 3", body: "Source Sans 3" },
-  },
-  motifs: [
-    { kind: "chevron", angleDeg: 0, density: 0.5, scale: 1.2 },   // their X / arrow chevron
-    { kind: "arrowSweep", curvature: 0.1, count: 6 },
-  ],
-  phrases: [
-    { de: "Datengetriebene Fertigung.", en: "Data-driven manufacturing." },
-    { de: "Präzision durch Analyse.", en: "Precision through analysis." },
-    { de: "Industrial intelligence.", en: "Industrial intelligence." },
-  ],
-  rules: { minLogoHeightMm: 50, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "secondary", logoVariant: "primary", motifRef: { kind: "chevron", angleDeg: 0, density: 0.5, scale: 1.2 } },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "secondary", logoVariant: "monoLight", motifRef: { kind: "arrowSweep", curvature: 0.1, count: 6 } },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "rectangle",     // industrial, no-nonsense
-    alternates: ["rectangle", "squircle"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-const lecole: BrandKit = {
-  id: "brand.lecole",
-  name: "L'École",
-  palette: {
-    primary: "#3B2F26",            // dark warm brown — heritage / craft
-    secondary: "#F4ECD8",          // cream
-    accent: "#C8A45C",              // brushed gold
-    neutralLight: "#FFFBF1",
-    neutralDark: "#1A1410",
-  },
-  derivation: "analogous",
-  logos: {
-    primary: { svgUrl: "/brand/lecole/logo-primary.svg", rasterUrl: "/logos/lécole-school-of-jewelry-arts-supported-by-van-cleef-arpels-opens-a-new-campus-in-the-middle-east-1.jpg", viewBox: [0, 0, 800, 400], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/lecole/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/lecole/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/lecole/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Cormorant Garamond", weights: [400, 500, 600], italic: true, source: "google", cssName: "Cormorant Garamond" },
-    body: { family: "Cormorant Garamond", weights: [400, 500], italic: false, source: "google", cssName: "Cormorant Garamond" },
-    fallbackGoogle: { display: "Cormorant Garamond", body: "Cormorant Garamond" },
-  },
-  motifs: [
-    { kind: "lineGrid", spacing: 0.06, angleDeg: 45, weight: 0.3 },
-  ],
-  phrases: [
-    { de: "L'art du bijou.", en: "The art of jewelry." },
-    { de: "Patrimoine vivant.", en: "Living heritage." },
-    { de: "Savoir-faire.", en: "Craftsmanship." },
-  ],
-  rules: { minLogoHeightMm: 80, safeAreaRatio: 1.5, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "backWall", treatment: "etched", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "secondary", logoVariant: "monoDark" },
-    { surfaceKind: "counterFront", treatment: "etched", paletteRole: "primary", logoVariant: "icon" },
-    { surfaceKind: "vitrineEtch", treatment: "etched", paletteRole: "accent", logoVariant: "icon" },
-    { surfaceKind: "pendantOuter", treatment: "etched", paletteRole: "secondary", logoVariant: "primary" },
-  ],
-  pendant: {
-    preferredShape: "squircle",     // soft, refined, atelier
-    alternates: ["squircle", "ring"],
-    outerFaceTreatment: "etched",
-    innerFaceTreatment: "downlight",
-  },
-  scene: {
-    wallColor: "#1F1B17",            // dark anthracite — atelier feel
-    floorColor: "#2A2520",
-    giMultiplier: 0.45,              // toned-down global illumination
-    keyMultiplier: 0.75,
-    youtubeId: "aqz-KE-bpKQ",        // placeholder: Big Buck Bunny CC. Replace with brand video.
-  },
-};
-
-const swisskrono: BrandKit = {
-  id: "brand.swisskrono",
-  name: "Swiss Krono",
-  palette: {
-    primary: "#005B92",            // anchor blue (confirm from official)
-    secondary: "#FFFFFF",
-    accent: "#E30613",              // red
-    neutralLight: "#F4F4F4",
-    neutralDark: "#0B1F2A",
-  },
-  derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/swisskrono/logo-primary.svg", rasterUrl: "/logos/swiss-krono-logo-png_seeklogo-393486.png", viewBox: [0, 0, 800, 240], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/swisskrono/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/swisskrono/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/swisskrono/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Barlow", weights: [500, 700], italic: false, source: "google", cssName: "Barlow" },
-    body: { family: "Barlow", weights: [400, 500], italic: false, source: "google", cssName: "Barlow" },
-    fallbackGoogle: { display: "Barlow", body: "Barlow" },
-  },
-  motifs: [
-    { kind: "lineGrid", spacing: 0.1, angleDeg: 0, weight: 0.6 },
-  ],
-  phrases: [
-    { de: "Holz, das verbindet.", en: "Wood that connects." },
-    { de: "Schweizer Präzision.", en: "Swiss precision." },
-    { de: "Nachhaltig gefertigt.", en: "Sustainably crafted." },
-  ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "rectangle",
-    alternates: ["rectangle", "squircle"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-  scene: {
-    wallColor: "#1a1a1a",            // dark backdrop for the wood-sample wall (per Swiss Krono showroom ref)
-    floorColor: "#dcd5c4",
-    // Swiss Krono needs floor space for the moss wall + sample plinths.
-    defaultTier: "L",
-    defaultWidthM: 16,
-    defaultDepthM: 12,
-    props: [
-      // Sample-shelf row on the back wall side
-      { kind: "whiteShelfRow", position: [0, 0, -2.0], rotationY: 0, tintHex: "#0e0e0e", cubeTint: "#005B92", cubeCount: 7, cubeSize: 0.4 },
-      // Moss wall — flush against the LEFT side wall, facing inward.
-      // x = -widthM/2 + small inset; rotation puts the wall's face into +X.
-      { kind: "plantWall", position: [-7.8, 0, 0], rotationY: -Math.PI / 2, heightM: 3.4 },
-      // Worktable centre-front — sits ON the platform now (visible-mesh bbox
-      // ground-pins it correctly; previous y=0.15 was a workaround).
-      { kind: "worktable", position: [1.4, 0, 1.0], rotationY: 0, heightM: 1.05 },
-      // Two LED towers flanking the front entrance
-      { kind: "ledTower", position: [-3, 1.4, 3.0], heightM: 2.8, widthM: 0.4 },
-      { kind: "ledTower", position: [ 3, 1.4, 3.0], heightM: 2.8, widthM: 0.4 },
-    ],
-  },
-};
-
-const schott: BrandKit = {
-  id: "brand.schott",
-  name: "SCHOTT",
-  palette: {
-    primary: "#1E68B7",          // SCHOTT corporate blue (anchor — confirm)
-    secondary: "#FFFFFF",
-    accent: "#9CD0F0",            // pale glass blue
-    neutralLight: "#F4F7FA",
-    neutralDark: "#08243E",
-  },
-  derivation: "monochrome",
-  logos: {
-    primary: { svgUrl: "/brand/schott/logo-primary.svg", rasterUrl: "/logos/Schott_AG_Logo_2022.svg.png", viewBox: [0, 0, 1280, 626], capHeightFraction: 0.65, isMono: false },
-    monoLight: { svgUrl: "/brand/schott/logo-mono-light.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    monoDark: { svgUrl: "/brand/schott/logo-mono-dark.svg", viewBox: [0, 0, 200, 60], capHeightFraction: 0.65, isMono: true },
-    icon: { svgUrl: "/brand/schott/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [500, 600, 700], italic: false, source: "google", cssName: "Inter" },
-    body: { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-    fallbackGoogle: { display: "Inter", body: "Inter" },
-  },
-  motifs: [
-    { kind: "lineGrid", spacing: 0.04, angleDeg: 0, weight: 0.3 },
-  ],
-  phrases: [
-    { de: "Glas, das Zukunft trägt.", en: "Glass, carrying the future." },
-    { de: "Optische Brillanz.", en: "Optical brilliance." },
-    { de: "Material für Leben.", en: "Material for life." },
-  ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "backWall", treatment: "etched", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "flankWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "vitrineEtch", treatment: "etched", paletteRole: "accent", logoVariant: "icon" },
-    { surfaceKind: "ledWall", treatment: "led", paletteRole: "primary", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "squircle",     // glass / optical cues — soft modernist
-    alternates: ["squircle", "ring"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-// ET Global "blank" template — used as the starting point when the user picks
-// "Create new brand" on the homepage. Neutral grey palette, ET orange accent.
-export const etglobalBlank: BrandKit = {
-  id: "brand.new",
-  name: "ET Global",
-  palette: {
-    primary: "#22252B",         // graphite — readable backdrop
-    secondary: "#FFFFFF",
-    accent: "#EE7F1A",           // ET Global orange
-    neutralLight: "#F5F5F5",
-    neutralDark: "#0F1115",
-  },
-  derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/etglobal/logo-primary.svg", rasterUrl: "/logos/etgloballogotrans.webp", viewBox: [0, 0, 600, 200], capHeightFraction: 0.6, isMono: false },
-    monoLight: { svgUrl: "/brand/etglobal/logo-mono-light.svg", rasterUrl: "/logos/etgloballogotrans.webp", viewBox: [0, 0, 600, 200], capHeightFraction: 0.6, isMono: true },
-    monoDark:  { svgUrl: "/brand/etglobal/logo-mono-dark.svg",  rasterUrl: "/logos/etgloballogotrans.webp", viewBox: [0, 0, 600, 200], capHeightFraction: 0.6, isMono: true },
-    icon: { svgUrl: "/brand/etglobal/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [500, 600, 700], italic: false, source: "google", cssName: "Inter" },
-    body:    { family: "Inter", weights: [400, 500],      italic: false, source: "google", cssName: "Inter" },
-    fallbackGoogle: { display: "Inter", body: "Inter" },
-  },
+  logos: logoSet("/logos/Ferrari-Logo.svg", [0, 0, 344, 550]),
+  typography: fonts("Oswald", "Inter"),
   motifs: [],
   phrases: [
-    { de: "Brand Spaces.", en: "Brand Spaces." },
-    { de: "Designed to deliver.", en: "Designed to deliver." },
+    { de: "Wir sind die Konkurrenz.", en: "We are the competition." },
+    { de: "Corse dal 1947.", en: "Racing since 1947." },
   ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.0, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia",   treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "counterFront", treatment: "vinyl", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "accent", logoVariant: "monoLight" },
-  ],
-  pendant: {
-    preferredShape: "rectangle",
-    alternates: ["rectangle", "squircle", "ring"],
-    outerFaceTreatment: "led",
-    innerFaceTreatment: "downlight",
-  },
-};
-
-// Brand-approved video for each kit's video wall. Used as the iframe ID
-// on the LED panel (the helper appends &autoplay=1&mute=1&loop=1&playlist=…).
-const KIT_YOUTUBE: Record<string, string> = {
-  "brand.tdk":        "u8knkGp_Uaw",
-  "brand.tagheuer":   "9WNmVTU31ik",
-  "brand.cargill":    "oIa5mYAr9Ko",
-  "brand.still":      "4Bq2N-HQXKg",
-  "brand.zeiss":      "BWDL58Ybycg",
-  "brand.exacom":     "zZrpOcWy2f0",
-  "brand.lecole":     "nBFq1GVq5qI",
-  "brand.swisskrono": "u4ofcsBZ_6I",
-  "brand.schott":     "U8s7x6nqlPQ",
-  "brand.nissan":     "n8n6dWs9pos",
-  "brand.neura":      "kydEYc0rk9Q",
-  "brand.lufthansa":  "P83ARC8SLlM",
-  "brand.nrwa":       "P6lgjODZkdU",
-  "brand.etglobal":   "dzZiIF91c1A",
-  "brand.new":        "dzZiIF91c1A",
-};
-
-// Wall graphics and procedural motifs — first pass
-schott.scene = { ...schott.scene, wallGraphic: "/glb/brand-hero/schott/schottwallpaper.png" };
-exacom.scene = { ...exacom.scene, wallGraphic: "/glb/brand-hero/exacom/reduces-reject-rates-3-2048x1035.png" };
-cargill.scene = { ...cargill.scene, wallMotif: "dots" };
-still.scene   = { ...still.scene,   wallMotif: "stripes.diagonal" };
-tdk.scene     = { ...tdk.scene,     wallMotif: "hex" };
-
-const nissan: BrandKit = {
-  id: "brand.nissan",
-  name: "Nissan",
-  palette: {
-    primary: "#C3002F",          // Nissan red
-    secondary: "#FFFFFF",
-    accent: "#1A1A1A",
-    neutralLight: "#F4F4F4",
-    neutralDark: "#0A0A0A",
-  },
-  derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/nissan/logo-primary.svg", rasterUrl: "/logos/nissanlogo.jpg", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/nissan/logo-mono-light.svg", rasterUrl: "/logos/nissanlogo.jpg", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/nissan/logo-mono-dark.svg", rasterUrl: "/logos/nissanlogo.jpg", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/nissan/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [500, 700], italic: false, source: "google", cssName: "Inter" },
-    body: { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-  },
-  motifs: [],
-  phrases: [
-    { de: "Dare to do.", en: "Dare to do." },
-    { de: "Innovation that excites.", en: "Innovation that excites." },
-  ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
-  pendant: { preferredShape: "ring", alternates: ["ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: {
-    // Nissan ships the Patrol GLB as a hero — needs room.
-    defaultTier: "L",
-    defaultWidthM: 18,
-    defaultDepthM: 12,
-  },
-};
-
-const neura: BrandKit = {
-  id: "brand.neura",
-  name: "NEURA",
-  palette: {
-    primary: "#0E1014",          // near-black
-    secondary: "#FFFFFF",
-    accent: "#00C2FF",            // electric blue
-    neutralLight: "#F4F4F4",
-    neutralDark: "#000000",
-  },
-  derivation: "complementary",
-  logos: {
-    primary: { svgUrl: "/brand/neura/logo-primary.svg", rasterUrl: "/logos/neura.svg", viewBox: [0, 0, 400, 200], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/neura/logo-mono-light.svg", rasterUrl: "/logos/neura.svg", viewBox: [0, 0, 400, 200], capHeightFraction: 0.7, isMono: true },
-    monoDark: { svgUrl: "/brand/neura/logo-mono-dark.svg", rasterUrl: "/logos/neura.svg", viewBox: [0, 0, 400, 200], capHeightFraction: 0.7, isMono: true },
-    icon: { svgUrl: "/brand/neura/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [600, 700], italic: false, source: "google", cssName: "Inter" },
-    body: { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-  },
-  motifs: [],
-  phrases: [
-    { de: "Robotics, redefined.", en: "Robotics, redefined." },
-    { de: "Cognitive automation.", en: "Cognitive automation." },
-  ],
-  rules: { minLogoHeightMm: 50, safeAreaRatio: 1, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "backWall", treatment: "printed", paletteRole: "primary", logoVariant: "monoLight" },
-    { surfaceKind: "pendantOuter", treatment: "led", paletteRole: "primary", logoVariant: "monoLight" },
-  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "quKzXz2XW5Q" },
 };
 
-// ET Global as an actual selectable kit (in addition to the etglobalBlank template).
-const etglobal: BrandKit = { ...etglobalBlank, id: "brand.etglobal", name: "ET Global" };
-
-// Lufthansa Group — deep blue corporate, hero arc ribbon over an ultrawide cinema screen.
-const lufthansa: BrandKit = {
-  id: "brand.lufthansa",
-  name: "Lufthansa Group",
-  palette: {
-    primary: "#05164D",          // Lufthansa navy
-    secondary: "#FFFFFF",
-    accent: "#F6A500",            // crane-yellow accent
-    neutralLight: "#F4F6FA",
-    neutralDark: "#020A24",
-  },
-  derivation: "monochrome",
-  logos: {
-    primary:   { svgUrl: "/brand/lufthansa/logo-primary.svg",  rasterUrl: "/logos/lufthansagroup-01.png", viewBox: [0, 0, 800, 200], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/lufthansa/logo-mono-light.svg", rasterUrl: "/logos/lufthansagroup-01.png", viewBox: [0, 0, 800, 200], capHeightFraction: 0.7, isMono: true },
-    monoDark:  { svgUrl: "/brand/lufthansa/logo-mono-dark.svg",  rasterUrl: "/logos/lufthansagroup-01.png", viewBox: [0, 0, 800, 200], capHeightFraction: 0.7, isMono: true },
-    icon:      { svgUrl: "/brand/lufthansa/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [500, 700], italic: false, source: "google", cssName: "Inter" },
-    body:    { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-  },
+// ── Google ───────────────────────────────────────────────────────────────────
+const google: BrandKit = {
+  id: "brand.google",
+  name: "Google",
+  palette: { primary: "#4285F4", secondary: "#FFFFFF", accent: "#FBBC05", neutralLight: "#F1F3F4", neutralDark: "#202124" },
+  derivation: "triadic",
+  logos: logoSet("/logos/Google_logo.svg", [0, 0, 272, 92]),
+  typography: fonts("Poppins", "Inter"),
   motifs: [],
   phrases: [
-    { de: "Nonstop you.", en: "Nonstop you." },
-    { de: "World of premium.", en: "Explore the premium experience." },
+    { de: "Tu das Richtige.", en: "Do the right thing." },
+    { de: "Organisiere die Welt.", en: "Organise the world's information." },
   ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia",        treatment: "printed", paletteRole: "primary",     logoVariant: "monoLight" },
-    { surfaceKind: "backWall",      treatment: "printed", paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "pendantOuter",  treatment: "led",     paletteRole: "primary",     logoVariant: "monoLight" },
-  ],
-  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: {
-    noDefaultDressing: true,        // open lounge — no generic counter / vitrines / sofas
-    props: [
-      { kind: "spiralRibbon", color: "#05164D", bandM: 0.9 },
-      { kind: "cinemaScreen", widthFrac: 0.95, heightFrac: 0.55, yFrac: 0.55 },
-      { kind: "curvedBack", color: "#05164D", arcDeg: 120 },
-    ],
-  },
+  rules: RULES,
+  intents: backWallIntent("neutralLight"),
+  pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "4JVtVgl8oEs", wallColor: "#F1F3F4" },
 };
 
-// National Waste & Recycling Association — campsite-style green tent with
-// wood posts, hero airstream caravan and campfire seating.
-const nrwa: BrandKit = {
-  id: "brand.nrwa",
-  name: "NWRA",
-  palette: {
-    primary: "#1aa86d",          // tent-canvas green
-    secondary: "#FFFFFF",
-    accent: "#d33b2d",            // red campaign panel
-    neutralLight: "#f1ecdd",
-    neutralDark: "#1c2a20",
-  },
+// ── Louis Vuitton ────────────────────────────────────────────────────────────
+const louisvuitton: BrandKit = {
+  id: "brand.louisvuitton",
+  name: "Louis Vuitton",
+  palette: { primary: "#3D2B1F", secondary: "#E8D9B8", accent: "#C8A45C", neutralLight: "#F5EFE0", neutralDark: "#1A120B" },
   derivation: "analogous",
-  logos: {
-    primary:   { svgUrl: "/brand/nrwa/logo-primary.svg", rasterUrl: "/logos/national-waste-and-recycling-association-vector-logo.png", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: false },
-    monoLight: { svgUrl: "/brand/nrwa/logo-mono-light.svg", rasterUrl: "/logos/national-waste-and-recycling-association-vector-logo.png", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: true },
-    monoDark:  { svgUrl: "/brand/nrwa/logo-mono-dark.svg",  rasterUrl: "/logos/national-waste-and-recycling-association-vector-logo.png", viewBox: [0, 0, 1000, 600], capHeightFraction: 0.7, isMono: true },
-    icon:      { svgUrl: "/brand/nrwa/icon.svg", viewBox: [0, 0, 60, 60], capHeightFraction: 1, isMono: false },
-  },
-  typography: {
-    display: { family: "Inter", weights: [600, 800], italic: false, source: "google", cssName: "Inter" },
-    body:    { family: "Inter", weights: [400, 500], italic: false, source: "google", cssName: "Inter" },
-  },
+  logos: logoSet("/logos/Louis_Vuitton_logo.svg", [0, 0, 815, 980]),
+  typography: fonts("Cormorant Garamond", "Cormorant Garamond"),
   motifs: [],
   phrases: [
-    { de: "Skip the bin.", en: "Skip the bin — turn your batteries in." },
-    { de: "Recycle right.",  en: "Recycle right." },
+    { de: "Die Kunst des Reisens.", en: "The art of travel." },
+    { de: "Savoir-faire seit 1854.", en: "Savoir-faire since 1854." },
   ],
-  rules: { minLogoHeightMm: 60, safeAreaRatio: 1.1, contrastMin: 4.5, disallowedBgs: [] },
-  intents: [
-    { surfaceKind: "fascia",       treatment: "printed", paletteRole: "primary",      logoVariant: "monoLight" },
-    { surfaceKind: "backWall",     treatment: "fabric",  paletteRole: "neutralLight", logoVariant: "primary" },
-    { surfaceKind: "counterFront", treatment: "vinyl",   paletteRole: "accent",       logoVariant: "primary" },
-  ],
-  pendant: { preferredShape: "none", alternates: [], outerFaceTreatment: "fabric", innerFaceTreatment: "matte" },
-  scene: {
-    floorColor: "#3a7a47",         // astroturf carpet visible in the reference shot
-    noDefaultDressing: true,        // campsite is bespoke — no generic counter / vitrines / sofas / plants
-    awningDecal: "/glb/brand-hero/nrwa/Skip-The-Bin_Shadow.webp",
-    props: [
-      { kind: "tentRoof", color: "#1aa86d", eaveAmp: 0.55, cycles: 6, liftM: 0.8 },
-      // Hero airstream — pushed left so it doesn't overlap the noticeboard.
-      { kind: "airstream",    position: [-2.6, 0, -1.6], rotationY: 0,         heightM: 2.4 },
-      // Campfire ring + log bench in front of the caravan, with chairs around
-      // it. Cluster shifted right of the caravan so it sits in the open
-      // floor between the airstream and the noticeboard.
-      { kind: "campfire",     position: [ 1.2, 0,  0.9], rotationY: 0,         heightM: 0.55 },
-      { kind: "logBench",     position: [ 1.2, 0,  1.8], rotationY: 0,         heightM: 0.45 },
-      { kind: "campingChair", position: [ 0.2, 0,  0.9], rotationY: Math.PI/2, heightM: 0.85 },
-      { kind: "campingChair", position: [ 2.2, 0,  0.9], rotationY: -Math.PI/2, heightM: 0.85 },
-      { kind: "campingChair", position: [ 1.2, 0,  0.0], rotationY: Math.PI,    heightM: 0.85 },
-      // Tree stumps as side tables
-      { kind: "treeStump",    position: [-0.6, 0,  0.2], rotationY: 0,         heightM: 0.45 },
-      { kind: "treeStump",    position: [ 2.8, 0,  1.6], rotationY: 0.5,       heightM: 0.45 },
-      // Cork noticeboard with flyers — back-right corner, off the caravan
-      { kind: "noticeboard",  position: [ 3.0, 0, -1.4], rotationY: -Math.PI/5, heightM: 1.7 },
-    ],
-  },
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "zCLDyNVBjRE", wallColor: "#2A1D14", floorColor: "#3D2B1F" },
 };
 
-export const seedBrandKits = { etglobalBlank, tdk, tagheuer, cargill, still, zeiss, exacom, lecole, swisskrono, schott, nissan, neura, etglobal, lufthansa, nrwa };
-export const seedBrandKitList: BrandKit[] = [etglobal, tdk, tagheuer, cargill, still, zeiss, exacom, lecole, swisskrono, schott, nissan, neura, lufthansa, nrwa];
+// ── Mercedes-Benz ────────────────────────────────────────────────────────────
+const mercedes: BrandKit = {
+  id: "brand.mercedes",
+  name: "Mercedes-Benz",
+  palette: { primary: "#1A1A1A", secondary: "#FFFFFF", accent: "#00ADEF", neutralLight: "#ECECEC", neutralDark: "#000000" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Mercedes-Logo.svg", [0, 0, 567, 567]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Das Beste oder nichts.", en: "The best or nothing." },
+    { de: "Erfinder des Automobils.", en: "Inventor of the automobile." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "ring", alternates: ["ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "HLy2IXCrpYw" },
+};
 
-// Lookup that includes the blank ET Global template (used by the homepage's
-// "Create new" tile). Not part of `seedBrandKitList` so it doesn't clutter the
-// in-app brand picker grid.
+// ── Meta ─────────────────────────────────────────────────────────────────────
+// NOTE: /logos/Meta_logo.svg + /components/brand-hero/meta/ are expected but
+// not yet on disk (the asset folders currently carry samsung/microsoft). The
+// kit references the canonical paths so it lights up once those land.
+const meta: BrandKit = {
+  id: "brand.meta",
+  name: "Meta",
+  palette: { primary: "#0668E1", secondary: "#FFFFFF", accent: "#00C6FF", neutralLight: "#EBF2FE", neutralDark: "#0A1F44" },
+  derivation: "complementary",
+  logos: logoSet("/logos/Meta_logo.svg", [0, 0, 800, 160]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Das Metaverse ist da.", en: "The metaverse is here." },
+    { de: "Menschen verbinden.", en: "Bringing people together." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "innerCurve", alternates: ["innerCurve", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "LIvpjFZwx4Q" },
+};
+
+// ── Netflix ──────────────────────────────────────────────────────────────────
+const netflix: BrandKit = {
+  id: "brand.netflix",
+  name: "Netflix",
+  palette: { primary: "#E50914", secondary: "#FFFFFF", accent: "#B20710", neutralLight: "#F5F5F5", neutralDark: "#141414" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Netflix_logo.svg", [0, 0, 1024, 277]),
+  typography: fonts("Oswald", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Sehen, was als Nächstes kommt.", en: "See what's next." },
+    { de: "Geschichten, grenzenlos.", en: "Stories, without limits." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("neutralDark"),
+  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "PssKpzB0Ah0", wallColor: "#141414", floorColor: "#1C1C1C" },
+};
+
+// ── Nike ─────────────────────────────────────────────────────────────────────
+const nike: BrandKit = {
+  id: "brand.nike",
+  name: "Nike",
+  palette: { primary: "#111111", secondary: "#FFFFFF", accent: "#FA5400", neutralLight: "#F5F5F5", neutralDark: "#000000" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Nike_logo.svg", [0, 0, 1000, 356]),
+  typography: fonts("Oswald", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Just Do It.", en: "Just Do It." },
+    { de: "Bewege die Welt.", en: "Move the world forward." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "_ZxqcqMB0ew", wallColor: "#161616", floorColor: "#1F1F1F" },
+};
+
+// ── Nvidia ───────────────────────────────────────────────────────────────────
+const nvidia: BrandKit = {
+  id: "brand.nvidia",
+  name: "NVIDIA",
+  palette: { primary: "#76B900", secondary: "#FFFFFF", accent: "#1A1A1A", neutralLight: "#F0F4E8", neutralDark: "#0B0F0A" },
+  derivation: "complementary",
+  logos: logoSet("/logos/Nvidia_logo.svg", [0, 0, 351, 259]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Der Motor der KI.", en: "The engine of AI." },
+    { de: "Beschleunigtes Rechnen.", en: "Accelerated computing." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "hexagon", alternates: ["hexagon", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C" },
+};
+
+// ── Rolex ────────────────────────────────────────────────────────────────────
+const rolex: BrandKit = {
+  id: "brand.rolex",
+  name: "Rolex",
+  palette: { primary: "#006039", secondary: "#FFFFFF", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#0A2A1C" },
+  derivation: "analogous",
+  logos: logoSet("/logos/Rolex_logo.svg", [0, 0, 105, 60]),
+  typography: fonts("Cormorant Garamond", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Eine Krone für jede Leistung.", en: "A crown for every achievement." },
+    { de: "Beständigkeit.", en: "Perpetual." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26" },
+};
+
+// ── Tesla ────────────────────────────────────────────────────────────────────
+const tesla: BrandKit = {
+  id: "brand.tesla",
+  name: "Tesla",
+  palette: { primary: "#E31937", secondary: "#FFFFFF", accent: "#171A20", neutralLight: "#F4F4F4", neutralDark: "#171A20" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/Tesla_logo.svg", [0, 0, 279, 360]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Beschleunige die Zukunft.", en: "Accelerating the future." },
+    { de: "Elektrisch, ohne Kompromisse.", en: "Electric, without compromise." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("neutralLight"),
+  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "Txt3Wodav1o", wallColor: "#F4F4F4", floorColor: "#E4E4E4" },
+};
+
+// ── The TMRW Foundation ──────────────────────────────────────────────────────
+// The house brand. The logo ships as a JPG (dark mark on white) — logoChroma
+// keys the white bed out and invertLogo flips the mark to white so it reads
+// on the dark room wall. On the light homepage tile it shows as-is.
+const tmrw: BrandKit = {
+  id: "brand.tmrw",
+  name: "TMRW Foundation",
+  palette: { primary: "#0A0A0A", secondary: "#FFFFFF", accent: "#3D7EFF", neutralLight: "#F4F2ED", neutralDark: "#000000" },
+  derivation: "monochrome",
+  logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Baue das Morgen.", en: "Build tomorrow." },
+    { de: "Räume für das, was kommt.", en: "Spaces for what's next." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "hexagon", alternates: ["hexagon", "ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "8yKBpthWRI4", wallColor: "#141414", floorColor: "#1C1C1C", logoChroma: "white", invertLogo: true },
+};
+
+// ── Blank template ───────────────────────────────────────────────────────────
+// Loaded when the user picks "Create new" on the homepage or the "+ New" cell
+// in the dock. Neutral graphite room, TMRW mark, TMRW house video.
+export const tmrwBlank: BrandKit = {
+  id: "brand.new",
+  name: "New room",
+  palette: { primary: "#22252B", secondary: "#FFFFFF", accent: "#3D7EFF", neutralLight: "#F5F5F5", neutralDark: "#0F1115" },
+  derivation: "complementary",
+  logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
+  typography: fonts("Inter", "Inter"),
+  motifs: [],
+  phrases: [
+    { de: "Ein leerer Raum.", en: "A blank room." },
+    { de: "Gestalte ihn.", en: "Make it yours." },
+  ],
+  rules: RULES,
+  intents: backWallIntent("primary"),
+  pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
+  scene: { youtubeId: "8yKBpthWRI4", logoChroma: "white", invertLogo: true },
+};
+
+// In-app brand picker grid — order is the homepage / dock order.
+export const seedBrandKitList: BrandKit[] = [
+  apple, bmw, disney, ferrari, google, louisvuitton, mercedes,
+  meta, netflix, nike, nvidia, rolex, tesla, tmrw,
+];
+
+// Convenience map (blank template included).
+export const seedBrandKits = {
+  tmrwBlank, apple, bmw, disney, ferrari, google, louisvuitton, mercedes,
+  meta, netflix, nike, nvidia, rolex, tesla, tmrw,
+};
+
+// Lookup including the blank template (not part of the picker grid).
 export function findKitById(id: string): BrandKit | undefined {
-  if (id === etglobalBlank.id) return etglobalBlank;
+  if (id === tmrwBlank.id) return tmrwBlank;
   return seedBrandKitList.find((k) => k.id === id);
 }
 
-// Seed brand-approved YouTube IDs on every kit (overwriting inline placeholders).
-for (const k of seedBrandKitList) {
-  const id = KIT_YOUTUBE[k.id];
-  if (!id) continue;
-  if (!k.scene) k.scene = { youtubeId: id };
-  else k.scene.youtubeId = id;
-}
-if (etglobalBlank.scene) etglobalBlank.scene.youtubeId = KIT_YOUTUBE["brand.new"];
-else etglobalBlank.scene = { youtubeId: KIT_YOUTUBE["brand.new"] };
-
-// ET Global pendant defaults to off-white instead of the graphite primary.
-const OFF_WHITE = "#f3efe7";
-if (etglobalBlank.scene) etglobalBlank.scene.defaultPendantColor = OFF_WHITE;
-if (etglobal.scene) etglobal.scene.defaultPendantColor = OFF_WHITE;
-else etglobal.scene = { defaultPendantColor: OFF_WHITE };
-
-// Neura canonical logo is dark; invert it so it reads on the dark wall.
-if (neura.scene) neura.scene.invertLogo = true;
-
-// Nissan logo ships as a JPG with a white background — strip it at decode time
-// so the chrome/red mark sits on the brand-coloured backing box.
-if (nissan.scene) nissan.scene.logoChroma = "white";
-
-// NWRA logo ships as a vector PNG against a white bed — chroma-key it out so
-// the mark reads on the green canvas backing.
-if (nrwa.scene) nrwa.scene.logoChroma = "white";
-
-// ── Asset URL prefixing for gh-pages basePath ────────────────────────────
-// All rasterUrl / svgUrl / wallGraphic / awningDecal / cinema imageUrl
-// strings in this file are written as absolute public-asset paths
-// (e.g. "/logos/foo.png"). In production we deploy under
-// /etglobal/, so those need to become "/etglobal/logos/foo.png".
-// One-pass sweep so each kit definition stays readable.
-for (const k of [tdk, tagheuer, cargill, still, zeiss, exacom, lecole, swisskrono, schott, nissan, neura, etglobalBlank, etglobal, lufthansa, nrwa]) {
+// ── Asset URL prefixing for the gh-pages basePath ────────────────────────────
+// rasterUrl / svgUrl / wallGraphic strings are written as absolute public-asset
+// paths (e.g. "/logos/foo.svg"). In production the bundle deploys under
+// /tmrwconfig/, so they need to become "/tmrwconfig/logos/foo.svg". One-pass
+// sweep keeps each kit definition readable above.
+for (const k of [...seedBrandKitList, tmrwBlank]) {
   for (const slot of ["primary", "monoLight", "monoDark", "icon"] as const) {
     const logo = k.logos?.[slot];
     if (logo) {
@@ -765,10 +369,4 @@ for (const k of [tdk, tagheuer, cargill, still, zeiss, exacom, lecole, swisskron
     }
   }
   if (k.scene?.wallGraphic) k.scene.wallGraphic = asset(k.scene.wallGraphic);
-  if (k.scene?.awningDecal) k.scene.awningDecal = asset(k.scene.awningDecal);
-  if (Array.isArray(k.scene?.props)) {
-    for (const p of k.scene.props as Array<{ imageUrl?: string }>) {
-      if (p.imageUrl) p.imageUrl = asset(p.imageUrl);
-    }
-  }
 }

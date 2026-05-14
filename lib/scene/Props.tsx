@@ -15,7 +15,6 @@ useGLTF.preload(asset("/glb/plants/hexapot.glb"));
 useGLTF.preload(asset("/glb/plants/tree_s2.glb"));
 useGLTF.preload(asset("/glb/plants/cactus.glb"));
 useGLTF.preload(asset("/glb/plants/tarro_tipo_lechuza.glb"));
-useGLTF.preload(asset("/glb/brand-hero/lecole/jewels.glb"));
 
 function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string, yLift = 0) {
   const gltf = useGLTF(url);
@@ -177,10 +176,6 @@ export function CoffeeTable({
   ...props
 }: { variant?: "avarta" | "kumo" | "geo"; position: [number, number, number]; rotationY?: number; heightM?: number }) {
   return <PropMount url={COFFEE_TABLE_URL[variant]} heightM={props.heightM ?? 0.45} position={props.position} rotationY={props.rotationY} />;
-}
-
-export function JewelryDisplay(props: { position: [number, number, number]; rotationY?: number; heightM?: number }) {
-  return <PropMount url={asset("/glb/brand-hero/lecole/jewels.glb")} heightM={props.heightM ?? 1.4} position={props.position} rotationY={props.rotationY} />;
 }
 
 type PlantKind = "snake" | "hexapot" | "tree" | "cactus" | "tarro";

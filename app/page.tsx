@@ -115,8 +115,8 @@ export default function Page() {
       </div>
       <SceneLoadingOverlay duration={1200} />
 
-      {/* Top bar — modelled on the etglobal.com header: orange ET circle + GLOBAL wordmark,
-          black nav-style buttons, bright orange CTA on the right. */}
+      {/* Top bar — TMRW Foundation mark on the left, global controls in the
+          centre, view/perf toggles + Save on the right. */}
       <header className="ui-overlay absolute inset-x-0 top-0 h-12 px-4 flex items-center justify-between panel-glass border-b border-[color:var(--color-border-soft)]">
         <div className="flex items-center gap-2.5">
           <button
@@ -131,15 +131,15 @@ export default function Page() {
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={asset("/logos/etgloballogotrans.webp")}
-            alt="ET Global"
-            className="h-6 w-auto"
-            style={{ filter: chromeTheme === "day" ? "none" : "invert(0.94)" }}
+            src={asset(chromeTheme === "day" ? "/logos/tmrwwhite.jpg" : "/logos/tmrwblack.jpg")}
+            alt="TMRW Foundation"
+            className="h-9 w-auto object-contain"
+            style={{ mixBlendMode: chromeTheme === "day" ? "multiply" : "screen" }}
           />
           <span className="t-label tracking-wider uppercase mt-[1px]">configurator</span>
           <span
             className="t-num text-[0.6rem] px-1.5 py-[1px] rounded-[4px] ml-1"
-            style={{ background: "#ee7f1a", color: "#fff", letterSpacing: "0.05em" }}
+            style={{ background: "#3d7eff", color: "#fff", letterSpacing: "0.05em" }}
           >
             v0.6
           </span>
@@ -204,7 +204,7 @@ export default function Page() {
           <button
             className="h-7 px-3.5 rounded-[6px] text-[0.72rem] uppercase tracking-wider"
             style={{
-              background: "#ee7f1a",
+              background: "#3d7eff",
               color: "#fff",
               fontVariationSettings: '"wdth" 100, "wght" 600',
               boxShadow: "0 1px 0 rgba(0,0,0,0.06), inset 0 -1px 0 rgba(0,0,0,0.12)",
@@ -236,8 +236,8 @@ export default function Page() {
       >
         {/* Brand picker moved to top per Round 9 — most-changed control deserves the prime slot */}
         <Section label="Brand kit">
-          {/* 5×3 grid — first cell is "Create" (blank ET Global template, matches
-              the homepage convention); rest are the 14 seeded brand kits. */}
+          {/* 5×3 grid — first cell is "Create" (blank TMRW template, matches
+              the homepage convention); rest are the seeded brand kits. */}
           <div className="grid grid-cols-5 gap-1">
             <button
               onClick={() => apply({ type: "brandKit.apply", kitId: "brand.new" })}
@@ -816,7 +816,7 @@ function NavBtn({ children, onClick, title }: { children: React.ReactNode; onCli
     <button
       onClick={onClick}
       title={title}
-      className="text-[0.74rem] uppercase tracking-wider text-[color:var(--color-text)] hover:text-[#ee7f1a] transition-colors"
+      className="text-[0.74rem] uppercase tracking-wider text-[color:var(--color-text)] hover:text-[#3d7eff] transition-colors"
       style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}
     >
       {children}
