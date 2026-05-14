@@ -1,0 +1,30 @@
+"use client";
+import { Canvas } from "@react-three/fiber";
+import * as THREE from "three";
+import { Scene } from "./Scene";
+import { useConfig } from "@/lib/store/configStore";
+
+export default function CanvasShell() {
+  const highDpr = useConfig((s) => s.highDpr);
+  const dprFloor = useConfig((s) => s.dprFloor);
+  // dprFloor (0.5 or 1) is the absolute lower bound — PerfMonitor drops to
+  // 0.5 only when FPS stays under 25 for 3 s after DPR is already at 1×.
+  const dpr: [number, number] = highDpr ? [dprFloor, 2] : [dprFloor, 1];
+  return (
+    <Canvas
+      shadows
+      dpr={dpr}
+      gl={{
+        antialias: true,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        outputColorSpace: THREE.SRGBColorSpace,
+        powerPreference: "high-performance",
+      }}
+      camera={{ position: [10.5, 4.2, 13.5], fov: 30, near: 0.1, far: 200 }}
+      style={{ width: "100%", height: "100%" }}
+    >
+      <Scene />
+    </Canvas>
+  );
+}

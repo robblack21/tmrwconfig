@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Misc
+.cache/
+coverage/
+.turbo/
+
+# Claude Code harness (worktrees, session state)
+.claude/
+
+# Big assets that should stay out of git or come from cloud later
+# (keep glbs and HDRIs tracked for now — they're the spec)
