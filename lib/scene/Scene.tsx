@@ -13,6 +13,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
+import { BoardroomTable, ChairsAroundTable } from "./Boardroom";
 import { Flycam } from "./Flycam";
 import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
@@ -95,6 +96,8 @@ export function Scene() {
   const tableLengthM = useConfig((s) => s.tableLengthM);
   const tableWidthM = useConfig((s) => s.tableWidthM);
   const chairCount = useConfig((s) => s.chairCount);
+  const tableVariant = useConfig((s) => s.tableVariant);
+  const chairVariant = useConfig((s) => s.chairVariant);
   const colourOverrides = useConfig((s) => s.colourOverrides);
   const shape = useConfig((s) => s.shape);
   const exposure = useConfig((s) => s.exposure);
@@ -254,11 +257,15 @@ export function Scene() {
         </Suspense>
       )}
 
-      <TimedReveal delay={300}>
-        <TrussCanopy widthM={widthM} depthM={depthM} trussTopM={trussTopM} color={trussColor} editMode={editMode} />
-      </TimedReveal>
+      {/* Truss + pendant belong to the open / exhibition look — hidden once the
+          ceiling encloses the room. */}
+      {!ceilingEnabled && (
+        <TimedReveal delay={300}>
+          <TrussCanopy widthM={widthM} depthM={depthM} trussTopM={trussTopM} color={trussColor} editMode={editMode} />
+        </TimedReveal>
+      )}
 
-      {pendantEnabled && (
+      {!ceilingEnabled && pendantEnabled && (
         <TimedReveal delay={450}>
           <PendantWithLogo
             shape={pendantShape}
@@ -336,19 +343,17 @@ export function Scene() {
           {/* Boardroom table + chairs arranged around it, all facing inward. */}
           <Suspense fallback={null}>
             <BoardroomTable
+              variant={tableVariant}
               lengthM={tableLengthM}
               widthM={tableWidthM}
               position={[0, platformHeightM, 0]}
-              topColor={kit.palette.neutralDark}
-              legColor={kit.palette.accent}
             />
             <ChairsAroundTable
               count={chairCount}
               tableLengthM={tableLengthM}
               tableWidthM={tableWidthM}
+              chairVariant={chairVariant}
               position={[0, platformHeightM, 0]}
-              seatColor={kit.palette.primary}
-              frameColor={kit.palette.neutralDark}
             />
           </Suspense>
 
@@ -781,99 +786,6 @@ function CornerPillars({
         >
           <meshPhysicalMaterial color={color} roughness={0.5} metalness={0.2} clearcoat={0.3} clearcoatRoughness={0.25} />
         </RoundedBox>
-      ))}
-    </group>
-  );
-}
-
-// ── Boardroom table + chairs ────────────────────────────────────────────────
-// The configurator centrepiece. The table resizes non-parametrically (length /
-// width are independent dims of one rigid object); chairs are arranged in a
-// formation around it, every chair facing the table centre.
-
-function BoardroomTable({
-  lengthM, widthM, position, topColor, legColor,
-}: { lengthM: number; widthM: number; position: [number, number, number]; topColor: string; legColor: string }) {
-  const tableH = 0.74;
-  const topT = 0.05;
-  const panelT = 0.08;
-  const panelH = tableH - topT;
-  const legInset = Math.min(0.8, lengthM * 0.2);
-  return (
-    <group position={position}>
-      {/* Tabletop */}
-      <RoundedBox position={[0, tableH - topT / 2, 0]} args={[widthM, topT, lengthM]} radius={0.02} smoothness={4} castShadow receiveShadow>
-        <meshPhysicalMaterial color={topColor} roughness={0.28} metalness={0.12} clearcoat={0.7} clearcoatRoughness={0.12} envMapIntensity={1.2} />
-      </RoundedBox>
-      {/* Trestle end panels */}
-      {[-1, 1].map((sz) => (
-        <mesh key={sz} position={[0, panelH / 2, sz * (lengthM / 2 - legInset)]} castShadow receiveShadow>
-          <boxGeometry args={[widthM * 0.62, panelH, panelT]} />
-          <meshPhysicalMaterial color={legColor} roughness={0.4} metalness={0.55} clearcoat={0.3} />
-        </mesh>
-      ))}
-      {/* Stretcher beam tying the trestles together */}
-      <mesh position={[0, panelH * 0.45, 0]} castShadow>
-        <boxGeometry args={[widthM * 0.16, 0.06, lengthM - 2 * legInset]} />
-        <meshPhysicalMaterial color={legColor} roughness={0.4} metalness={0.55} />
-      </mesh>
-    </group>
-  );
-}
-
-function Chair({
-  position, rotationY, seatColor, frameColor,
-}: { position: [number, number, number]; rotationY: number; seatColor: string; frameColor: string }) {
-  const seatH = 0.46;
-  const seatW = 0.5;
-  const seatD = 0.5;
-  const backH = 0.55;
-  return (
-    <group position={position} rotation-y={rotationY}>
-      {/* Seat */}
-      <RoundedBox position={[0, seatH, 0]} args={[seatW, 0.08, seatD]} radius={0.03} smoothness={3} castShadow receiveShadow>
-        <meshPhysicalMaterial color={seatColor} roughness={0.55} metalness={0.05} clearcoat={0.2} />
-      </RoundedBox>
-      {/* Backrest — at the -Z side, tilted slightly back */}
-      <RoundedBox position={[0, seatH + backH / 2, -seatD / 2 + 0.04]} rotation-x={0.12} args={[seatW, backH, 0.07]} radius={0.03} smoothness={3} castShadow>
-        <meshPhysicalMaterial color={seatColor} roughness={0.55} metalness={0.05} clearcoat={0.2} />
-      </RoundedBox>
-      {/* Four legs */}
-      {[[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([lx, lz], i) => (
-        <mesh key={i} position={[lx * (seatW / 2 - 0.05), seatH / 2, lz * (seatD / 2 - 0.05)]} castShadow>
-          <cylinderGeometry args={[0.022, 0.022, seatH, 8]} />
-          <meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.8} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function ChairsAroundTable({
-  count, tableLengthM, tableWidthM, position, seatColor, frameColor,
-}: { count: number; tableLengthM: number; tableWidthM: number; position: [number, number, number]; seatColor: string; frameColor: string }) {
-  const slots = useMemo(() => {
-    const out: { pos: [number, number, number]; rot: number }[] = [];
-    if (count <= 0) return out;
-    const gap = 0.34;                                  // chair offset from the table edge
-    const sideX = tableWidthM / 2 + gap;
-    const endZ = tableLengthM / 2 + gap;
-    const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
-    const sideTotal = count - endN;
-    const leftN = Math.ceil(sideTotal / 2);
-    const rightN = sideTotal - leftN;
-    const spanZ = Math.max(0.01, tableLengthM - 0.8);  // keep chairs off the corners
-    const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
-    for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
-    for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
-    if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
-    if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
-    return out;
-  }, [count, tableLengthM, tableWidthM]);
-  return (
-    <group position={position}>
-      {slots.map((s, i) => (
-        <Chair key={i} position={s.pos} rotationY={s.rot} seatColor={seatColor} frameColor={frameColor} />
       ))}
     </group>
   );

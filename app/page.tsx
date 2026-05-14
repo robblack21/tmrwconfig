@@ -37,9 +37,11 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
+    windowsEnabled, ceilingEnabled, windowSillM,
+    tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId,
-    exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, standingDisplayCount, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
+    exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
     bomRateOverrides, hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
@@ -301,6 +303,43 @@ export default function Page() {
           <Slider label="Floor"  value={platformHeightM} onChange={(v) => apply({ type: "layout.setPlatformHeight", value: v })} min={0.10} max={0.30} step={0.01} unit="m" />
         </Section>
 
+        <Section label="Room">
+          <ToggleRow label="Ceiling" value={ceilingEnabled} onToggle={(v) => apply({ type: "room.setCeilingEnabled", value: v })} />
+          <ToggleRow label="Windows" value={windowsEnabled} onToggle={(v) => apply({ type: "room.setWindowsEnabled", value: v })} />
+          {windowsEnabled && (
+            <Slider label="Sill" value={windowSillM} onChange={(v) => apply({ type: "room.setWindowSill", value: v })} min={0.4} max={1.6} step={0.05} unit="m" />
+          )}
+        </Section>
+
+        <Section label="Table">
+          <PillRow
+            options={[
+              { value: "main",      label: "Main" },
+              { value: "secondary", label: "Alt" },
+              { value: "presenter", label: "Pres" },
+              { value: "simple",    label: "Simple" },
+            ]}
+            value={tableVariant}
+            onSelect={(v) => apply({ type: "boardroom.setTableVariant", value: v as typeof tableVariant })}
+          />
+          <Slider label="Length" value={tableLengthM} onChange={(v) => apply({ type: "boardroom.setTableLength", value: v })} min={2.0} max={8.0} step={0.1} unit="m" />
+          <Slider label="Width"  value={tableWidthM}  onChange={(v) => apply({ type: "boardroom.setTableWidth", value: v })} min={1.0} max={3.0} step={0.1} unit="m" />
+        </Section>
+
+        <Section label="Chairs">
+          <PillRow
+            options={[
+              { value: "studio",    label: "Studio" },
+              { value: "executive", label: "Exec" },
+              { value: "office",    label: "Office" },
+              { value: "presenter", label: "Pres" },
+            ]}
+            value={chairVariant}
+            onSelect={(v) => apply({ type: "boardroom.setChairVariant", value: v as typeof chairVariant })}
+          />
+          <Slider label="Count" value={chairCount} onChange={(v) => apply({ type: "boardroom.setChairCount", value: v })} min={0} max={16} step={1} />
+        </Section>
+
         <Section
           label="Pendant"
           right={
@@ -382,7 +421,6 @@ export default function Page() {
               onSelect={(v) => apply({ type: "layout.setCoffeeTable", value: v as "avarta" | "kumo" | "geo" })}
             />
           )}
-          <Slider label="Displays" value={standingDisplayCount} onChange={(v) => apply({ type: "layout.setStandingDisplayCount", value: v })} min={0} max={4} step={1} />
         </Section>
 
         <Section label="Lighting">

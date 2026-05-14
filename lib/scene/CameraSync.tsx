@@ -8,14 +8,22 @@ import { useLive } from "@/lib/store/liveStore";
 // Minimal duck-type for drei's OrbitControls (avoids three-stdlib dep).
 type OrbitControlsLike = { target: THREE.Vector3; update: () => void };
 
-/** Named camera presets — { camera position, look-at target, fov }. */
+/** Named camera presets — interior boardroom views { camera pos, look-at
+ *  target, fov }. Tuned for the default mid-size room; OrbitControls handles
+ *  the rest as the user resizes. */
 export const CAMERA_PRESETS: Record<string, { pos: [number, number, number]; target: [number, number, number]; fov: number }> = {
-  hero:    { pos: [10.5, 4.2, 13.5], target: [0, 2.0, 0], fov: 30 },
-  front:   { pos: [0, 2.6, 14.5],    target: [0, 2.0, 0], fov: 30 },
-  side:    { pos: [14.5, 2.6, 0],    target: [0, 2.0, 0], fov: 30 },
-  top:     { pos: [0.01, 18, 0.01],  target: [0, 0, 0],   fov: 50 },
-  pendant: { pos: [0, 5.2, 6],       target: [0, 4.2, 0], fov: 42 },
-  closeup: { pos: [4.5, 1.8, 6],     target: [0, 1.6, -2], fov: 45 },
+  // Inside the room — 3/4 view from a front corner, across the table.
+  hero:    { pos: [4.4, 2.1, 3.0],  target: [-0.6, 0.9, -0.6], fov: 42 },
+  // From just inside the door, looking down the table at the back / video wall.
+  front:   { pos: [0, 1.85, 3.2],   target: [0, 1.3, -3.4],    fov: 46 },
+  // Along one side wall, looking across to the windowed wall opposite.
+  side:    { pos: [5.0, 1.8, 0],    target: [-5.0, 1.1, 0],    fov: 46 },
+  // High interior angle — reads the table + chair formation from above.
+  top:     { pos: [0.01, 3.5, 3.8], target: [0, 0.7, -0.6],    fov: 48 },
+  // Low, wide shot down the length of the room.
+  pendant: { pos: [0, 1.2, 3.0],    target: [0, 1.6, -3.2],    fov: 52 },
+  // Tight on the head of the table + nearest chairs.
+  closeup: { pos: [1.9, 1.3, 2.4],  target: [0, 0.78, 0],      fov: 40 },
 };
 
 /** First-load "entry" view — camera pulls in from 2.5× further away with

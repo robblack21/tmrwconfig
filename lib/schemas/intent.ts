@@ -48,6 +48,8 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("boardroom.setTableLength"), value: z.number() }),
   z.object({ type: z.literal("boardroom.setTableWidth"), value: z.number() }),
   z.object({ type: z.literal("boardroom.setChairCount"), value: z.number().int() }),
+  z.object({ type: z.literal("boardroom.setTableVariant"), value: z.enum(["main", "secondary", "presenter", "simple"]) }),
+  z.object({ type: z.literal("boardroom.setChairVariant"), value: z.enum(["studio", "executive", "office", "presenter"]) }),
 
   z.object({ type: z.literal("ledWall.setEnabled"), enabled: z.boolean() }),
   z.object({ type: z.literal("ledWall.setWidth"), value: z.number() }),

@@ -370,3 +370,84 @@ for (const k of [...seedBrandKitList, tmrwBlank]) {
   }
   if (k.scene?.wallGraphic) k.scene.wallGraphic = asset(k.scene.wallGraphic);
 }
+
+// ── Brand-hero assets ────────────────────────────────────────────────────────
+// The GLBs in /components/brand-hero/<slug>/, laid out per room: small items
+// (devices, watches, shoes, logos) sit on plinths along the back-left wall;
+// large items (cars, structures) stand on the floor down the left side. These
+// are display dressing — positions are tuned for a mid-size room and can be
+// art-directed per brand later. louisvuitton / meta / tmrw have no hero GLBs
+// on disk yet, so they simply render none.
+type HeroSpec = { file: string; heightM: number; plinth?: boolean };
+const HERO_ASSETS: Record<string, HeroSpec[]> = {
+  "brand.apple": [
+    { file: "apple_mac_studio.glb",        heightM: 0.42, plinth: true },
+    { file: "apple_vision_pro.glb",        heightM: 0.40, plinth: true },
+    { file: "apple_ipad_pro.glb",          heightM: 0.45, plinth: true },
+    { file: "apple_iphone_13_pro_max.glb", heightM: 0.40, plinth: true },
+  ],
+  "brand.bmw": [{ file: "bmw_m5_g90_2024__www.vecarz.com.glb", heightM: 1.45 }],
+  "brand.disney": [
+    { file: "disney_buzz.glb",                              heightM: 0.65, plinth: true },
+    { file: "disney_color_and_play_-_mickey.glb",           heightM: 0.65, plinth: true },
+    { file: "disney_infinity_woody.glb",                    heightM: 0.65, plinth: true },
+    { file: "lightning_mcqueen_forza_horizon_version.glb",  heightM: 1.05 },
+  ],
+  "brand.ferrari": [{ file: "2021_ferrari_sf90_spider.glb", heightM: 1.30 }],
+  "brand.google": [
+    { file: "google_logo.glb", heightM: 0.60, plinth: true },
+    { file: "google_bike.glb", heightM: 1.10 },
+  ],
+  "brand.mercedes": [{ file: "maybach.glb", heightM: 1.55 }],
+  "brand.netflix": [
+    { file: "netflix_symbol.glb", heightM: 0.75, plinth: true },
+    { file: "castle_byers.glb",   heightM: 1.60 },
+  ],
+  "brand.nike": [
+    { file: "miles_morales_shoes.glb",     heightM: 0.32, plinth: true },
+    { file: "nike_dunk_low_unlv.glb",      heightM: 0.32, plinth: true },
+    { file: "travis_scott_nike_shoes.glb", heightM: 0.32, plinth: true },
+  ],
+  "brand.nvidia": [
+    { file: "nvidia_logo.free_high_polly.glb",                       heightM: 0.55, plinth: true },
+    { file: "nvidia_rtx_5090_founders_edition_-_free_download.glb",   heightM: 0.42, plinth: true },
+  ],
+  "brand.rolex": [
+    { file: "rolex_datejust.glb", heightM: 0.34, plinth: true },
+    { file: "invicta_watch.glb",  heightM: 0.34, plinth: true },
+  ],
+  "brand.tesla": [{ file: "tesla_2018_model_3.glb", heightM: 1.40 }],
+};
+
+function buildHeroProps(slug: string, specs: HeroSpec[]) {
+  const props: Array<Record<string, unknown>> = [];
+  const plinthItems = specs.filter((s) => s.plinth);
+  const floorItems = specs.filter((s) => !s.plinth);
+  plinthItems.forEach((s, i) => {
+    props.push({
+      kind: "heroAsset",
+      url: asset(`/glb/brand-hero/${slug}/${s.file}`),
+      position: [-3.6 + i * 1.0, 0, -2.6],
+      rotationY: 0.35,
+      heightM: s.heightM,
+      plinthHeightM: 1.0,
+    });
+  });
+  floorItems.forEach((s, i) => {
+    props.push({
+      kind: "heroAsset",
+      url: asset(`/glb/brand-hero/${slug}/${s.file}`),
+      position: [-2.6 + i * 0.4, 0, 1.0],
+      rotationY: -Math.PI / 5,
+      heightM: s.heightM,
+    });
+  });
+  return props;
+}
+
+for (const k of seedBrandKitList) {
+  const specs = HERO_ASSETS[k.id];
+  if (!specs) continue;
+  if (!k.scene) k.scene = {};
+  k.scene.props = buildHeroProps(k.id.replace("brand.", ""), specs);
+}

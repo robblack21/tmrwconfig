@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type { Intent, PendantShape, SizeTier, FootprintShape } from "@/lib/schemas";
 import { standardSizeTiers } from "@/lib/schemas";
 import { seedBrandKitList, findKitById } from "@/lib/fixtures/brandKits";
+import type { TableVariant, ChairVariant } from "@/lib/scene/Boardroom";
 
 // Configurator state — derived/persisted from a real StandConfig later.
 // For Week-1 we keep a flat shape that mirrors what the UI binds to;
@@ -48,6 +49,8 @@ export type ConfigState = {
   tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
   tableWidthM: number;                // 1.0..3.0 — boardroom table width
   chairCount: number;                 // 0..16 — chairs arranged around the table, facing in
+  tableVariant: TableVariant;         // which boardroom-table GLB
+  chairVariant: ChairVariant;         // which boardroom-chair GLB
   // LED / video wall
   ledWallEnabled: boolean;
   ledWallWidthM: number;        // 2.0..14.0
@@ -150,6 +153,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tableLengthM: 3.6,
   tableWidthM: 1.4,
   chairCount: 8,
+  tableVariant: "main",
+  chairVariant: "studio",
   ledWallEnabled: true,
   ledWallWidthM: 6.0,           // sane back-wall size
   ledWallHeightM: 3.375,        // 6 / 3.375 = 16:9
@@ -283,6 +288,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "boardroom.setTableLength":   { set({ tableLengthM: clamp(intent.value, 2.0, 8.0) }); break; }
       case "boardroom.setTableWidth":    { set({ tableWidthM: clamp(intent.value, 1.0, 3.0) }); break; }
       case "boardroom.setChairCount":    { set({ chairCount: Math.round(clamp(intent.value, 0, 16)) }); break; }
+      case "boardroom.setTableVariant":  { set({ tableVariant: intent.value }); break; }
+      case "boardroom.setChairVariant":  { set({ chairVariant: intent.value }); break; }
       case "ledWall.setEnabled": {
         set({ ledWallEnabled: intent.enabled });
         break;
