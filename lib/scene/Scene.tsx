@@ -261,39 +261,6 @@ export function Scene() {
         </TimedReveal>
       )}
 
-      {/* Brand logo — prominent inside the room (migrates to the left flank
-          when the video wall occupies the back wall). The exterior signage
-          flanking the front door is rendered by Room/DoorEdgeWall. */}
-      <Suspense fallback={null}>
-        <BrandLogoOnWall
-          kit={kit}
-          widthM={widthM}
-          depthM={depthM}
-          wallHeightM={wallHeightM}
-          platformHeightM={platformHeightM}
-          glow={logoGlow}
-          extrusionM={logoExtrusionM}
-          emissive={logoEmissive}
-          placement={ledWallEnabled ? "flank-left" : "back-centre"}
-        />
-      </Suspense>
-
-      {/* LED / video wall — emissive panel mounted on the back wall */}
-      {ledWallEnabled && (
-        <Suspense fallback={null}>
-          <LedWall
-            kit={kit}
-            backWallZ={-depthM / 2}
-            widthM={ledWallWidthM}
-            heightM={ledWallHeightM}
-            roomWidthM={widthM}
-            roomHeightM={wallHeightM}
-            platformHeightM={platformHeightM}
-            brightness={ledWallBrightness}
-          />
-        </Suspense>
-      )}
-
       {/* The truss canopy is the open / exhibition rig — hidden once the
           ceiling encloses the room. */}
       {!ceilingEnabled && (
@@ -301,130 +268,169 @@ export function Scene() {
           <TrussCanopy widthM={widthM} depthM={depthM} trussTopM={trussTopM} color={trussColor} editMode={editMode} />
         </TimedReveal>
       )}
-
-      {/* The branded pendant stays in both modes — it hangs from the ceiling
-          when enclosed, from the truss when open (see pendantYM above). */}
-      {pendantEnabled && (
-        <TimedReveal delay={450}>
-          <PendantWithLogo
-            shape={pendantShape}
-            widthM={pendantWidthM}
-            depthM={pendantDepthM}
-            heightM={pendantHeightM}
-            yPositionM={pendantYM}
-            extrusionM={logoExtrusionM}
-            emissive={logoEmissive}
-            rotationDeg={pendantRotationDeg}
-            ringVertical={pendantRingVertical}
-            colorOverride={pendantColor}
-            kit={kit}
-          />
-        </TimedReveal>
-      )}
-
-      {/* Hero elements — toggles in Lighting section. In edit mode the
-          performance-heavy / shadow-casting ones are skipped. */}
-      {lightShaftsEnabled && !editMode && (
-        <LightShafts
-          widthM={widthM}
-          depthM={depthM}
-          railY={trussTopM + 0.1}
-          color={kit.palette.accent}
-          count={6}
-          density={lightShaftDensity}
-          floorY={platformHeightM + 0.05}
-        />
-      )}
-      {lightboxLogoEnabled && (
-        <Suspense fallback={null}>
-          {/* Lightbox hangs from the truss — suspended near the truss height
-              (trussTopM - 0.4) with a thin cable from above, so it reads as
-              part of the overhead rig instead of floating mid-room. */}
-          <group position={[0, trussTopM - 1.2, depthM / 2 - 1.5]}>
-            <mesh position={[0, 0.7, 0]}>
-              <cylinderGeometry args={[0.01, 0.01, 1.0, 6]} />
-              <meshStandardMaterial color="#1a1c22" roughness={0.4} metalness={0.6} />
-            </mesh>
-            <LightboxLogo kit={kit} position={[0, 0, 0]} widthM={2.6} heightM={1.0} />
-          </group>
-        </Suspense>
-      )}
-      {radiatingRigEnabled && (
-        <RadiatingRig
-          centerXZ={[0, 0]}
-          baseRadius={radiatingRadiusM}
-          rings={radiatingRings}
-          yPos={(pendantEnabled ? pendantYM : trussTopM - 0.5) + radiatingYOffsetM}
-          color={radiatingColor || kit.palette.accent}
-        />
-      )}
-      {glassBalconyEnabled && (
-        <GlassBalcony widthM={widthM} depthM={depthM} platformHeightM={platformHeightM} brandPrimary={kit.palette.primary} brandAccent={kit.palette.accent} />
-      )}
-      {circularScreenEnabled && (
-        <CircularScreen kit={kit} position={[0, platformHeightM + wallHeightM * 0.6, -depthM / 2 + 0.18]} radius={1.4} />
-      )}
-      {wraparoundScreenEnabled && (
-        <WraparoundScreen kit={kit} widthM={widthM} depthM={depthM} heightM={wallHeightM * 0.8} yBaseM={platformHeightM + 0.4} />
-      )}
-
-      {/* Per-kit brand-hero assets — the GLBs in /components/brand-hero/<slug>/. */}
-      <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM }} />
-
-      {/* Boardroom furnishing — the table + chairs are the centrepiece; plants
-          dress the corners; sofas are optional breakout seating. Suppressed
-          when a kit brings its own bespoke set. */}
-      {!kit.scene?.noDefaultDressing && (
-        <>
-          {/* Boardroom table + chairs arranged around it, all facing inward. */}
-          <Suspense fallback={null}>
-            <BoardroomTable
-              variant={tableVariant}
-              lengthM={tableLengthM}
-              widthM={tableWidthM}
-              position={[0, platformHeightM, 0]}
-              tintHex={kit.palette.primary}
-            />
-            <ChairsAroundTable
-              count={chairCount}
-              tableLengthM={tableLengthM}
-              tableWidthM={tableWidthM}
-              chairVariant={chairVariant}
-              position={[0, platformHeightM, 0]}
-              tintHex={kit.palette.secondary}
-            />
-          </Suspense>
-
-          {/* Optional breakout seating — sofa pair against the front-right
-              corner, count-driven (0 by default for a clean boardroom). */}
-          {Array.from({ length: Math.min(sofaCount, 2) }, (_, i) => {
-            const sx = i === 0 ? -1 : 1;
-            const SOFA_HEIGHT = 1.0;
-            const x = sx > 0 ? widthM / 2 - 1.3 : widthM / 2 - 1.3;
-            const z = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.4);
-            const rotY = -Math.PI / 2;
-            return (
-              <Suspense key={`sofa-${i}`} fallback={null}>
-                <Sofa
-                  position={[x, platformHeightM + SOFA_HEIGHT * 0.5, z]}
-                  rotationY={rotY}
-                  heightM={SOFA_HEIGHT}
-                  tintHex={sofaResolved}
-                />
-              </Suspense>
-            );
-          })}
-          {sofaCount >= 2 && (
-            <Suspense fallback={null}>
-              <CoffeeTable variant={coffeeTableVariant} position={[widthM / 2 - 2.4, platformHeightM, depthM / 2 - 2.3]} heightM={0.335} />
-            </Suspense>
-          )}
-
-          <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
-        </>
-      )}
         </group>
       ))}
+
+      {/* Props + branded content — rendered ONLY in the first room of the
+          cluster. Multi-room duplication is for empty architectural shells;
+          the pendant, logo, video wall, hero GLBs and default dressing all
+          stay anchored to the lead room rather than copying across clones. */}
+      <group position={[xOffsetFor(0), 0, 0]}>
+        {/* Brand logo — prominent inside the room (migrates to the left flank
+            when the video wall occupies the back wall). The exterior signage
+            flanking the front door is rendered by Room/DoorEdgeWall. */}
+        <Suspense fallback={null}>
+          <BrandLogoOnWall
+            kit={kit}
+            widthM={widthM}
+            depthM={depthM}
+            wallHeightM={wallHeightM}
+            platformHeightM={platformHeightM}
+            glow={logoGlow}
+            extrusionM={logoExtrusionM}
+            emissive={logoEmissive}
+            placement={ledWallEnabled ? "flank-left" : "back-centre"}
+          />
+        </Suspense>
+
+        {/* LED / video wall — emissive panel mounted on the back wall */}
+        {ledWallEnabled && (
+          <Suspense fallback={null}>
+            <LedWall
+              kit={kit}
+              backWallZ={-depthM / 2}
+              widthM={ledWallWidthM}
+              heightM={ledWallHeightM}
+              roomWidthM={widthM}
+              roomHeightM={wallHeightM}
+              platformHeightM={platformHeightM}
+              brightness={ledWallBrightness}
+            />
+          </Suspense>
+        )}
+
+        {/* The branded pendant stays in both modes — it hangs from the ceiling
+            when enclosed, from the truss when open (see pendantYM above). */}
+        {pendantEnabled && (
+          <TimedReveal delay={450}>
+            <PendantWithLogo
+              shape={pendantShape}
+              widthM={pendantWidthM}
+              depthM={pendantDepthM}
+              heightM={pendantHeightM}
+              yPositionM={pendantYM}
+              extrusionM={logoExtrusionM}
+              emissive={logoEmissive}
+              rotationDeg={pendantRotationDeg}
+              ringVertical={pendantRingVertical}
+              colorOverride={pendantColor}
+              kit={kit}
+            />
+          </TimedReveal>
+        )}
+
+        {/* Hero elements — toggles in Lighting section. In edit mode the
+            performance-heavy / shadow-casting ones are skipped. */}
+        {lightShaftsEnabled && !editMode && (
+          <LightShafts
+            widthM={widthM}
+            depthM={depthM}
+            railY={trussTopM + 0.1}
+            color={kit.palette.accent}
+            count={6}
+            density={lightShaftDensity}
+            floorY={platformHeightM + 0.05}
+          />
+        )}
+        {lightboxLogoEnabled && (
+          <Suspense fallback={null}>
+            {/* Lightbox hangs from the truss — suspended near the truss height
+                (trussTopM - 0.4) with a thin cable from above, so it reads as
+                part of the overhead rig instead of floating mid-room. */}
+            <group position={[0, trussTopM - 1.2, depthM / 2 - 1.5]}>
+              <mesh position={[0, 0.7, 0]}>
+                <cylinderGeometry args={[0.01, 0.01, 1.0, 6]} />
+                <meshStandardMaterial color="#1a1c22" roughness={0.4} metalness={0.6} />
+              </mesh>
+              <LightboxLogo kit={kit} position={[0, 0, 0]} widthM={2.6} heightM={1.0} />
+            </group>
+          </Suspense>
+        )}
+        {radiatingRigEnabled && (
+          <RadiatingRig
+            centerXZ={[0, 0]}
+            baseRadius={radiatingRadiusM}
+            rings={radiatingRings}
+            yPos={(pendantEnabled ? pendantYM : trussTopM - 0.5) + radiatingYOffsetM}
+            color={radiatingColor || kit.palette.accent}
+          />
+        )}
+        {glassBalconyEnabled && (
+          <GlassBalcony widthM={widthM} depthM={depthM} platformHeightM={platformHeightM} brandPrimary={kit.palette.primary} brandAccent={kit.palette.accent} />
+        )}
+        {circularScreenEnabled && (
+          <CircularScreen kit={kit} position={[0, platformHeightM + wallHeightM * 0.6, -depthM / 2 + 0.18]} radius={1.4} />
+        )}
+        {wraparoundScreenEnabled && (
+          <WraparoundScreen kit={kit} widthM={widthM} depthM={depthM} heightM={wallHeightM * 0.8} yBaseM={platformHeightM + 0.4} />
+        )}
+
+        {/* Per-kit brand-hero assets — the GLBs in /components/brand-hero/<slug>/. */}
+        <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM }} />
+
+        {/* Boardroom furnishing — the table + chairs are the centrepiece; plants
+            dress the corners; sofas are optional breakout seating. Suppressed
+            when a kit brings its own bespoke set. */}
+        {!kit.scene?.noDefaultDressing && (
+          <>
+            {/* Boardroom table + chairs arranged around it, all facing inward. */}
+            <Suspense fallback={null}>
+              <BoardroomTable
+                variant={tableVariant}
+                lengthM={tableLengthM}
+                widthM={tableWidthM}
+                position={[0, platformHeightM, 0]}
+                tintHex={kit.palette.primary}
+              />
+              <ChairsAroundTable
+                count={chairCount}
+                tableLengthM={tableLengthM}
+                tableWidthM={tableWidthM}
+                chairVariant={chairVariant}
+                position={[0, platformHeightM, 0]}
+                tintHex={kit.palette.secondary}
+              />
+            </Suspense>
+
+            {/* Optional breakout seating — sofa pair against the front-right
+                corner, count-driven (0 by default for a clean boardroom). */}
+            {Array.from({ length: Math.min(sofaCount, 2) }, (_, i) => {
+              const sx = i === 0 ? -1 : 1;
+              const SOFA_HEIGHT = 1.0;
+              const x = sx > 0 ? widthM / 2 - 1.3 : widthM / 2 - 1.3;
+              const z = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.4);
+              const rotY = -Math.PI / 2;
+              return (
+                <Suspense key={`sofa-${i}`} fallback={null}>
+                  <Sofa
+                    position={[x, platformHeightM + SOFA_HEIGHT * 0.5, z]}
+                    rotationY={rotY}
+                    heightM={SOFA_HEIGHT}
+                    tintHex={sofaResolved}
+                  />
+                </Suspense>
+              );
+            })}
+            {sofaCount >= 2 && (
+              <Suspense fallback={null}>
+                <CoffeeTable variant={coffeeTableVariant} position={[widthM / 2 - 2.4, platformHeightM, depthM / 2 - 2.3]} heightM={0.335} />
+              </Suspense>
+            )}
+
+            <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
+          </>
+        )}
+      </group>
 
       {/* Camera sync — applies FOV + preset moves + surfaces live readouts.
           Lives outside the per-room map so it observes the cluster as a
