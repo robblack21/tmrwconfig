@@ -7,6 +7,7 @@ import { asset } from "@/lib/assetPath";
 const FLOOR_BASE = asset("/textures/concrete_floor_worn_001_4k.gltf/textures");
 const WALL_BASE = asset("/textures/plastered_wall_02_4k.gltf/textures");
 const PARQUET_BASE = asset("/textures/herringbone_parquet_2k.gltf/textures");
+const QUADRATED_BASE = asset("/textures/black_quadrated_wall_texture_pack");
 
 useTexture.preload(`${FLOOR_BASE}/concrete_floor_worn_001_diff_4k.jpg`);
 useTexture.preload(`${FLOOR_BASE}/concrete_floor_worn_001_nor_gl_4k.jpg`);
@@ -17,6 +18,10 @@ useTexture.preload(`${WALL_BASE}/plastered_wall_02_arm_4k.jpg`);
 useTexture.preload(`${PARQUET_BASE}/herringbone_parquet_diff_2k.jpg`);
 useTexture.preload(`${PARQUET_BASE}/herringbone_parquet_nor_gl_2k.jpg`);
 useTexture.preload(`${PARQUET_BASE}/herringbone_parquet_arm_2k.jpg`);
+useTexture.preload(`${QUADRATED_BASE}/black_quadrated_wall_basecolor_2k.png`);
+useTexture.preload(`${QUADRATED_BASE}/black_quadrated_wall_normal_2k.png`);
+useTexture.preload(`${QUADRATED_BASE}/black_quadrated_wall_roughness_2k.png`);
+useTexture.preload(`${QUADRATED_BASE}/black_quadrated_wall_ao_2k.png`);
 
 /**
  * Floor textures share a single instance across uses — we set the repeat once at
@@ -95,6 +100,32 @@ export function useWallTextures() {
     armMap.colorSpace = THREE.NoColorSpace;
   }, [map, normalMap, armMap]);
   return { map, normalMap, aoMap: armMap, roughnessMap: armMap };
+}
+
+/**
+ * Black quadrated wall — square panelling with gentle relief. Used on the
+ * interior front (door) wall by default; brand-tinted at the material
+ * level so each kit gets its own panelled aesthetic.
+ */
+export function useQuadratedWallTextures() {
+  const [map, normalMap, roughnessMap, aoMap] = useTexture([
+    `${QUADRATED_BASE}/black_quadrated_wall_basecolor_2k.png`,
+    `${QUADRATED_BASE}/black_quadrated_wall_normal_2k.png`,
+    `${QUADRATED_BASE}/black_quadrated_wall_roughness_2k.png`,
+    `${QUADRATED_BASE}/black_quadrated_wall_ao_2k.png`,
+  ]);
+  useEffect(() => {
+    [map, normalMap, roughnessMap, aoMap].forEach((t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(1.8, 1.4);
+      t.anisotropy = 8;
+    });
+    map.colorSpace = THREE.SRGBColorSpace;
+    normalMap.colorSpace = THREE.NoColorSpace;
+    roughnessMap.colorSpace = THREE.NoColorSpace;
+    aoMap.colorSpace = THREE.NoColorSpace;
+  }, [map, normalMap, roughnessMap, aoMap]);
+  return { map, normalMap, roughnessMap, aoMap };
 }
 
 /**

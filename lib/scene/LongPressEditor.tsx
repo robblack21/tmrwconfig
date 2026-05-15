@@ -45,32 +45,46 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
       }
     };
 
+    const doRaycast = (clientX: number, clientY: number): boolean => {
+      const rect = canvas.getBoundingClientRect();
+      // Bail if the click was outside the canvas (clicked on a panel etc).
+      if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+      const hits = raycaster.intersectObjects(scene.children, true);
+      for (const h of hits) {
+        let o: THREE.Object3D | null = h.object;
+        while (o) {
+          const kind = (o.userData as { kind?: string } | undefined)?.kind;
+          if (kind && kind in KIND_LABEL) {
+            onOpen(kind as SurfaceKind, clientX, clientY);
+            return true;
+          }
+          o = o.parent;
+        }
+      }
+      return false;
+    };
+
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return; // primary button only
+      // Shift+Click — immediate alternative to long-press.
+      if (e.shiftKey) {
+        if (doRaycast(e.clientX, e.clientY)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
       downTimeRef.current = Date.now();
       downPosRef.current = [e.clientX, e.clientY];
       draggingRef.current = false;
       cancelTimer();
       timerRef.current = window.setTimeout(() => {
-        // Long-press completed without significant drag — try to identify.
         if (draggingRef.current || !downPosRef.current) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = ((downPosRef.current[0] - rect.left) / rect.width) * 2 - 1;
-        const y = -((downPosRef.current[1] - rect.top) / rect.height) * 2 + 1;
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-        const hits = raycaster.intersectObjects(scene.children, true);
-        for (const h of hits) {
-          let o: THREE.Object3D | null = h.object;
-          while (o) {
-            const kind = (o.userData as { kind?: string } | undefined)?.kind;
-            if (kind && kind in KIND_LABEL) {
-              onOpen(kind as SurfaceKind, downPosRef.current[0], downPosRef.current[1]);
-              return;
-            }
-            o = o.parent;
-          }
-        }
+        doRaycast(downPosRef.current[0], downPosRef.current[1]);
       }, LONG_PRESS_MS);
     };
 
@@ -89,48 +103,19 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
       cancelTimer();
     };
 
-    // Shift+Click — explicit alternative to long-press. Fires immediately
-    // on pointerdown when Shift is held, so users have a guaranteed shortcut
-    // even if their finger / trackpad makes the long-press timer flaky.
-    const onShiftClick = (e: PointerEvent) => {
-      if (!e.shiftKey || e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const rect = canvas.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
-      const hits = raycaster.intersectObjects(scene.children, true);
-      for (const h of hits) {
-        let o: THREE.Object3D | null = h.object;
-        while (o) {
-          const kind = (o.userData as { kind?: string } | undefined)?.kind;
-          if (kind && kind in KIND_LABEL) {
-            onOpen(kind as SurfaceKind, e.clientX, e.clientY);
-            return;
-          }
-          o = o.parent;
-        }
-      }
-    };
-
-    // Use capture phase so we fire BEFORE OrbitControls' own listeners and
-    // before any stopPropagation it might do.
+    // Attach to DOCUMENT (not the canvas) so OrbitControls' pointer capture
+    // on the canvas can't intercept the events before we see them. The
+    // raycast helper bails when the click was outside the canvas bounds.
     const opts = { capture: true } as AddEventListenerOptions;
-    canvas.addEventListener("pointerdown", onDown, opts);
-    canvas.addEventListener("pointermove", onMove, opts);
-    canvas.addEventListener("pointerup", onUp, opts);
-    canvas.addEventListener("pointercancel", onUp, opts);
-    // Note: NO pointerleave listener — the cursor briefly leaving the canvas
-    // during a slow long-press shouldn't cancel the gesture.
-    canvas.addEventListener("pointerdown", onShiftClick, opts);
+    document.addEventListener("pointerdown", onDown, opts);
+    document.addEventListener("pointermove", onMove, opts);
+    document.addEventListener("pointerup", onUp, opts);
+    document.addEventListener("pointercancel", onUp, opts);
     return () => {
-      canvas.removeEventListener("pointerdown", onDown, opts);
-      canvas.removeEventListener("pointermove", onMove, opts);
-      canvas.removeEventListener("pointerup", onUp, opts);
-      canvas.removeEventListener("pointercancel", onUp, opts);
-      canvas.removeEventListener("pointerdown", onShiftClick, opts);
+      document.removeEventListener("pointerdown", onDown, opts);
+      document.removeEventListener("pointermove", onMove, opts);
+      document.removeEventListener("pointerup", onUp, opts);
+      document.removeEventListener("pointercancel", onUp, opts);
       cancelTimer();
     };
   }, [camera, scene, gl, onOpen]);

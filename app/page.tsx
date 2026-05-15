@@ -36,7 +36,7 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
-    windowsEnabled, ceilingEnabled, windowSillM, roomCount,
+    windowsEnabled, ceilingEnabled, wallTextureEnabled, windowSillM, roomCount,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
@@ -360,6 +360,7 @@ export default function Page() {
         <Section label="Room">
           <ToggleRow label="Ceiling" value={ceilingEnabled} onToggle={(v) => apply({ type: "room.setCeilingEnabled", value: v })} />
           <ToggleRow label="Windows" value={windowsEnabled} onToggle={(v) => apply({ type: "room.setWindowsEnabled", value: v })} />
+          <ToggleRow label="Wall texture" value={wallTextureEnabled} onToggle={(v) => apply({ type: "room.setWallTextureEnabled", value: v })} />
           {windowsEnabled && (
             <Slider label="Sill" value={windowSillM} onChange={(v) => apply({ type: "room.setWindowSill", value: v })} min={0.4} max={1.6} step={0.05} unit="m" />
           )}

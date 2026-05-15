@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { useConfig, useBrandKit, type VideoCell } from "@/lib/store/configStore";
 import type { PendantShape, FootprintShape } from "@/lib/schemas";
 import { Sofa, CoffeeTable, Plant } from "./Props";
-import { useFloorTextures, useWallTextures, useParquetTextures, useLogoTexture } from "./Textures";
+import { useFloorTextures, useWallTextures, useQuadratedWallTextures, useParquetTextures, useLogoTexture } from "./Textures";
 import { useWallGraphic, useMotifTexture, type MotifKind } from "./WallGraphics";
 import { LightShafts, LightboxLogo, RadiatingRig, GlassBalcony, CircularScreen, WraparoundScreen } from "./HeroElements";
 import { TimedReveal } from "./SceneReveal";
@@ -220,7 +220,7 @@ export function Scene() {
       <directionalLight position={[-6, 6, -4]} intensity={(isDark ? 0.22 : 0.3) * keyLightIntensity} color="#a8b4cc" />
 
       <Suspense fallback={null}>
-        <PbrFloor isDark={isDark} />
+        <PbrFloor isDark={isDark} widthM={clusterWidthM} depthM={depthM} />
       </Suspense>
 
       <Suspense fallback={null}>
@@ -730,12 +730,18 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
   );
 }
 
-function PbrFloor({ isDark }: { isDark: boolean }) {
+function PbrFloor({ isDark, widthM, depthM }: { isDark: boolean; widthM: number; depthM: number }) {
   const { map, normalMap, roughnessMap } = useFloorTextures();
+  // 1.5x the room dimensions — gives a sense of exterior context just
+  // outside the room shell, but isn't an infinite quad with stretched-thin
+  // texture detail. The concrete texture's repeat is already set in
+  // useFloorTextures; this just sizes the plane.
+  const w = widthM * 1.5;
+  const d = depthM * 1.5;
   return (
     <mesh receiveShadow rotation-x={-Math.PI / 2} position={[0, 0, 0]}>
-      <planeGeometry args={[100, 100]} />
-      <meshStandardMaterial map={map} normalMap={normalMap} roughnessMap={roughnessMap} color={isDark ? "#8d8d8d" : "#ffffff"} roughness={isDark ? 0.72 : 0.82} metalness={0.05} envMapIntensity={isDark ? 0.9 : 1.05} />
+      <planeGeometry args={[w, d]} />
+      <meshStandardMaterial map={map} normalMap={normalMap} roughnessMap={roughnessMap} color={isDark ? "#8d8d8d" : "#cccccc"} roughness={isDark ? 0.72 : 0.82} metalness={0.05} envMapIntensity={isDark ? 0.9 : 1.05} />
     </mesh>
   );
 }
@@ -982,10 +988,13 @@ function DoorEdgeWall({
   const segCx = doorW / 2 + segW / 2;
   return (
     <group position={position} rotation-y={rotationY}>
-      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[-segCx, wallHeightM / 2, 0]} color={color} />
-      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[segCx, wallHeightM / 2, 0]} color={color} />
+      {/* Front wall (the door wall) carries the quadrated panelling —
+          brand-tinted square panels with relief. The other walls keep the
+          plaster finish (toggleable via room.setWallTextureEnabled). */}
+      <WallPanelQuadrated w={segW} h={wallHeightM} d={thick} pos={[-segCx, wallHeightM / 2, 0]} color={color} />
+      <WallPanelQuadrated w={segW} h={wallHeightM} d={thick} pos={[segCx, wallHeightM / 2, 0]} color={color} />
       {headerH > 0.05 && (
-        <WallPanelPlaster w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
+        <WallPanelQuadrated w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
       )}
       {/* Extruded brand signage flanking the door on the exterior face */}
       {logo && segW > 0.6 && [-1, 1].map((sx) => (
@@ -1292,28 +1301,54 @@ function WallPanelMotif({ w, h, d, pos, color, accent, motif }: { w: number; h: 
 
 function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
   const { map, normalMap, aoMap } = useWallTextures();
+  const textured = useConfig((s) => s.wallTextureEnabled);
   // Smoother, more "printed satin laminate" feel — less plaster bumpiness,
   // slight clearcoat sheen so brand-coloured walls catch the HDR.
   // Wrapped in a group with userData so the long-press editor's raycast walk
   // finds the surface kind even if RoundedBox swallows the mesh-level prop.
+  // wallTextureEnabled toggles the plaster relief on/off — off gives a
+  // matte painted finish (better for some brand looks).
   return (
     <group userData={{ kind: "walls" }}>
     <RoundedBox position={pos} args={[w, h, d]} radius={0.014} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
       <meshPhysicalMaterial
         color={color}
-        map={map}
-        normalMap={normalMap}
-        aoMap={aoMap}
-        roughness={0.42}
+        map={textured ? map : null}
+        normalMap={textured ? normalMap : null}
+        aoMap={textured ? aoMap : null}
+        roughness={textured ? 0.42 : 0.55}
         metalness={0.04}
-        clearcoat={0.45}
+        clearcoat={textured ? 0.45 : 0.2}
         clearcoatRoughness={0.22}
         envMapIntensity={1.15}
-        normalScale={new THREE.Vector2(0.05, 0.05)}
+        normalScale={textured ? new THREE.Vector2(0.05, 0.05) : new THREE.Vector2(0, 0)}
         sheen={0.2}
         sheenRoughness={0.5}
       />
     </RoundedBox>
+    </group>
+  );
+}
+
+/** Quadrated panelling — used for the front wall (the one with the door).
+ *  Brand-tinted via material `color`, so each kit gets its own panelled
+ *  variant. Identical signature to WallPanelPlaster so callers can swap. */
+function WallPanelQuadrated({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
+  const { map, normalMap, roughnessMap, aoMap } = useQuadratedWallTextures();
+  return (
+    <group userData={{ kind: "walls" }}>
+      <RoundedBox position={pos} args={[w, h, d]} radius={0.012} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
+        <meshPhysicalMaterial
+          color={color}
+          map={map}
+          normalMap={normalMap}
+          roughnessMap={roughnessMap}
+          aoMap={aoMap}
+          metalness={0.08}
+          envMapIntensity={1.1}
+          normalScale={new THREE.Vector2(0.8, 0.8)}
+        />
+      </RoundedBox>
     </group>
   );
 }
@@ -2020,7 +2055,10 @@ function MatrixCell({
       </group>
     );
   }
-  // Image or default-logo fallback
+  // Image or default-logo fallback. The brand-glow plane is the BACKGROUND;
+  // the logo / image sits IN FRONT of it (zFront + 0.004) so it isn't
+  // occluded by the glow's emissive face. Logo is sized to the cell so
+  // matrix subdivisions actually read as separate small screens.
   return (
     <group position={[x, y, 0]}>
       <mesh position={[0, 0, zFront]}>
@@ -2033,9 +2071,9 @@ function MatrixCell({
         />
       </mesh>
       {resolved.kind === "image" && resolved.value ? (
-        <MatrixCellImage url={resolved.value} cellW={cellW} cellH={cellH} zFront={zFront + 0.003} />
+        <MatrixCellImage url={resolved.value} cellW={cellW} cellH={cellH} zFront={zFront + 0.005} />
       ) : (
-        <LedWallContent kit={kit} widthM={cellW} heightM={cellH} brightness={brightness} />
+        <MatrixCellLogo kit={kit} cellW={cellW} cellH={cellH} zFront={zFront + 0.005} />
       )}
     </group>
   );
@@ -2047,6 +2085,43 @@ function MatrixCellImage({ url, cellW, cellH, zFront }: { url: string; cellW: nu
     <mesh position={[0, 0, zFront]}>
       <planeGeometry args={[cellW * 0.95, cellH * 0.93]} />
       <meshStandardMaterial map={tex} toneMapped={false} emissive={new THREE.Color("#ffffff")} emissiveMap={tex} emissiveIntensity={0.6} />
+    </mesh>
+  );
+}
+
+/** Cell-sized brand logo. Unlike `LedWallLogo` (which positions a 32%-tall
+ *  logo at the upper-right of a full-size LED wall), this one fills the
+ *  cell — sized to fit width OR height, centred in the cell, IN FRONT of
+ *  the brand-glow plane. Solves the "I can't see new screens" complaint
+ *  where matrix cells looked blank because the logo was occluded by the
+ *  glow plane and positioned for full-LED-wall coordinates. */
+function MatrixCellLogo({ kit, cellW, cellH, zFront }: { kit: BrandKit; cellW: number; cellH: number; zFront: number }) {
+  const url = kit.logos.primary.rasterUrl;
+  if (!url) return null;
+  const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
+  let w = cellW * 0.6;
+  let h = w / aspect;
+  if (h > cellH * 0.6) { h = cellH * 0.6; w = h * aspect; }
+  return (
+    <Suspense fallback={null}>
+      <MatrixCellLogoInner url={url} w={w} h={h} zFront={zFront} invert={!!kit.scene?.invertLogo} chroma={kit.scene?.logoChroma ?? ""} tint={kit.palette.neutralLight} />
+    </Suspense>
+  );
+}
+
+function MatrixCellLogoInner({ url, w, h, zFront, invert, chroma, tint }: { url: string; w: number; h: number; zFront: number; invert: boolean; chroma: "white" | "black" | ""; tint: string }) {
+  const tex = useLogoTexture(url, invert, chroma);
+  return (
+    <mesh position={[0, 0, zFront]}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial
+        map={tex}
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+        color={tint}
+        opacity={1}
+      />
     </mesh>
   );
 }

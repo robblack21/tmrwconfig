@@ -154,36 +154,28 @@ function ChairBackLogoDecal({ kit, backZ }: { kit: BrandKit; backZ: number }) {
   // backZ is -0.32 — and we flip the plane 180° around Y so its normal points
   // outward.
   const rotY = backZ > 0 ? 0 : Math.PI;
-  // Slight inset for the front-facing decal so it sits ON the backrest's
-  // inner face (≈8cm forward of the back), not at the very same z as the
-  // outward one.
+  // Inward-facing decal sits on the FRONT of the backrest — slightly
+  // inset from the back face (≈8cm forward) so it doesn't z-fight, and
+  // dropped DOWN by half its height (~h/2) per user feedback so it sits
+  // mid-backrest rather than rim-of-head height.
   const frontZ = backZ > 0 ? backZ - 0.08 : backZ + 0.08;
-  const matProps = {
-    map: tex,
-    emissiveMap: tex,
-    emissive: new THREE.Color("#ffffff"),
-    emissiveIntensity: 0.35,
-    color: "#ffffff",
-    transparent: true,
-    toneMapped: false,
-    depthWrite: false,
-    alphaTest: 0.04,
-    side: THREE.DoubleSide,
-  };
+  const frontY = 0.92 - h * 0.5;
   return (
-    <>
-      {/* Outward-facing decal — visible from outside the table circle. */}
-      <mesh position={[0, 0.92, backZ]} rotation-y={rotY}>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial {...matProps} />
-      </mesh>
-      {/* Inward-facing decal — on the FRONT of the backrest, visible to
-          anyone sitting OPPOSITE this chair across the table. */}
-      <mesh position={[0, 0.92, frontZ]} rotation-y={rotY + Math.PI}>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial {...matProps} />
-      </mesh>
-    </>
+    <mesh position={[0, frontY, frontZ]} rotation-y={rotY + Math.PI}>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial
+        map={tex}
+        emissiveMap={tex}
+        emissive={new THREE.Color("#ffffff")}
+        emissiveIntensity={0.35}
+        color="#ffffff"
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+        alphaTest={0.04}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 

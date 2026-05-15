@@ -53,6 +53,7 @@ export type ConfigState = {
   // Boardroom geometry
   windowsEnabled: boolean;            // ribbon windows on the side walls (glass shading)
   ceilingEnabled: boolean;            // enclosed ceiling slab (off = open / exhibition look)
+  wallTextureEnabled: boolean;        // plastered-wall texture detail on/off (off = matte painted)
   windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
   roomCount: number;                  // 1..6 — cloned rooms linked by mid-wall doorways
   tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
@@ -203,6 +204,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   wraparoundScreenEnabled: false,
   windowsEnabled: true,
   ceilingEnabled: true,
+  wallTextureEnabled: true,
   windowSillM: 0.95,
   roomCount: 1,
   tableLengthM: 3.6,
@@ -349,6 +351,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "scene.setWraparoundScreen":  { set({ wraparoundScreenEnabled: intent.value }); break; }
       case "room.setWindowsEnabled":     { set({ windowsEnabled: intent.value }); break; }
       case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
+      case "room.setWallTextureEnabled": { set({ wallTextureEnabled: intent.value }); break; }
       case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
       case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
       case "boardroom.setTableLength": {
