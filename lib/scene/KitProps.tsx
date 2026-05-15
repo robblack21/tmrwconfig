@@ -250,7 +250,18 @@ function HeroAsset({
           <meshPhysicalMaterial color={plinthColor} roughness={0.4} metalness={0.2} clearcoat={0.4} clearcoatRoughness={0.2} />
         </mesh>
       )}
-      <primitive object={scene} position={[0, baseY, 0]} />
+      {/* ROOT-CAUSE FIX (long-standing!): we used to put baseY directly on
+          the primitive (`<primitive object={scene} position={[0, baseY, 0]}/>`)
+          which OVERWRITES scene.position — and scene.position is exactly
+          where normalizeForBase carefully placed the model so its base
+          sits at local y=0. The override threw every hero asset off by
+          whatever shift normalize had applied (worst for the Tesla GLB,
+          where the shift was ~0.65m — hence "half-embedded in the floor").
+          Fix: wrap in a group that takes the baseY position, leaving
+          scene.position untouched. */}
+      <group position={[0, baseY, 0]}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }

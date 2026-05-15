@@ -926,10 +926,13 @@ function DoorEdgeWall({
     sideTint: string; extrusionM: number; emissive: number;
   };
 }) {
-  const doorW = Math.min(1.3, lengthM * 0.6);
-  const doorH = Math.min(2.25, wallHeightM - 0.35);
+  // Door dimensions bumped from a standard residential 1.3 × 2.25m to a more
+  // generous 2.0 × wall-height-minus-0.2m so the room reads as a real
+  // corporate / showroom space rather than a domestic entry.
+  const doorW = Math.min(2.0, lengthM * 0.55);
+  const doorH = Math.max(2.0, wallHeightM - 0.2);
   const segW = Math.max(0.02, (lengthM - doorW) / 2);
-  const headerH = wallHeightM - doorH;
+  const headerH = Math.max(0, wallHeightM - doorH);
   const segCx = doorW / 2 + segW / 2;
   return (
     <group position={position} rotation-y={rotationY}>
@@ -1076,7 +1079,9 @@ function AtriumGlassWall({
   lengthM: number; wallHeightM: number; thick: number;
   position: [number, number, number]; rotationY: number; frameColor: string;
 }) {
-  const doorW = Math.min(1.6, lengthM * 0.42);
+  // Atrium glass doors — wider than the typical room door so the courtyard
+  // reads as a generous, walk-through space.
+  const doorW = Math.min(2.2, lengthM * 0.5);
   const halfW = Math.max(0.4, (lengthM - doorW) / 2);
   const halfCx = doorW / 2 + halfW / 2;
   const glassT = thick * 0.4;
@@ -1128,30 +1133,63 @@ function AtriumGlassWall({
   );
 }
 
-// Windowed side wall with an interior door opening dead-centre — used to link
-// adjacent rooms in the multi-room cluster. Glass + mullion layout on either
-// side of the door mirrors the regular windowed wall so the rhythm flows.
+// Interior divider between adjacent cluster rooms. Earlier versions reused
+// `WindowedWall` (with its `transmission=0.95` ribbon glass) for the two
+// flanking halves — but at 6 rooms in a cluster you've got 5 such dividers
+// PLUS the perimeter ribbon windows, and three.js's transmission renderer
+// fails to sort more than a handful of overlapping transmissive panels,
+// producing "errant black glass panels" cutting through the geometry.
+//
+// Reworked here as a frameless full-height glass divider with a wide door
+// opening, identical material to `AtriumGlassWall`: simple physical glass
+// without transmission so it composes cleanly with the perimeter glass.
 function WindowedDoorwayWall({
-  lengthM, wallHeightM, thick, position, rotationY, sillM, color, frameColor,
+  lengthM, wallHeightM, thick, position, rotationY, frameColor,
 }: {
   lengthM: number; wallHeightM: number; thick: number;
   position: [number, number, number]; rotationY: number;
-  sillM: number; color: string; frameColor: string;
+  // sillM + color retained for caller compatibility but unused — the divider
+  // is no longer a ribbon-window pastiche.
+  sillM?: number; color?: string; frameColor: string;
 }) {
-  const doorW = Math.min(1.3, lengthM * 0.4);
-  const doorH = Math.min(2.25, wallHeightM - 0.35);
-  const halfW = Math.max(0.5, (lengthM - doorW) / 2);
+  const doorW = Math.min(2.2, lengthM * 0.5);
+  const halfW = Math.max(0.4, (lengthM - doorW) / 2);
   const halfCx = doorW / 2 + halfW / 2;
-  const headerH = wallHeightM - doorH;
+  const glassT = thick * 0.4;
+  const headerH = 0.08;
   return (
     <group position={position} rotation-y={rotationY}>
-      <WindowedWall lengthM={halfW} wallHeightM={wallHeightM} thick={thick}
-        position={[-halfCx, 0, 0]} rotationY={0} sillM={sillM} color={color} frameColor={frameColor} />
-      <WindowedWall lengthM={halfW} wallHeightM={wallHeightM} thick={thick}
-        position={[halfCx, 0, 0]} rotationY={0} sillM={sillM} color={color} frameColor={frameColor} />
-      {headerH > 0.05 && (
-        <WallPanelPlaster w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
-      )}
+      {[-halfCx, halfCx].map((cx, idx) => (
+        <group key={idx} position={[cx, 0, 0]}>
+          {/* Full-height frameless glass pane — physical material with NO
+              transmission so it doesn't compound the perimeter glazing's
+              transmission stack. Slight reflectivity + low roughness still
+              reads as glass. */}
+          <mesh position={[0, wallHeightM / 2, 0]} castShadow={false} receiveShadow={false}>
+            <boxGeometry args={[halfW - 0.03, wallHeightM, glassT]} />
+            <meshPhysicalMaterial
+              transparent
+              opacity={0.18}
+              roughness={0.04}
+              metalness={0}
+              ior={1.5}
+              color="#dde4ec"
+              envMapIntensity={1.4}
+              depthWrite={false}
+            />
+          </mesh>
+          {/* Slim vertical jamb between glass and door opening */}
+          <mesh position={[idx === 0 ? halfW / 2 - 0.015 : -halfW / 2 + 0.015, wallHeightM / 2, 0]}>
+            <boxGeometry args={[0.03, wallHeightM, thick * 1.05]} />
+            <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+          </mesh>
+        </group>
+      ))}
+      {/* Continuous top header rail spanning the full divider width. */}
+      <mesh position={[0, wallHeightM - headerH / 2, 0]}>
+        <boxGeometry args={[lengthM, headerH, thick * 1.1]} />
+        <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+      </mesh>
     </group>
   );
 }

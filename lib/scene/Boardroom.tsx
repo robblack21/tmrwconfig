@@ -36,9 +36,17 @@ useGLTF.preload(CHAIR_VARIANTS.studio);
 const TABLE_HEIGHT_M = 0.74;        // standard boardroom-table height
 const CHAIR_HEIGHT_M = 1.05;        // office chair, floor to top of backrest
 
-// The ny_studio chair GLB faces away from +Z in its bind pose, so the
-// formation rotations land it facing outward — flip it 180° to face the table.
-const CHAIR_FACE_OFFSET = Math.PI;
+// Each chair GLB faces a different direction in its bind pose. We apply a
+// per-variant offset so all of them end up facing the table once the slot
+// rotation is applied. The ny_studio chair faces -Z natively (so we flip π);
+// the executive + presenter chairs ship facing +Z so they need NO offset
+// (otherwise they end up rotated 180° from where they should be).
+const CHAIR_FACE_OFFSETS: Record<ChairVariant, number> = {
+  studio: Math.PI,
+  executive: 0,
+  office: Math.PI,
+  presenter: 0,
+};
 
 // ── Table ────────────────────────────────────────────────────────────────────
 // Non-parametric resize: the GLB is recentred, its base pinned to the floor,
@@ -94,8 +102,8 @@ export function BoardroomTable({
 // ── Chair ────────────────────────────────────────────────────────────────────
 
 function BoardroomChair({
-  url, position, rotationY, tintHex, kit,
-}: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string; kit?: BrandKit }) {
+  url, position, rotationY, tintHex, kit, variant,
+}: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string; kit?: BrandKit; variant: ChairVariant }) {
   const gltf = useGLTF(url);
   const node = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
@@ -111,18 +119,23 @@ function BoardroomChair({
     });
     return normalizeForBase(s, CHAIR_HEIGHT_M);
   }, [gltf, tintHex]);
+  const offset = CHAIR_FACE_OFFSETS[variant];
+  // Backrest direction in chair-local: for variants whose model natively
+  // faces -Z (offset = π), the back is at local +Z; for variants whose
+  // model faces +Z (offset = 0), the back is at local -Z.
+  const backZ = offset === Math.PI ? 0.32 : -0.32;
   return (
-    <group position={position} rotation-y={rotationY + CHAIR_FACE_OFFSET}>
+    <group position={position} rotation-y={rotationY + offset}>
       <primitive object={node} />
       {/* Small brand decal on the back of the chair backrest, visible
           from outside the table circle. Sits ~0.95m up + ~0.3m behind the
           chair pivot (the chair's seat origin). */}
-      {kit && <ChairBackLogoDecal kit={kit} />}
+      {kit && <ChairBackLogoDecal kit={kit} backZ={backZ} />}
     </group>
   );
 }
 
-function ChairBackLogoDecal({ kit }: { kit: BrandKit }) {
+function ChairBackLogoDecal({ kit, backZ }: { kit: BrandKit; backZ: number }) {
   const url = kit.logos.primary.rasterUrl;
   if (!url) return null;
   const invert = !!kit.scene?.invertLogo;
@@ -131,13 +144,13 @@ function ChairBackLogoDecal({ kit }: { kit: BrandKit }) {
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
   const w = 0.12;
   const h = w / aspect;
-  // The chair GLB's bind pose faces -Z, so the BACKREST is at +Z in chair-
-  // local. Place the decal at +z behind the backrest and let the plane's
-  // default normal (+Z) face outward — no rotation needed. This was previously
-  // wired with -z + rotation-y=π, which positioned the logo in FRONT of the
-  // chair (facing the table) instead.
+  // backZ is the chair-local Z of the backrest. For chairs whose model faces
+  // -Z (offset = π), backZ is +0.32; for chairs that face +Z (offset = 0),
+  // backZ is -0.32 — and we flip the plane 180° around Y so its normal points
+  // outward.
+  const rotY = backZ > 0 ? 0 : Math.PI;
   return (
-    <mesh position={[0, 0.92, 0.32]}>
+    <mesh position={[0, 0.92, backZ]} rotation-y={rotY}>
       <planeGeometry args={[w, Math.min(h, 0.1)]} />
       <meshStandardMaterial
         map={tex}
@@ -260,7 +273,7 @@ export function ChairsAroundTable({
   return (
     <group position={position}>
       {slots.map((s, i) => (
-        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} kit={kit} />
+        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} kit={kit} variant={chairVariant} />
       ))}
     </group>
   );
