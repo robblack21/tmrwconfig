@@ -44,7 +44,7 @@ export default function Page() {
     videoMatrixCols, videoMatrixRows, videoMatrixCells,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
-    hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
+    hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hdrRotationDeg, hdrBlur, hallDarkness,
     highDpr, floorStyle, radiatingRadiusM, radiatingYOffsetM, radiatingColor, renderMode,
     apply,
   } = useConfig();
@@ -497,6 +497,8 @@ export default function Page() {
         <Section label="HDRI" defaultOpen={false}>
           <Slider label="Env"       value={hdrIntensity}   onChange={(v) => apply({ type: "scene.setHdrIntensity",   value: v })} min={0} max={2} step={0.01} />
           <Slider label="Bg"        value={hdrBgIntensity} onChange={(v) => apply({ type: "scene.setHdrBgIntensity", value: v })} min={0} max={2} step={0.01} />
+          <Slider label="Blur"      value={hdrBlur}        onChange={(v) => apply({ type: "scene.setHdrBlur",       value: v })} min={0} max={1} step={0.01} />
+          <Slider label="Rotation"  value={hdrRotationDeg} onChange={(v) => apply({ type: "scene.setHdrRotation",   value: v })} min={0} max={360} step={1} unit="°" />
           <Slider label="Hall dark" value={hallDarkness}   onChange={(v) => apply({ type: "scene.setHallDarkness",  value: v })} min={0} max={1} step={0.01} />
           <div className="pt-1">
             <div className="t-label mb-1">Preset</div>

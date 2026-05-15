@@ -78,6 +78,8 @@ export type ConfigState = {
   hallVisible: boolean;             // toggle the 3D hall context glb
   hdrIntensity: number;             // 0..2 — env-lighting multiplier
   hdrBgIntensity: number;           // 0..2 — visible-background multiplier
+  hdrRotationDeg: number;           // 0..360 — rotate the env around Y
+  hdrBlur: number;                  // 0..1 — backgroundBlurriness override
   hallDarkness: number;             // 0..1 — 1 = darkest (collapses to near-black)
   highDpr: boolean;                 // true = retina (1..2), false = forced 1× for perf
   dprFloor: number;                 // 1 or 0.5 — auto-dropped to 0.5 by PerfMonitor when FPS sags after DPR already at 1×
@@ -181,7 +183,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tier: defaultTier,
   widthM: defaultBounds.widthM.default,
   depthM: defaultBounds.depthM.default,
-  wallHeightM: 4.2,
+  wallHeightM: 5.0,
   trussTopM: 5.5,
   pendantEnabled: true,
   pendantShape: "rectangle",
@@ -226,6 +228,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
   hallVisible: true,
   hdrIntensity: 0.20,
   hdrBgIntensity: 0.20,
+  hdrRotationDeg: 0,
+  hdrBlur: 0.05,
   hallDarkness: 0.85,
   highDpr: true,
   dprFloor: 1,
@@ -356,9 +360,16 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
       case "boardroom.setTableLength": {
         const next = clamp(intent.value, 2.0, 8.0);
-        // Grow the room (and tier if needed) so the table + chairs always fit.
         const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM);
-        set({ tableLengthM: next, ...fit });
+        // Auto-adjust chairs: ~1 chair per 0.75m along each side, plus head
+        // + foot chairs once the table is long enough. User can still
+        // override via the Chairs slider — but the default tracks the
+        // table size so it always reads as a filled boardroom.
+        const chairsPerSide = Math.max(1, Math.round(next / 0.75));
+        const endChairs = next >= 3.6 ? 2 : 0;
+        const idealChairs = chairsPerSide * 2 + endChairs;
+        const nextChairs = Math.min(16, idealChairs);
+        set({ tableLengthM: next, chairCount: nextChairs, ...fit });
         break;
       }
       case "boardroom.setTableWidth": {
@@ -531,6 +542,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "scene.setHdrIntensity":   { set({ hdrIntensity:   clamp(intent.value, 0, 2) }); break; }
+      case "scene.setHdrRotation":    { set({ hdrRotationDeg: ((intent.value % 360) + 360) % 360 }); break; }
+      case "scene.setHdrBlur":        { set({ hdrBlur: clamp(intent.value, 0, 1) }); break; }
       case "scene.setHdrBgIntensity": { set({ hdrBgIntensity: clamp(intent.value, 0, 2) }); break; }
       case "scene.setHallDarkness":   { set({ hallDarkness:   clamp(intent.value, 0, 1) }); break; }
       case "scene.setHighDpr":        { set({ highDpr: intent.value }); break; }
@@ -565,7 +578,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
           tier,
           widthM: kit?.scene?.defaultWidthM ?? b.widthM.default,
           depthM: kit?.scene?.defaultDepthM ?? b.depthM.default,
-          wallHeightM: 4.2,
+          wallHeightM: 5.0,
           trussTopM: 5.5,
           platformHeightM: 0.2,
           pendantHeightM: 1.0,

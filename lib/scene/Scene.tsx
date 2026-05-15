@@ -66,6 +66,8 @@ export function Scene() {
   const hallVisible = useConfig((s) => s.hallVisible);
   const hdrIntensity = useConfig((s) => s.hdrIntensity);
   const hdrBgIntensity = useConfig((s) => s.hdrBgIntensity);
+  const hdrRotationDeg = useConfig((s) => s.hdrRotationDeg);
+  const hdrBlur = useConfig((s) => s.hdrBlur);
   const hallDarkness = useConfig((s) => s.hallDarkness);
   const floorStyle = useConfig((s) => s.floorStyle);
   const renderMode = useConfig((s) => s.renderMode);
@@ -176,12 +178,12 @@ export function Scene() {
         <Environment
           files={asset(`/hdri/${hdriIdOverride || HDRI_BY_MODE[hallMode]}.hdr`)}
           background
-          // Environment mode (hall geometry hidden) shows the HDR sharply so
-          // the captured exterior actually reads as the surroundings. Inside
-          // the warehouse box we blur + dim so it doesn't compete with the
-          // hall geometry. backgroundBlurriness 0 in environment mode, 0.55
-          // in warehouse mode.
-          backgroundBlurriness={hallVisible ? (isDark ? 0.55 : 0.3) : 0.02}
+          // Sliders for blur + rotation now drive these directly. Default
+          // hdrBlur is 0.05 (almost sharp); warehouse mode adds a baseline
+          // blur of 0.5 on top so the hall geometry stays primary.
+          backgroundBlurriness={Math.min(1, hdrBlur + (hallVisible ? 0.5 : 0))}
+          backgroundRotation={[0, (hdrRotationDeg * Math.PI) / 180, 0]}
+          environmentRotation={[0, (hdrRotationDeg * Math.PI) / 180, 0]}
           backgroundIntensity={hdrBgIntensity * (hallVisible ? (isDark ? 0.6 : 1.4) : 1.2)}
           environmentIntensity={hdrIntensity * (isDark ? 1.2 : 1.4)}
         />
@@ -334,6 +336,17 @@ export function Scene() {
                 platformHeightM={platformHeightM}
                 ledWallWidthM={ledWallWidthM}
                 ledWallHeightM={ledWallHeightM}
+              />
+              {/* Twin satellite screens flanking the door on the interior
+                  side of the FRONT wall. Same look as the back-wall
+                  flanking monitors, just mounted on z=+depthM/2 facing
+                  toward the room (face direction -Z). */}
+              <DoorWallSatellites
+                kit={kit}
+                roomDepthM={depthM}
+                roomWidthM={widthM}
+                wallHeightM={wallHeightM}
+                platformHeightM={platformHeightM}
               />
             </Suspense>
           );
@@ -490,7 +503,7 @@ export function Scene() {
               </Suspense>
             )}
 
-            <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
+            <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} shape={shape} />
 
             {/* Freestanding display screens — count-driven, placed along the
                 side walls facing the table. Each one can optionally show a
@@ -1302,12 +1315,9 @@ function WallPanelMotif({ w, h, d, pos, color, accent, motif }: { w: number; h: 
 function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
   const { map, normalMap, aoMap } = useWallTextures();
   const textured = useConfig((s) => s.wallTextureEnabled);
-  // Smoother, more "printed satin laminate" feel — less plaster bumpiness,
-  // slight clearcoat sheen so brand-coloured walls catch the HDR.
-  // Wrapped in a group with userData so the long-press editor's raycast walk
-  // finds the surface kind even if RoundedBox swallows the mesh-level prop.
-  // wallTextureEnabled toggles the plaster relief on/off — off gives a
-  // matte painted finish (better for some brand looks).
+  // Normal-scale bumped from 0.05 → 0.45 so the plaster relief is actually
+  // visible (the old value was so subtle it read as matte).
+  // wallTextureEnabled toggles plaster on/off (off = matte painted).
   return (
     <group userData={{ kind: "walls" }}>
     <RoundedBox position={pos} args={[w, h, d]} radius={0.014} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
@@ -1316,12 +1326,12 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
         map={textured ? map : null}
         normalMap={textured ? normalMap : null}
         aoMap={textured ? aoMap : null}
-        roughness={textured ? 0.42 : 0.55}
+        roughness={textured ? 0.5 : 0.55}
         metalness={0.04}
-        clearcoat={textured ? 0.45 : 0.2}
-        clearcoatRoughness={0.22}
+        clearcoat={textured ? 0.2 : 0.2}
+        clearcoatRoughness={0.35}
         envMapIntensity={1.15}
-        normalScale={textured ? new THREE.Vector2(0.05, 0.05) : new THREE.Vector2(0, 0)}
+        normalScale={textured ? new THREE.Vector2(0.45, 0.45) : new THREE.Vector2(0, 0)}
         sheen={0.2}
         sheenRoughness={0.5}
       />
@@ -1331,22 +1341,30 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
 }
 
 /** Quadrated panelling — used for the front wall (the one with the door).
- *  Brand-tinted via material `color`, so each kit gets its own panelled
- *  variant. Identical signature to WallPanelPlaster so callers can swap. */
+ *  Brand-tinted via material `color`, but the diffuse map's full value is
+ *  preserved (we lerp the tint 60% toward white so the panelling relief
+ *  isn't crushed by saturated brand colours). */
 function WallPanelQuadrated({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
   const { map, normalMap, roughnessMap, aoMap } = useQuadratedWallTextures();
+  // Lerp the brand colour 60% toward white so the texture's mid-tones
+  // survive the multiply — otherwise dark brand colours (Rolex green,
+  // Apple near-black) crush the relief to a flat dark surface.
+  const tint = useMemo(() => {
+    const c = new THREE.Color(color);
+    return c.lerp(new THREE.Color("#ffffff"), 0.6).getStyle();
+  }, [color]);
   return (
     <group userData={{ kind: "walls" }}>
       <RoundedBox position={pos} args={[w, h, d]} radius={0.012} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
         <meshPhysicalMaterial
-          color={color}
+          color={tint}
           map={map}
           normalMap={normalMap}
           roughnessMap={roughnessMap}
           aoMap={aoMap}
           metalness={0.08}
           envMapIntensity={1.1}
-          normalScale={new THREE.Vector2(0.8, 0.8)}
+          normalScale={new THREE.Vector2(1.4, 1.4)}
         />
       </RoundedBox>
     </group>
@@ -2136,23 +2154,62 @@ function FlankingMonitors({
   kit: BrandKit; backWallZ: number; roomWidthM: number; wallHeightM: number;
   platformHeightM: number; ledWallWidthM: number; ledWallHeightM: number;
 }) {
-  // Each monitor is ~45% the LED wall width, on a 16:9 panel. We carve them
-  // out of whatever space remains on the back wall after the LED screen.
-  const gap = 0.35;
-  const remainingPerSide = (roomWidthM - ledWallWidthM) / 2 - gap;
-  if (remainingPerSide < 0.9) return null;     // not enough wall to host a sensible side screen
-  const w = Math.min(remainingPerSide - 0.2, ledWallWidthM * 0.48);
+  // Each monitor is sized to fill ~70% of the available wall on either side
+  // of the LED panel — but capped so it doesn't dwarf the LED. Bigger
+  // wall-corner inset (1.2m) than the LED-side gap (0.45m), so the
+  // monitor lands snug to the LED rather than tucked into the corner.
+  const cornerInset = 1.2;
+  const ledGap = 0.45;
+  const remainingPerSide = (roomWidthM - ledWallWidthM) / 2 - ledGap - cornerInset;
+  if (remainingPerSide < 0.7) return null;     // not enough wall to host a sensible side screen
+  const w = Math.min(remainingPerSide, ledWallWidthM * 0.42);
   const h = Math.min(w * 9 / 16, wallHeightM - 1.4);
   if (h < 0.5) return null;
   const bezelD = 0.1;
   const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
   // Centre vertically on the LED wall so the row of screens reads as a band.
   const ledCy = platformHeightM + 0.5 + ledWallHeightM / 2;
-  const cx = ledWallWidthM / 2 + gap + w / 2;
+  const cx = ledWallWidthM / 2 + ledGap + w / 2;
   return (
     <group>
       {[-1, 1].map((sx) => (
         <FlankingMonitor key={sx} kit={kit} x={sx * cx} y={ledCy} z={z} w={w} h={h} bezelD={bezelD} />
+      ))}
+    </group>
+  );
+}
+
+// ── Door-wall satellite screens ────────────────────────────────────────────
+// Twin screens on the INTERIOR face of the front (door) wall, one on each
+// side of the door opening. Same monitor look as the LED-flanking ones.
+function DoorWallSatellites({
+  kit, roomDepthM, roomWidthM, wallHeightM, platformHeightM,
+}: {
+  kit: BrandKit; roomDepthM: number; roomWidthM: number; wallHeightM: number; platformHeightM: number;
+}) {
+  // Door dims mirror DoorEdgeWall: doorW capped at 2.0m or 55% of wall.
+  const wallLen = roomWidthM;
+  const doorW = Math.min(2.0, wallLen * 0.55);
+  const segW = Math.max(0.02, (wallLen - doorW) / 2);
+  // Monitor fits inside the door-flanking segment, with a small margin.
+  const margin = 0.4;
+  const w = segW - margin * 2;
+  if (w < 0.7) return null;
+  const h = Math.min(w * 9 / 16, wallHeightM - 1.6);
+  if (h < 0.45) return null;
+  const bezelD = 0.1;
+  // Interior face of the front wall is at z = depthM/2 - wallThickness.
+  // We mount the screen JUST IN FRONT of the wall, facing -Z (into the room).
+  const wallThick = 0.08;
+  const z = roomDepthM / 2 - wallThick - bezelD / 2 - 0.015;
+  const cy = platformHeightM + 0.5 + h / 2;
+  const segCx = doorW / 2 + segW / 2;
+  return (
+    <group>
+      {[-1, 1].map((sx) => (
+        <group key={sx} position={[sx * segCx, cy, z]} rotation-y={Math.PI}>
+          <FlankingMonitor kit={kit} x={0} y={0} z={0} w={w} h={h} bezelD={bezelD} />
+        </group>
       ))}
     </group>
   );
@@ -2833,8 +2890,8 @@ function SpotlightFixture({ pos, target, editMode }: { pos: [number, number, num
 
 // ── Plants ──────────────────────────────────────────────────────────────────
 
-function Plants({ widthM, depthM, plantCount, platformHeightM }: { widthM: number; depthM: number; plantCount: number; platformHeightM: number }) {
-  const slots = useMemo(() => generatePlantSlots(widthM, depthM, plantCount, platformHeightM), [widthM, depthM, plantCount, platformHeightM]);
+function Plants({ widthM, depthM, plantCount, platformHeightM, shape = "rectangle" }: { widthM: number; depthM: number; plantCount: number; platformHeightM: number; shape?: FootprintShape }) {
+  const slots = useMemo(() => generatePlantSlots(widthM, depthM, plantCount, platformHeightM, shape), [widthM, depthM, plantCount, platformHeightM, shape]);
   return (
     <>
       {slots.map((s, i) => (
@@ -2847,18 +2904,41 @@ function Plants({ widthM, depthM, plantCount, platformHeightM }: { widthM: numbe
 }
 
 type PlantKind = "snake" | "hexapot" | "tree" | "cactus" | "tarro";
-function generatePlantSlots(widthM: number, depthM: number, count: number, platformHeightM: number) {
+function generatePlantSlots(widthM: number, depthM: number, count: number, platformHeightM: number, shape: FootprintShape = "rectangle") {
   if (count <= 0) return [];
   const y = platformHeightM;
-  // Heights aligned within each L/R pair so the booth reads symmetrically.
-  // First pair: trees flanking the front. Second pair: low pots flanking the
-  // back. Third pair: mid-height snake plants on the side walls.
-  //
-  // Insets are radius-aware (see placementAudit.ts) — each candidate's
-  // planter footprint is looked up, then we add wall clearance so the
-  // planter base never overlaps the wall regardless of room size.
-  const inT = safeInsetForKind("tree", 0.15);    // tree planter inset (+ 15cm cushion)
-  const inS = safeInsetForKind("hexapot", 0.15); // smaller-pot inset
+  const inT = safeInsetForKind("tree", 0.15);
+  const inS = safeInsetForKind("hexapot", 0.15);
+
+  // For circular rooms the rectangle-corner candidates sit OUTSIDE the
+  // wall (a corner at half-width / half-depth is at distance r√2, which
+  // is outside a circle of radius r). Place them on the inscribed circle
+  // instead. Angles avoid the back-edge brand signs at the inter-
+  // cardinals (π/4, 3π/4, 5π/4, 7π/4) and the door direction (+Z = π/2).
+  if (shape === "circular") {
+    const r = Math.min(widthM, depthM) / 2;
+    const treeR = r - inT;
+    const potR = r - inS;
+    if (treeR <= 0.4 || potR <= 0.4) return [];
+    // Angles measured from +X (math convention), so π/2 = +Z (front, door).
+    // Six slots biased to the back half (z<0) so they read as room dressing
+    // and not as obstacles to the doorway.
+    const candidates: { kind: PlantKind; pos: [number, number, number]; rot: number; h: number }[] = [
+      // Front-left + front-right trees (skewed away from the door)
+      { kind: "tree",    pos: [Math.cos(2.7) * treeR, y, Math.sin(2.7) * treeR],  rot: 2.7 - Math.PI, h: 2.0 },
+      { kind: "tree",    pos: [Math.cos(0.45) * treeR, y, Math.sin(0.45) * treeR], rot: 0.45 + Math.PI, h: 2.0 },
+      // Back pots
+      { kind: "hexapot", pos: [Math.cos(-0.9) * potR, y, Math.sin(-0.9) * potR], rot: -0.9 + Math.PI, h: 1.0 },
+      { kind: "tarro",   pos: [Math.cos(-2.25) * potR, y, Math.sin(-2.25) * potR], rot: -2.25 + Math.PI, h: 1.0 },
+      // Side snake plants
+      { kind: "snake",   pos: [Math.cos(0) * potR, y, Math.sin(0) * potR], rot: -Math.PI / 2, h: 1.3 },
+      { kind: "snake",   pos: [Math.cos(Math.PI) * potR, y, Math.sin(Math.PI) * potR], rot: Math.PI / 2, h: 1.3 },
+    ];
+    return candidates.slice(0, Math.min(count, candidates.length));
+  }
+
+  // Rectangle (and the L / U / corner shapes which inherit the bounding box):
+  // place plants at the bbox corners + side midpoints.
   const candidates: { kind: PlantKind; pos: [number, number, number]; rot: number; h: number }[] = [
     { kind: "tree",    pos: [ widthM / 2 - inT, y,  depthM / 2 - inT], rot: -Math.PI / 4, h: 2.0 },
     { kind: "tree",    pos: [-widthM / 2 + inT, y,  depthM / 2 - inT], rot:  Math.PI / 4, h: 2.0 },
@@ -2868,7 +2948,6 @@ function generatePlantSlots(widthM: number, depthM: number, count: number, platf
     { kind: "snake",   pos: [-widthM / 2 + inS, y, 0], rot:  Math.PI / 2, h: 1.3 },
   ];
   const picked = candidates.slice(0, Math.min(count, candidates.length));
-  // Dev-only audit — log any candidate that still overhangs a wall.
   for (const s of picked) {
     auditPropOnFloor({
       label: `plant.${s.kind}`,

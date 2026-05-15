@@ -73,6 +73,8 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scene.setHallVisible"), value: z.boolean() }),
   z.object({ type: z.literal("scene.setHdrIntensity"), value: z.number() }),
   z.object({ type: z.literal("scene.setHdrBgIntensity"), value: z.number() }),
+  z.object({ type: z.literal("scene.setHdrRotation"), value: z.number() }),
+  z.object({ type: z.literal("scene.setHdrBlur"), value: z.number() }),
   z.object({ type: z.literal("scene.setHallDarkness"), value: z.number() }),
   z.object({ type: z.literal("scene.setHighDpr"), value: z.boolean() }),
   z.object({ type: z.literal("scene.setDprFloor"), value: z.number() }),

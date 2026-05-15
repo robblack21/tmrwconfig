@@ -169,117 +169,111 @@ export function LongPressModal({ kind, screenX, screenY, onClose }: {
         onClick={onClose}
         style={{ position: "fixed", inset: 0, zIndex: 1000, background: "transparent" }}
       />
+      {/* Restyled to match the rest of the configurator UI — panel-glass
+          background + neumorph chips on the controls, t-label / t-num
+          typography. */}
       <div
+        className="ui-overlay panel-glass"
         style={{
           position: "fixed",
           left: x,
           top: y,
           width: W,
           zIndex: 1001,
-          background: "var(--color-bg-elev, #1b1d22)",
-          border: "1px solid color-mix(in srgb, var(--color-border-soft, #3a3d44) 80%, transparent)",
-          borderRadius: 16,
+          borderRadius: 12,
           padding: 14,
-          boxShadow: "0 14px 38px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset",
-          color: "var(--color-text, #e8e9ec)",
-          fontFamily: "Inter, system-ui, sans-serif",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontSize: 11, letterSpacing: 1.4, opacity: 0.7, textTransform: "uppercase" }}>{KIND_LABEL[kind]} colour</div>
-          <button onClick={onClose} style={{ width: 22, height: 22, borderRadius: 6, background: "transparent", border: "1px solid var(--color-border-soft, #3a3d44)", color: "inherit", cursor: "pointer", fontSize: 12, lineHeight: 1 }}>✕</button>
+        <div className="pb-2 mb-2 border-b border-[color:var(--color-border-soft)] flex items-center justify-between">
+          <span className="t-label uppercase tracking-wider">{KIND_LABEL[kind]} colour</span>
+          <button
+            onClick={onClose}
+            className="w-6 h-6 rounded-[6px] neumorph-raised grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]"
+            title="Close"
+            aria-label="Close"
+          >
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+              <path d="M1.5 1.5L7.5 7.5M7.5 1.5L1.5 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
 
-        {/* Colour picker + native input */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <input
-            type="color"
-            value={colour}
-            onChange={(e) => apply({ type: "colourOverride.set", surface: kind, value: e.target.value })}
-            style={{ width: 38, height: 38, border: "none", borderRadius: 8, padding: 0, background: "transparent", cursor: "pointer" }}
-          />
-          <div style={{ flex: 1, fontFamily: "ui-monospace, SF Mono, Menlo, monospace", fontSize: 12, opacity: 0.85 }}>{colour}</div>
+        {/* Colour picker + hex readout */}
+        <div className="flex items-center gap-2 mb-2.5">
+          <label className="rounded-[6px] neumorph-raised h-8 w-9 grid place-items-center cursor-pointer overflow-hidden" style={{ background: colour }}>
+            <input
+              type="color"
+              value={colour}
+              onChange={(e) => apply({ type: "colourOverride.set", surface: kind, value: e.target.value })}
+              className="opacity-0 w-9 h-8 cursor-pointer"
+            />
+          </label>
+          <div className="t-num flex-1 text-[0.7rem]">{colour.toUpperCase()}</div>
           {colourOverrides[kind] != null && (
             <button
               onClick={() => apply({ type: "colourOverride.set", surface: kind, value: null })}
               title="Restore default"
-              style={{ background: "transparent", border: "1px solid var(--color-border-soft, #3a3d44)", color: "inherit", borderRadius: 6, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}
+              className="t-label text-[0.6rem] px-2 py-1 rounded-[5px] neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-accent)]"
             >reset</button>
           )}
         </div>
 
         {/* Brand swatches */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <div className="flex gap-1.5 mb-3">
           {[
             { hex: kit.palette.primary, label: "primary" },
             { hex: kit.palette.secondary, label: "secondary" },
             { hex: kit.palette.accent, label: "accent" },
             { hex: kit.palette.neutralLight, label: "light" },
             { hex: kit.palette.neutralDark, label: "dark" },
-          ].map((s, i) => (
-            <button
-              key={i}
-              title={`${s.label} · ${s.hex}`}
-              onClick={() => apply({ type: "colourOverride.set", surface: kind, value: s.hex })}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 8,
-                background: s.hex,
-                border: colour.toUpperCase() === s.hex.toUpperCase() ? "2px solid #fff" : "1px solid rgba(255,255,255,0.15)",
-                cursor: "pointer",
-              }}
-            />
-          ))}
+          ].map((s, i) => {
+            const selected = colour.toUpperCase() === s.hex.toUpperCase();
+            return (
+              <button
+                key={i}
+                title={`${s.label} · ${s.hex}`}
+                onClick={() => apply({ type: "colourOverride.set", surface: kind, value: s.hex })}
+                className={"flex-1 aspect-square rounded-[6px] transition-all " + (selected ? "neumorph-inset" : "neumorph-raised")}
+                style={{ background: s.hex, outline: selected ? "1.5px solid var(--color-accent)" : undefined, outlineOffset: -1 }}
+              />
+            );
+          })}
         </div>
 
         {/* Texture/motif section — only for surfaces that carry one */}
         {kind === "walls" && (
           <>
-            <div style={{ fontSize: 10, letterSpacing: 1.2, opacity: 0.6, textTransform: "uppercase", marginBottom: 6 }}>Wall motif</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
-              {MOTIFS.map((m) => (
-                <button
-                  key={m}
-                  title={m}
-                  onClick={() => apply({ type: "kit.setWallMotif", kitId: kit.id, motif: m })}
-                  style={{
-                    fontSize: 9,
-                    padding: "5px 2px",
-                    background: currentMotif === m ? "var(--color-accent, #3d7eff)" : "transparent",
-                    border: "1px solid var(--color-border-soft, #3a3d44)",
-                    borderRadius: 6,
-                    color: currentMotif === m ? "#fff" : "inherit",
-                    cursor: "pointer",
-                    textTransform: "lowercase",
-                  }}
-                >{m.replace("stripes.", "")}</button>
-              ))}
+            <div className="t-label uppercase tracking-wider text-[0.6rem] opacity-70 mb-1.5">Wall motif</div>
+            <div className="grid grid-cols-4 gap-1">
+              {MOTIFS.map((m) => {
+                const selected = currentMotif === m;
+                return (
+                  <button
+                    key={m}
+                    title={m}
+                    onClick={() => apply({ type: "kit.setWallMotif", kitId: kit.id, motif: m })}
+                    className={"t-label text-[0.55rem] px-1 py-1.5 rounded-[5px] transition-all " + (selected ? "neumorph-inset text-[color:var(--color-accent)]" : "neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]")}
+                  >{m.replace("stripes.", "")}</button>
+                );
+              })}
             </div>
           </>
         )}
 
         {kind === "floor" && (
           <>
-            <div style={{ fontSize: 10, letterSpacing: 1.2, opacity: 0.6, textTransform: "uppercase", marginBottom: 6 }}>Floor style</div>
-            <div style={{ display: "flex", gap: 6 }}>
-              {FLOOR_STYLES.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => apply({ type: "scene.setFloorStyle", value: s })}
-                  style={{
-                    flex: 1,
-                    fontSize: 11,
-                    padding: "8px 4px",
-                    background: floorStyle === s ? "var(--color-accent, #3d7eff)" : "transparent",
-                    border: "1px solid var(--color-border-soft, #3a3d44)",
-                    borderRadius: 6,
-                    color: floorStyle === s ? "#fff" : "inherit",
-                    cursor: "pointer",
-                    textTransform: "capitalize",
-                  }}
-                >{s}</button>
-              ))}
+            <div className="t-label uppercase tracking-wider text-[0.6rem] opacity-70 mb-1.5">Floor style</div>
+            <div className="flex gap-1.5">
+              {FLOOR_STYLES.map((s) => {
+                const selected = floorStyle === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => apply({ type: "scene.setFloorStyle", value: s })}
+                    className={"t-label text-[0.65rem] flex-1 py-1.5 rounded-[5px] capitalize transition-all " + (selected ? "neumorph-inset text-[color:var(--color-accent)]" : "neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]")}
+                  >{s}</button>
+                );
+              })}
             </div>
           </>
         )}

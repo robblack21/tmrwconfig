@@ -510,13 +510,25 @@ function buildHeroProps(slug: string, specs: HeroSpec[]) {
     const base = s.pos ?? basePos;
     return [base[0], base[1] + (s.floatYM ?? 0), base[2]];
   };
+  // Plinth items SPLIT left + right: first half ranged along the back-LEFT,
+  // second half along the back-RIGHT. Leaves the central back area free for
+  // the table to expand into without colliding with the plinths.
   plinthItems.forEach((s, i) => {
-    const defaultPos: [number, number, number] = [-3.6 + i * 1.0, 0, -2.6];
+    const halfN = Math.ceil(plinthItems.length / 2);
+    const isLeft = i < halfN;
+    const localIdx = isLeft ? i : i - halfN;
+    const side = isLeft ? -1 : 1;
+    const xBase = side * 3.6;
+    const xStep = side * 1.0;
+    const defaultPos: [number, number, number] = [xBase - side * localIdx * 0, 0, -2.6];
+    defaultPos[0] = xBase + xStep * localIdx;
     props.push({
       kind: "heroAsset",
       url: asset(`/glb/brand-hero/${slug}/${s.file}`),
       position: applyFloat(defaultPos, s),
-      rotationY: s.rotationY ?? 0.35,
+      // Each plinth faces inward toward the table — angled slightly so they
+      // catch light from the back-wall sconces.
+      rotationY: s.rotationY ?? (isLeft ? 0.35 : -0.35),
       heightM: s.heightM,
       plinthHeightM: 1.0,
       ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
