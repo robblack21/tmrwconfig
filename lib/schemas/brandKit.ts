@@ -184,6 +184,24 @@ export const BrandKit = z.object({
       /** Pendant body colour override when the kit is applied — keeps wall +
        *  trim colours separate from the pendant's brand-on-pendant look. */
       defaultPendantColor: HexColor.optional(),
+      /** Coffee-cup body colour. Defaults to neutralLight if unset.
+       *  Lets the merch table-setting carry its own brand colour without
+       *  affecting the wall / floor neutrals. */
+      cupColor: HexColor.optional(),
+      /** Exhibition graphics — printed artwork applied to the back wall
+       *  panel and / or to freestanding display stands around the room.
+       *  Surface defaults to "wall"; the configurator picks placement
+       *  based on the surface kind. Use this when shipping campaign art
+       *  / brand-led imagery on top of the procedural wall motif. */
+      exhibitionGraphics: z.array(z.object({
+        url: z.string(),
+        surface: z.enum(["wall", "standingDisplay"]).default("wall"),
+        /** Optional explicit XZ position. For "wall" it's ignored (back wall);
+         *  for "standingDisplay" it's the floor position. */
+        position: z.tuple([z.number(), z.number(), z.number()]).optional(),
+        /** Optional caption shown below the graphic on a standing display. */
+        caption: z.string().optional(),
+      })).optional(),
     })
     .optional(),
 });

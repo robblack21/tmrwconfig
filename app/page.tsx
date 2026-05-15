@@ -40,7 +40,7 @@ export default function Page() {
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
-    exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
+    exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, standingDisplayCount, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
     hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
@@ -435,6 +435,7 @@ export default function Page() {
         <Section label="Dressing">
           <Slider label="Plants"   value={plantCount}          onChange={(v) => apply({ type: "layout.setPlantCount", value: v })}        min={0} max={6} step={1} />
           <Slider label="Sofas"    value={sofaCount}           onChange={(v) => apply({ type: "layout.setSofaCount", value: v })}         min={0} max={4} step={1} />
+          <Slider label="Displays" value={standingDisplayCount} onChange={(v) => apply({ type: "layout.setStandingDisplayCount", value: v })} min={0} max={4} step={1} />
           {sofaCount >= 2 && (
             <PillRow
               options={[

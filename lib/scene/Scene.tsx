@@ -471,6 +471,23 @@ export function Scene() {
             )}
 
             <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
+
+            {/* Freestanding display screens — count-driven, placed along the
+                side walls facing the table. Each one can optionally show a
+                campaign graphic from kit.scene.exhibitionGraphics (entries
+                with surface="standingDisplay"); otherwise it ken-burns the
+                brand mark over an emissive panel. */}
+            <StandingDisplays
+              count={standingDisplayCount}
+              widthM={widthM}
+              depthM={depthM}
+              platformHeightM={platformHeightM}
+              kit={kit}
+            />
+
+            {/* Exhibition graphics applied to the back wall (printed posters /
+                campaign artwork rather than full-bleed `wallGraphic`). */}
+            <WallExhibitionGraphics kit={kit} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
           </>
         )}
       </group>
@@ -1585,7 +1602,95 @@ function LogoSign({
 
 // ── Brand standing screen (freestanding display + ken-burns logo) ──────────
 
-function BrandStandingScreen({ kit, position }: { kit: BrandKit; position: [number, number, number] }) {
+// ── Standing displays formation ────────────────────────────────────────────
+// Distributes N freestanding screens along the left + right side walls,
+// facing the table. Picks graphics from kit.scene.exhibitionGraphics when
+// any are tagged `surface: "standingDisplay"`; falls back to the kit's
+// brand-mark ken-burns panel.
+function StandingDisplays({
+  count, widthM, depthM, platformHeightM, kit,
+}: { count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit }) {
+  if (count <= 0) return null;
+  const exhibitionScreens = (kit.scene?.exhibitionGraphics ?? []).filter((g) => g.surface === "standingDisplay");
+  const inset = 0.55;
+  // Alternate left/right, distributing along z to avoid clumping.
+  const slots: { pos: [number, number, number]; rot: number; graphic?: typeof exhibitionScreens[number] }[] = [];
+  for (let i = 0; i < count; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const idx = Math.floor(i / 2);
+    // Pairs span the depth: pair 0 at z=0, pair 1 at z=±depthM/4, pair 2 at z=±depthM/2.5
+    const zSpread = idx === 0 ? 0 : (idx === 1 ? -depthM / 4 : -depthM / 2.8);
+    const x = side * (widthM / 2 - inset);
+    const z = zSpread;
+    const rot = side === -1 ? Math.PI / 2 : -Math.PI / 2;   // face room centre
+    slots.push({
+      pos: [x, platformHeightM, z],
+      rot,
+      graphic: exhibitionScreens[i],
+    });
+  }
+  return (
+    <>
+      {slots.map((s, i) => (
+        <group key={i} position={s.pos} rotation-y={s.rot}>
+          <BrandStandingScreen kit={kit} position={[0, 0, 0]} graphic={s.graphic} />
+        </group>
+      ))}
+    </>
+  );
+}
+
+// ── Wall exhibition graphics ───────────────────────────────────────────────
+// Renders any kit graphics tagged `surface: "wall"` as printed-poster decals
+// on the back wall. Different from `wallGraphic` (which is the full-bleed
+// hero artwork): these read as gallery-style posters with frame highlights.
+function WallExhibitionGraphics({
+  kit, widthM, depthM, wallHeightM, platformHeightM,
+}: { kit: BrandKit; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
+  const posters = (kit.scene?.exhibitionGraphics ?? []).filter((g) => g.surface === "wall");
+  if (posters.length === 0) return null;
+  const z = -depthM / 2 + 0.045;
+  const cy = platformHeightM + wallHeightM * 0.55;
+  return (
+    <>
+      {posters.map((g, i) => {
+        // Distribute across the back wall evenly. With N posters, position at
+        //   x = (i - (N-1)/2) * stride   where stride = clamp(widthM/(N+1), ~1.2)
+        const stride = Math.min(widthM / (posters.length + 1), 2.4);
+        const x = (i - (posters.length - 1) / 2) * stride;
+        const pos: [number, number, number] = g.position ?? [x, cy, z];
+        return <WallPoster key={i} url={g.url} caption={g.caption} position={pos} />;
+      })}
+    </>
+  );
+}
+
+function WallPoster({ url, caption, position }: { url: string; caption?: string; position: [number, number, number] }) {
+  const tex = useWallGraphic(url);
+  const widthM = 1.4;
+  const heightM = 1.6;
+  return (
+    <group position={position}>
+      {/* Frame */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[widthM + 0.08, heightM + 0.08, 0.04]} />
+        <meshPhysicalMaterial color="#0e1014" roughness={0.55} metalness={0.35} />
+      </mesh>
+      {/* Artwork */}
+      <mesh position={[0, 0, 0.022]}>
+        <planeGeometry args={[widthM, heightM]} />
+        <meshStandardMaterial map={tex} toneMapped />
+      </mesh>
+      {caption && (
+        <Html position={[0, -heightM / 2 - 0.08, 0.022]} center distanceFactor={6}>
+          <div style={{ color: "#fff", background: "rgba(8,10,14,0.6)", padding: "4px 10px", fontSize: 14, borderRadius: 4, fontFamily: "Inter, sans-serif", whiteSpace: "nowrap" }}>{caption}</div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+function BrandStandingScreen({ kit, position, graphic }: { kit: BrandKit; position: [number, number, number]; graphic?: { url: string; surface: "wall" | "standingDisplay"; position?: [number, number, number]; caption?: string } }) {
   return (
     <group position={position}>
       {/* Stand pillar — thin dark column */}
@@ -1603,17 +1708,30 @@ function BrandStandingScreen({ kit, position }: { kit: BrandKit; position: [numb
         <boxGeometry args={[0.8, 0.5, 0.05]} />
         <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.7} />
       </mesh>
-      {/* Emissive content panel + ken-burns logo */}
+      {/* Emissive content panel. If the kit ships an exhibition graphic for
+          this slot, render it; otherwise ken-burns the brand mark. */}
       <group position={[0, 1.4, 0.03]}>
         <mesh>
           <planeGeometry args={[0.76, 0.46]} />
-          <meshStandardMaterial color={kit.palette.primary} emissive={new THREE.Color(kit.palette.primary)} emissiveIntensity={0.9} toneMapped={false} />
+          <meshStandardMaterial color={kit.palette.primary} emissive={new THREE.Color(kit.palette.primary)} emissiveIntensity={graphic ? 0.45 : 0.9} toneMapped={false} />
         </mesh>
         <Suspense fallback={null}>
-          <KenBurnsLogo kit={kit} availW={0.7} availH={0.4} />
+          {graphic
+            ? <StandingDisplayGraphic url={graphic.url} availW={0.74} availH={0.44} />
+            : <KenBurnsLogo kit={kit} availW={0.7} availH={0.4} />}
         </Suspense>
       </group>
     </group>
+  );
+}
+
+function StandingDisplayGraphic({ url, availW, availH }: { url: string; availW: number; availH: number }) {
+  const tex = useWallGraphic(url);
+  return (
+    <mesh position={[0, 0, 0.001]}>
+      <planeGeometry args={[availW, availH]} />
+      <meshStandardMaterial map={tex} toneMapped={false} />
+    </mesh>
   );
 }
 

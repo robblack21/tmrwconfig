@@ -339,7 +339,10 @@ function BrandedCoffeeCup({
   // Cap decalW at 90% of the cup radius (≈37mm); height follows aspect.
   const decalW = CUP_RADIUS_M * 0.9;
   const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.45);
-  const cupColor = kit.palette.neutralLight ?? "#F4F4F4";
+  // Cup body: kit-specific cup colour wins; falls back to the kit's
+  // neutralLight ceramic-cream. Updated via `kit.scene.cupColor` in
+  // lib/fixtures/brandKits.ts.
+  const cupColor = kit.scene?.cupColor ?? kit.palette.neutralLight ?? "#F4F4F4";
   // Two decals — front and back — so the logo reads from any seat without
   // becoming a busy orbit of marks around the cup.
   const facings = [0, Math.PI];
