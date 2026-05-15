@@ -112,7 +112,7 @@ export type ConfigState = {
   cameraActivePreset: string;
 
   // Manual colour overrides per surface — null = use kit default
-  colourOverrides: Partial<Record<"walls" | "floor" | "trim" | "pendant" | "truss" | "sofa" | "counter" | "vitrine" | "monitor", string | null>>;
+  colourOverrides: Partial<Record<"walls" | "floor" | "trim" | "pendant" | "truss" | "sofa" | "counter" | "vitrine" | "monitor" | "table" | "chair" | "ceiling", string | null>>;
   // Per-line BOM rate overrides (lineId → unit-rate in EUR)
   bomRateOverrides: Record<string, number>;
   // brand
@@ -420,6 +420,24 @@ export const useConfig = create<ConfigState>((set, get) => ({
         while (cells.length <= intent.index) cells.push({ kind: "default", value: "" });
         cells[intent.index] = { kind: intent.kind, value: intent.value };
         set({ videoMatrixCells: cells });
+        break;
+      }
+      case "kit.setWallMotif": {
+        const kit = findKitById(intent.kitId);
+        if (!kit) break;
+        if (!kit.scene) kit.scene = {};
+        // Use a loose cast — schema enum keeps the caller honest at the UI layer.
+        (kit.scene as { wallMotif?: string }).wallMotif = intent.motif;
+        set({ kitRev: (get().kitRev ?? 0) + 1 });
+        break;
+      }
+      case "kit.setWallGraphic": {
+        const kit = findKitById(intent.kitId);
+        if (!kit) break;
+        if (!kit.scene) kit.scene = {};
+        if (intent.url === null) delete kit.scene.wallGraphic;
+        else kit.scene.wallGraphic = intent.url;
+        set({ kitRev: (get().kitRev ?? 0) + 1 });
         break;
       }
       case "kit.setPropField": {

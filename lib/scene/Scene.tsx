@@ -263,7 +263,7 @@ export function Scene() {
           look (which also reveals the truss canopy above). */}
       {ceilingEnabled && (
         <TimedReveal delay={250}>
-          <Ceiling shape={shape} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
+          <Ceiling shape={shape} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} ceilingColor={colourOverrides.ceiling ?? "#e9eaee"} />
         </TimedReveal>
       )}
 
@@ -428,7 +428,7 @@ export function Scene() {
                 // Table reads as a dark anchor against the brand-coloured
                 // chairs — avoids the Samsung-style "everything is one shade
                 // of brand blue" problem. Per-kit override available.
-                tintHex={kit.scene?.tableColor ?? kit.palette.neutralDark}
+                tintHex={colourOverrides.table ?? kit.scene?.tableColor ?? kit.palette.neutralDark}
               />
               <ChairsAroundTable
                 count={chairCount}
@@ -436,7 +436,7 @@ export function Scene() {
                 tableWidthM={tableWidthM}
                 chairVariant={chairVariant}
                 position={[0, platformHeightM, 0]}
-                tintHex={kit.palette.secondary}
+                tintHex={colourOverrides.chair ?? kit.palette.secondary}
                 kit={kit}
               />
               {/* Custom branded merch — one logo-emblazoned coffee cup at
@@ -693,15 +693,15 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
   if (shape === "circular") {
     const radius = Math.min(widthM, depthM) / 2;
     return (
-      <group position={[0, platformHeightM / 2, 0]}>
-        <mesh receiveShadow castShadow>
+      <group position={[0, platformHeightM / 2, 0]} userData={{ kind: "floor" }}>
+        <mesh receiveShadow castShadow userData={{ kind: "floor" }}>
           <cylinderGeometry args={[radius, radius, platformHeightM, 64, 1, false]} />
           <meshPhysicalMaterial color={sideColor} roughness={0.7} metalness={0.04} />
         </mesh>
         {/* Top cap carries the parquet — separate mesh so we don't have to
             re-uv the cylinder. Slight Y lift so it sits proud of the body
             and the parquet AO doesn't z-fight with the side. */}
-        <mesh receiveShadow rotation-x={-Math.PI / 2} position={[0, platformHeightM / 2 + 0.001, 0]}>
+        <mesh receiveShadow rotation-x={-Math.PI / 2} position={[0, platformHeightM / 2 + 0.001, 0]} userData={{ kind: "floor" }}>
           <circleGeometry args={[radius, 64]} />
           <meshPhysicalMaterial map={map} normalMap={normalMap} aoMap={aoMap} color={parquetTint} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
         </mesh>
@@ -711,7 +711,7 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
   // 6 face materials on a BoxGeometry: parquet on the top (+Y), brand-coloured on the rest.
   // Order in three: +X -X +Y -Y +Z -Z
   return (
-    <mesh receiveShadow castShadow position={[0, platformHeightM / 2, 0]}>
+    <mesh receiveShadow castShadow position={[0, platformHeightM / 2, 0]} userData={{ kind: "floor" }}>
       <boxGeometry args={[widthM, platformHeightM, depthM]} />
       <meshPhysicalMaterial attach="material-0" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-1" color={sideColor} roughness={0.7} metalness={0.04} />
@@ -1283,7 +1283,7 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
   // Smoother, more "printed satin laminate" feel — less plaster bumpiness,
   // slight clearcoat sheen so brand-coloured walls catch the HDR.
   return (
-    <RoundedBox position={pos} args={[w, h, d]} radius={0.014} smoothness={4} castShadow receiveShadow>
+    <RoundedBox position={pos} args={[w, h, d]} radius={0.014} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
       <meshPhysicalMaterial
         color={color}
         map={map}
@@ -1305,8 +1305,8 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
 // ── Ceiling ─────────────────────────────────────────────────────────────────
 
 function Ceiling({
-  shape, widthM, depthM, wallHeightM, platformHeightM,
-}: { shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
+  shape, widthM, depthM, wallHeightM, platformHeightM, ceilingColor = "#e9eaee",
+}: { shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; ceilingColor?: string }) {
   const y = platformHeightM + wallHeightM;
   const poly = footprintPolygon(shape, widthM, depthM);
   const isPavilion = shape === "pavilion";
@@ -1353,8 +1353,8 @@ function Ceiling({
     <group>
       {/* Ceiling surface — castShadow off so the key light still reaches the
           room; the underside reads as lit via the recessed downlights below. */}
-      <mesh geometry={geom} position={[0, y, 0]} rotation-x={Math.PI / 2} receiveShadow castShadow={false}>
-        <meshStandardMaterial color="#e9eaee" roughness={0.92} metalness={0.02} side={THREE.DoubleSide} />
+      <mesh geometry={geom} position={[0, y, 0]} rotation-x={Math.PI / 2} receiveShadow castShadow={false} userData={{ kind: "ceiling" }}>
+        <meshStandardMaterial color={ceilingColor} roughness={0.92} metalness={0.02} side={THREE.DoubleSide} />
       </mesh>
       {/* Recessed downlights flush with the ceiling underside */}
       {lights.map(([x, z], i) => (

@@ -63,6 +63,7 @@ export function BoardroomTable({
       const m = o as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true; m.receiveShadow = true;
+        m.userData = { ...m.userData, kind: "table" };
         if (tintHex) {
           const mat = m.material as THREE.MeshStandardMaterial | undefined;
           if (mat && "color" in mat) { const nx = mat.clone(); nx.color = new THREE.Color(tintHex); m.material = nx; }
@@ -111,6 +112,7 @@ function BoardroomChair({
       const m = o as THREE.Mesh;
       if (m.isMesh) {
         m.castShadow = true; m.receiveShadow = true;
+        m.userData = { ...m.userData, kind: "chair" };
         if (tintHex) {
           const mat = m.material as THREE.MeshStandardMaterial | undefined;
           if (mat && "color" in mat) { const nx = mat.clone(); nx.color = new THREE.Color(tintHex); m.material = nx; }

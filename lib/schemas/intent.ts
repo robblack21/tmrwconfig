@@ -103,7 +103,11 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("camera.savePreset"), preset: z.string(), pos: z.tuple([z.number(), z.number(), z.number()]), target: z.tuple([z.number(), z.number(), z.number()]), fov: z.number() }),
   z.object({ type: z.literal("camera.setActivePreset"), preset: z.string() }),
 
-  z.object({ type: z.literal("colourOverride.set"), surface: z.enum(["walls", "floor", "trim", "pendant", "truss", "sofa", "counter", "vitrine", "monitor"]), value: z.string().nullable() }),
+  z.object({ type: z.literal("colourOverride.set"), surface: z.enum(["walls", "floor", "trim", "pendant", "truss", "sofa", "counter", "vitrine", "monitor", "table", "chair", "ceiling"]), value: z.string().nullable() }),
+  /** Per-kit wall-motif change via UI (e.g. long-press editor). */
+  z.object({ type: z.literal("kit.setWallMotif"), kitId: z.string(), motif: z.string() }),
+  /** Per-kit wall-graphic URL override via UI. */
+  z.object({ type: z.literal("kit.setWallGraphic"), kitId: z.string(), url: z.string().nullable() }),
   z.object({ type: z.literal("bom.setLineRate"), lineId: z.string(), rate: z.number() }),
   z.object({ type: z.literal("bom.resetRates"), }),
 
