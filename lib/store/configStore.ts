@@ -215,13 +215,16 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tableVariant: "main",
   chairVariant: "studio",
   ledWallEnabled: true,
-  ledWallWidthM: 5.6,           // 16:9 default — sized for a typical M-tier
-                                // back wall (12m wide), leaves room for the
-                                // flanking monitors on either side.
-  ledWallHeightM: 3.15,         // 5.6 / 3.15 = 16:9
+  // Default sized to fill the back wall as one big video wall (the
+  // flanking monitors got removed in favour of this single full-span
+  // arrangement). Slider can still scale down for a smaller installation.
+  ledWallWidthM: 11.0,          // tracks ~92% of a 12m room
+  ledWallHeightM: 3.5,          // tracks ~70% of a 5m wall
   ledWallBrightness: 1.4,
-  videoMatrixCols: 1,
-  videoMatrixRows: 1,
+  // 4x2 matrix by default — the back wall reads as a multi-screen cinema
+  // wall right out of the box.
+  videoMatrixCols: 4,
+  videoMatrixRows: 2,
   videoMatrixCells: [],
   hallMode: "warehouse.dark",
   hdriId: "",

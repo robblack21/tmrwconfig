@@ -304,7 +304,7 @@ export function Scene() {
             glow={logoGlow}
             extrusionM={logoExtrusionM}
             emissive={logoEmissive}
-            placement={ledWallEnabled ? "flank-left" : "back-centre"}
+            placement={ledWallEnabled ? "flank-both" : "back-centre"}
             shape={shape}
           />
         </Suspense>
@@ -328,19 +328,9 @@ export function Scene() {
                 platformHeightM={platformHeightM}
                 brightness={ledWallBrightness}
               />
-              <FlankingMonitors
-                kit={kit}
-                backWallZ={ledBackZ}
-                roomWidthM={widthM}
-                wallHeightM={wallHeightM}
-                platformHeightM={platformHeightM}
-                ledWallWidthM={ledWallWidthM}
-                ledWallHeightM={ledWallHeightM}
-              />
-              {/* Twin satellite screens flanking the door on the interior
-                  side of the FRONT wall. Same look as the back-wall
-                  flanking monitors, just mounted on z=+depthM/2 facing
-                  toward the room (face direction -Z). */}
+              {/* FlankingMonitors removed — the back wall is now ONE
+                  full-span video wall. Keep DoorWallSatellites though,
+                  they live on the front (door) wall. */}
               <DoorWallSatellites
                 kit={kit}
                 roomDepthM={depthM}
@@ -1110,8 +1100,13 @@ function WindowedWall({
           </mesh>
         );
       })}
-      {/* Exterior brand signage flanking the ribbon window (both ends). */}
-      {logoEnabled && [-1, 1].map((sx) => {
+      {/* Exterior brand signage flanking the ribbon window — TEMPORARILY
+          DISABLED while we sort out the per-side parity issue (the right-
+          side flank was reading as "floating outside" because the deep
+          extrusion punched through the glass). The interior `flank-left` /
+          `flank-right` signs from BrandLogoOnWall now cover both sides
+          symmetrically. */}
+      {false && logoEnabled && [-1, 1].map((sx) => {
         const margin = logoMaxW * 0.6;
         const xOffset = sx * (lengthM / 2 - margin);
         // Centre vertically on the wall so the brand reads even when the
@@ -1488,7 +1483,7 @@ function CornerPillars({
 
 // ── Logos ───────────────────────────────────────────────────────────────────
 
-type LogoPlacement = "back-centre" | "flank-left" | "flank-right";
+type LogoPlacement = "back-centre" | "flank-left" | "flank-right" | "flank-both";
 
 /** For circular rooms: returns the back-wall Z value that places the chord
  *  needed to host an element with the given half-width without the element
@@ -1570,27 +1565,38 @@ function BrandLogoOnWall({
     );
   }
   const flankZ = -depthM / 4;
-  const flankX = placement === "flank-left" ? -widthM / 2 : widthM / 2;
-  const rotY = placement === "flank-left" ? Math.PI / 2 : -Math.PI / 2;
+  const sides: Array<"flank-left" | "flank-right"> =
+    placement === "flank-both" ? ["flank-left", "flank-right"]
+    : placement === "flank-right" ? ["flank-right"]
+    : ["flank-left"];
   return (
-    <LogoSignFlank
-      url={url}
-      viewBox={kit.logos.primary.viewBox}
-      depthM={depthM}
-      wallHeightM={wallHeightM}
-      x={flankX}
-      z={flankZ}
-      rotY={rotY}
-      y={yCentre}
-      extrusionM={extrusionM}
-      accent={accent}
-      sideTint={sideTint}
-      emissiveBoost={boost}
-      emissive={emissive}
-      invert={invert}
-      chroma={chroma}
-      maxWidthM={Math.min(depthM * 0.5, 3.4)}
-    />
+    <>
+      {sides.map((side) => {
+        const flankX = side === "flank-left" ? -widthM / 2 : widthM / 2;
+        const rotY = side === "flank-left" ? Math.PI / 2 : -Math.PI / 2;
+        return (
+          <LogoSignFlank
+            key={side}
+            url={url}
+            viewBox={kit.logos.primary.viewBox}
+            depthM={depthM}
+            wallHeightM={wallHeightM}
+            x={flankX}
+            z={flankZ}
+            rotY={rotY}
+            y={yCentre}
+            extrusionM={extrusionM}
+            accent={accent}
+            sideTint={sideTint}
+            emissiveBoost={boost}
+            emissive={emissive}
+            invert={invert}
+            chroma={chroma}
+            maxWidthM={Math.min(depthM * 0.5, 3.4)}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -1954,25 +1960,31 @@ function LedWall({
   kit: BrandKit; backWallZ: number; widthM: number; heightM: number;
   roomWidthM: number; roomHeightM: number; platformHeightM: number; brightness: number;
 }) {
-  // Requested 16:9 panel, then clamped so it always fits inside the back wall.
-  let w169 = Math.min(widthM, heightM * (16 / 9));
-  let h169 = w169 * (9 / 16);
+  // Fill the back wall — clamp width to roomWidth - 0.5m margin and height
+  // to wallHeight - 0.5m. We DON'T enforce 16:9 anymore because the matrix
+  // is meant to span the wall regardless of aspect; the YouTube iframe is
+  // cropped top+bottom inside its parent so the video still reads.
   const maxW = roomWidthM - 0.5;
-  const maxH = roomHeightM - 0.9;             // leaves clear gaps above + below
-  if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
-  if (h169 > maxH) { h169 = maxH; w169 = h169 * (16 / 9); }
-  const bezelD = 0.14;                       // the panel extrudes off the wall
+  const maxH = roomHeightM - 0.5;
+  const w169 = Math.min(widthM, maxW);
+  const h169 = Math.min(heightM, maxH);
+  const bezelD = 0.12;                       // slimmer bezel — the matrix is the focal point
   const cols = useConfig((s) => s.videoMatrixCols);
   const rows = useConfig((s) => s.videoMatrixRows);
   const cells = useConfig((s) => s.videoMatrixCells);
   // Sit just in front of the back wall's inner face (wall thickness 0.08),
-  // proud of it by the bezel's half-depth. Anchored ~0.5m off the floor so
-  // the (clamped) panel always clears the ceiling.
+  // proud of it by the bezel's half-depth. Anchored ~0.25m off the floor so
+  // a full-span wall reaches near to the floor.
   const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
-  const cy = platformHeightM + 0.5 + h169 / 2;
-  // Cell sub-bezel + inner content size — inset slightly so each cell reads
-  // as a distinct panel within the matrix.
-  const gutter = cols * rows > 1 ? 0.04 : 0;
+  const cy = platformHeightM + 0.25 + h169 / 2;
+  // The matrix uses a "shared iframe" treatment: when EVERY cell is default
+  // and the kit has a youtubeId, one big iframe spans the whole wall (the
+  // video crops top+bottom to fit). Any per-cell override falls back to
+  // the previous per-cell rendering.
+  const allDefault = cells.length === 0 || cells.every((c) => !c || c.kind === "default");
+  const youtubeId = kit.scene?.youtubeId ?? "";
+  const showSharedVideo = allDefault && !!youtubeId;
+  const gutter = cols * rows > 1 ? 0.025 : 0;
   const cellW = (w169 - gutter * (cols + 1)) / cols;
   const cellH = (h169 - gutter * (rows + 1)) / rows;
   return (
@@ -1983,12 +1995,34 @@ function LedWall({
         <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
       </mesh>
 
+      {/* Shared video — one iframe spanning the whole wall, cropped to fit.
+          Drawn BEHIND the per-cell layer so the cell bezels overlay it
+          like real screen separators. */}
+      {showSharedVideo && (
+        <SharedMatrixVideo
+          ytId={youtubeId}
+          wallW={w169}
+          wallH={h169}
+          zFront={bezelD / 2 + 0.002}
+        />
+      )}
+
       {Array.from({ length: cols * rows }, (_, idx) => {
         const col = idx % cols;
         const row = Math.floor(idx / cols);
         const cx = -w169 / 2 + gutter * (col + 1) + cellW * (col + 0.5);
         const cy2 = h169 / 2 - gutter * (row + 1) - cellH * (row + 0.5);
         const cell = cells[idx] ?? { kind: "default", value: "" };
+        // When the shared video is rendering, default cells just draw a
+        // thin bezel outline (no inner content). Overridden cells still
+        // render their own image / iframe over the shared video.
+        if (showSharedVideo && cell.kind === "default") {
+          return (
+            <group key={idx} position={[cx, cy2, 0]}>
+              <MatrixBezelOutline cellW={cellW} cellH={cellH} zFront={bezelD / 2 + 0.006} />
+            </group>
+          );
+        }
         return (
           <MatrixCell
             key={idx}
@@ -2013,6 +2047,83 @@ function LedWall({
         decay={1.6}
         color={kit.palette.primary}
       />
+    </group>
+  );
+}
+
+/** Shared video — ONE YouTube iframe spanning the full back wall.
+ *  Sized to fill the wall width; if the resulting 16:9 height overflows
+ *  the wall, the iframe's parent crops it (overflow:hidden) so the video
+ *  reads as a cinema-style strip with top + bottom cropped. */
+function SharedMatrixVideo({ ytId, wallW, wallH, zFront }: { ytId: string; wallW: number; wallH: number; zFront: number }) {
+  const videoMuted = useConfig((s) => s.videoMuted);
+  const videoVolume = useConfig((s) => s.videoVolume);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  useEffect(() => {
+    const w = iframeRef.current?.contentWindow;
+    if (!w) return;
+    try {
+      w.postMessage(JSON.stringify({ event: "command", func: videoMuted ? "mute" : "unMute", args: [] }), "*");
+      w.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [videoVolume] }), "*");
+    } catch { /* cross-origin */ }
+  }, [videoMuted, videoVolume]);
+  // CSS sizes (px) at the world's `transform` factor of 200 px / metre.
+  const wallPxW = Math.round(wallW * 200);
+  const wallPxH = Math.round(wallH * 200);
+  const videoPxH = Math.round(wallPxW * 9 / 16);   // 16:9 at wall width
+  return (
+    <Html
+      transform
+      position={[0, 0, zFront]}
+      distanceFactor={1}
+      occlude="blending"
+      style={{ pointerEvents: "auto" }}
+    >
+      <div style={{ width: wallPxW, height: wallPxH, overflow: "hidden", position: "relative", background: "#000" }}>
+        <iframe
+          ref={iframeRef}
+          width={wallPxW}
+          height={videoPxH}
+          src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&disablekb=1&iv_load_policy=3&fs=0`}
+          title="back-wall video"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          style={{
+            border: 0,
+            display: "block",
+            pointerEvents: "none",
+            position: "absolute",
+            left: 0,
+            top: "50%",
+            transform: "translateY(-50%)",
+          }}
+          onLoad={(e) => {
+            const w = (e.currentTarget as HTMLIFrameElement).contentWindow;
+            if (!w) return;
+            try {
+              w.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [videoVolume] }), "*");
+              if (!videoMuted) w.postMessage(JSON.stringify({ event: "command", func: "unMute", args: [] }), "*");
+            } catch { /* cross-origin */ }
+          }}
+        />
+      </div>
+    </Html>
+  );
+}
+
+/** Thin emissive outline drawn around each cell when the shared video is
+ *  active — gives the visual cue that the wall is segmented into screens
+ *  without occluding the video underneath. */
+function MatrixBezelOutline({ cellW, cellH, zFront }: { cellW: number; cellH: number; zFront: number }) {
+  const t = 0.012;
+  return (
+    <group position={[0, 0, zFront]}>
+      {/* Top + bottom */}
+      <mesh position={[0,  cellH / 2 - t / 2, 0]}><boxGeometry args={[cellW, t, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
+      <mesh position={[0, -cellH / 2 + t / 2, 0]}><boxGeometry args={[cellW, t, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
+      {/* Left + right */}
+      <mesh position={[ cellW / 2 - t / 2, 0, 0]}><boxGeometry args={[t, cellH, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
+      <mesh position={[-cellW / 2 + t / 2, 0, 0]}><boxGeometry args={[t, cellH, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
     </group>
   );
 }
