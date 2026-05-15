@@ -48,7 +48,9 @@ const backWallIntent = (role: "primary" | "secondary" | "neutralDark" | "neutral
 const apple: BrandKit = {
   id: "brand.apple",
   name: "Apple",
-  palette: { primary: "#1D1D1F", secondary: "#FFFFFF", accent: "#0071E3", neutralLight: "#F5F5F7", neutralDark: "#000000" },
+  // `secondary` tints the boardroom chairs; Apple gets a soft anodised silver
+  // rather than pure white so the chairs read warm against the F5 walls.
+  palette: { primary: "#1D1D1F", secondary: "#D9D9DC", accent: "#0071E3", neutralLight: "#F5F5F7", neutralDark: "#000000" },
   derivation: "monochrome",
   logos: logoSet("/logos/Apple_logo.svg", [0, 0, 814, 1000]),
   typography: fonts("Inter", "Inter"),
@@ -67,7 +69,8 @@ const apple: BrandKit = {
 const bmw: BrandKit = {
   id: "brand.bmw",
   name: "BMW",
-  palette: { primary: "#0066B1", secondary: "#FFFFFF", accent: "#1C69D4", neutralLight: "#E6EEF5", neutralDark: "#0A0E14" },
+  // BMW M-stripe livery — secondary picks up the deeper BMW blue for chairs.
+  palette: { primary: "#0066B1", secondary: "#1C5598", accent: "#E22718", neutralLight: "#E6EEF5", neutralDark: "#0A0E14" },
   derivation: "monochrome",
   logos: logoSet("/logos/BMW_logo.svg", [0, 0, 1015, 1015]),
   typography: fonts("Inter", "Inter"),
@@ -86,7 +89,8 @@ const bmw: BrandKit = {
 const disney: BrandKit = {
   id: "brand.disney",
   name: "Disney",
-  palette: { primary: "#113CCF", secondary: "#FFFFFF", accent: "#F0C808", neutralLight: "#EAF0FF", neutralDark: "#0A1A4A" },
+  // Disney magic-blue chairs to match the wall mark.
+  palette: { primary: "#113CCF", secondary: "#3A5BD9", accent: "#F0C808", neutralLight: "#EAF0FF", neutralDark: "#0A1A4A" },
   derivation: "complementary",
   logos: logoSet("/logos/Disney_logo.svg", [0, 0, 700, 294]),
   typography: fonts("Poppins", "Inter"),
@@ -105,7 +109,8 @@ const disney: BrandKit = {
 const ferrari: BrandKit = {
   id: "brand.ferrari",
   name: "Ferrari",
-  palette: { primary: "#D40000", secondary: "#FFF200", accent: "#1A1A1A", neutralLight: "#F4F4F4", neutralDark: "#0A0A0A" },
+  // Ferrari racing yellow chairs (Modena shield colour) for a hit of livery.
+  palette: { primary: "#D40000", secondary: "#FFE600", accent: "#1A1A1A", neutralLight: "#F4F4F4", neutralDark: "#0A0A0A" },
   derivation: "triadic",
   logos: logoSet("/logos/Ferrari-Logo.svg", [0, 0, 344, 550]),
   typography: fonts("Oswald", "Inter"),
@@ -124,7 +129,9 @@ const ferrari: BrandKit = {
 const google: BrandKit = {
   id: "brand.google",
   name: "Google",
-  palette: { primary: "#4285F4", secondary: "#FFFFFF", accent: "#FBBC05", neutralLight: "#F1F3F4", neutralDark: "#202124" },
+  // Google rainbow — chairs in Google green so the room mixes blue walls,
+  // yellow accent, and green seating across the brand's four-colour set.
+  palette: { primary: "#4285F4", secondary: "#34A853", accent: "#FBBC05", neutralLight: "#F1F3F4", neutralDark: "#202124" },
   derivation: "triadic",
   logos: logoSet("/logos/Google_logo.svg", [0, 0, 272, 92]),
   typography: fonts("Poppins", "Inter"),
@@ -162,7 +169,8 @@ const louisvuitton: BrandKit = {
 const mercedes: BrandKit = {
   id: "brand.mercedes",
   name: "Mercedes-Benz",
-  palette: { primary: "#1A1A1A", secondary: "#FFFFFF", accent: "#00ADEF", neutralLight: "#ECECEC", neutralDark: "#000000" },
+  // Mercedes silver — chairs in the brand's signature aluminium-silver.
+  palette: { primary: "#1A1A1A", secondary: "#A8AEB4", accent: "#00ADEF", neutralLight: "#ECECEC", neutralDark: "#000000" },
   derivation: "monochrome",
   logos: logoSet("/logos/Mercedes-Logo.svg", [0, 0, 567, 567]),
   typography: fonts("Inter", "Inter"),
@@ -184,7 +192,8 @@ const mercedes: BrandKit = {
 const samsung: BrandKit = {
   id: "brand.samsung",
   name: "Samsung",
-  palette: { primary: "#1428A0", secondary: "#FFFFFF", accent: "#1428A0", neutralLight: "#EAF0FF", neutralDark: "#0A1633" },
+  // Samsung navy-blue chairs to match the wordmark on the back wall.
+  palette: { primary: "#1428A0", secondary: "#3B4DB8", accent: "#1428A0", neutralLight: "#EAF0FF", neutralDark: "#0A1633" },
   derivation: "monochrome",
   logos: logoSet("/logos/Samsung_logo.svg", [0, 0, 7051, 1080]),
   typography: fonts("Inter", "Inter"),
@@ -203,7 +212,9 @@ const samsung: BrandKit = {
 const netflix: BrandKit = {
   id: "brand.netflix",
   name: "Netflix",
-  palette: { primary: "#E50914", secondary: "#FFFFFF", accent: "#B20710", neutralLight: "#F5F5F5", neutralDark: "#141414" },
+  // Netflix red chairs — the signature mark. Pure red is too much for backs
+  // and seats, so we use the deeper red (B20710) for restraint.
+  palette: { primary: "#E50914", secondary: "#B20710", accent: "#B20710", neutralLight: "#F5F5F5", neutralDark: "#141414" },
   derivation: "monochrome",
   logos: logoSet("/logos/Netflix_logo.svg", [0, 0, 1024, 277]),
   typography: fonts("Oswald", "Inter"),
@@ -222,7 +233,9 @@ const netflix: BrandKit = {
 const nike: BrandKit = {
   id: "brand.nike",
   name: "Nike",
-  palette: { primary: "#111111", secondary: "#FFFFFF", accent: "#FA5400", neutralLight: "#F5F5F5", neutralDark: "#000000" },
+  // Nike orange chairs — the iconic swoosh colour applied to seating against
+  // the near-black walls.
+  palette: { primary: "#111111", secondary: "#FA5400", accent: "#FA5400", neutralLight: "#F5F5F5", neutralDark: "#000000" },
   derivation: "monochrome",
   logos: logoSet("/logos/Nike_logo.svg", [0, 0, 1000, 356]),
   typography: fonts("Oswald", "Inter"),
@@ -241,7 +254,9 @@ const nike: BrandKit = {
 const nvidia: BrandKit = {
   id: "brand.nvidia",
   name: "NVIDIA",
-  palette: { primary: "#76B900", secondary: "#FFFFFF", accent: "#1A1A1A", neutralLight: "#F0F4E8", neutralDark: "#0B0F0A" },
+  // NVIDIA green chairs — the bright primary applied directly to seating
+  // so the room reads as a saturated green-on-near-black volume.
+  palette: { primary: "#76B900", secondary: "#5C9100", accent: "#1A1A1A", neutralLight: "#F0F4E8", neutralDark: "#0B0F0A" },
   derivation: "complementary",
   logos: logoSet("/logos/Nvidia_logo.svg", [0, 0, 351, 259]),
   typography: fonts("Inter", "Inter"),
@@ -260,7 +275,8 @@ const nvidia: BrandKit = {
 const rolex: BrandKit = {
   id: "brand.rolex",
   name: "Rolex",
-  palette: { primary: "#006039", secondary: "#FFFFFF", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#0A2A1C" },
+  // Rolex gold chairs — match the crown gilt against the deep-green walls.
+  palette: { primary: "#006039", secondary: "#C8A45C", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#0A2A1C" },
   derivation: "analogous",
   logos: logoSet("/logos/Rolex_logo.svg", [0, 0, 105, 60]),
   typography: fonts("Cormorant Garamond", "Inter"),
@@ -279,7 +295,8 @@ const rolex: BrandKit = {
 const tesla: BrandKit = {
   id: "brand.tesla",
   name: "Tesla",
-  palette: { primary: "#E31937", secondary: "#FFFFFF", accent: "#171A20", neutralLight: "#F4F4F4", neutralDark: "#171A20" },
+  // Tesla space-grey chairs (model-3 trim colour) against the light walls.
+  palette: { primary: "#E31937", secondary: "#3F4248", accent: "#171A20", neutralLight: "#F4F4F4", neutralDark: "#171A20" },
   derivation: "monochrome",
   logos: logoSet("/logos/Tesla_logo.svg", [0, 0, 279, 360]),
   typography: fonts("Inter", "Inter"),
@@ -301,7 +318,9 @@ const tesla: BrandKit = {
 const tmrw: BrandKit = {
   id: "brand.tmrw",
   name: "TMRW Foundation",
-  palette: { primary: "#0A0A0A", secondary: "#FFFFFF", accent: "#3D7EFF", neutralLight: "#F4F2ED", neutralDark: "#000000" },
+  // TMRW house chairs — soft neutral cream so the room reads warm even
+  // with the near-black walls and the saturated brand-blue accent.
+  palette: { primary: "#0A0A0A", secondary: "#D7D2C6", accent: "#3D7EFF", neutralLight: "#F4F2ED", neutralDark: "#000000" },
   derivation: "monochrome",
   logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
   typography: fonts("Inter", "Inter"),
@@ -391,6 +410,10 @@ type HeroSpec = {
    *  before render (used for the TMRW earth's atmosphere shell). */
   meshFilter?: string;
   rotationY?: number;
+  /** Extra rotation around X / Z so a flat-modelled prop can be tipped
+   *  onto its side (Rolex Invicta wall-clock orientation). */
+  rotationX?: number;
+  rotationZ?: number;
 };
 const HERO_ASSETS: Record<string, HeroSpec[]> = {
   "brand.apple": [
@@ -427,7 +450,16 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
   ],
   "brand.rolex": [
     { file: "rolex_datejust.glb", heightM: 0.34, plinth: true },
-    { file: "invicta_watch.glb",  heightM: 0.34, plinth: true },
+    {
+      file: "invicta_watch.glb",
+      // Big presentation watch tipped onto its side and hung against the
+      // back-right wall like a giant timepiece. Tipping it -π/2 around X
+      // makes the dial face the room.
+      heightM: 1.45,
+      pos: [3.4, 1.7, -3.6],
+      rotationY: Math.PI,
+      rotationX: -Math.PI / 2,
+    },
   ],
   "brand.tesla": [{ file: "tesla_2018_model_3.glb", heightM: 1.40 }],
   "brand.louisvuitton": [
@@ -469,6 +501,8 @@ function buildHeroProps(slug: string, specs: HeroSpec[]) {
       heightM: s.heightM,
       plinthHeightM: 1.0,
       ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
+      ...(s.rotationX != null ? { rotationX: s.rotationX } : {}),
+      ...(s.rotationZ != null ? { rotationZ: s.rotationZ } : {}),
     });
   });
   floorItems.forEach((s, i) => {
@@ -481,6 +515,8 @@ function buildHeroProps(slug: string, specs: HeroSpec[]) {
       rotationY: s.rotationY ?? -Math.PI / 5,
       heightM: s.heightM,
       ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
+      ...(s.rotationX != null ? { rotationX: s.rotationX } : {}),
+      ...(s.rotationZ != null ? { rotationZ: s.rotationZ } : {}),
     });
   });
   return props;

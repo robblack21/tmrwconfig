@@ -39,7 +39,7 @@ export default function Page() {
     windowsEnabled, ceilingEnabled, windowSillM, roomCount,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
-    hallMode, brandKitId,
+    hallMode, brandKitId, cameraFov,
     exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
@@ -161,6 +161,23 @@ export default function Page() {
               className="w-20 accent-[color:var(--color-accent)]"
               title={`Video volume ${videoVolume}/100`}
             />
+          </div>
+          {/* FOV slider — duplicate of the right-side CameraPanel control,
+              promoted to the top bar so you can lens-tweak without opening
+              the camera dock. */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-[6px] neumorph-inset">
+            <span className="t-label text-[0.6rem] opacity-60">FOV</span>
+            <input
+              type="range"
+              min={20}
+              max={70}
+              step={1}
+              value={cameraFov}
+              onChange={(e) => apply({ type: "camera.setFov", value: Number(e.target.value) })}
+              className="w-24 accent-[color:var(--color-accent)]"
+              title={`Camera field of view ${cameraFov}°`}
+            />
+            <span className="t-num text-[0.6rem] w-6 text-right tabular-nums">{cameraFov}°</span>
           </div>
           <NavBtn onClick={() => apply({ type: "scene.resetGeometry" })} title="Reset room geometry to the kit defaults">
             ⟲ Reset

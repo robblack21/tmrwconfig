@@ -4,6 +4,8 @@ import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { asset } from "@/lib/assetPath";
 import { normalizeForBase } from "./KitProps";
+import { useLogoTexture } from "./Textures";
+import type { BrandKit } from "@/lib/schemas";
 
 // ── Boardroom furniture — the configurator centrepiece ───────────────────────
 // User-supplied GLBs under /components/{tables,chairs}/. The table resizes
@@ -151,6 +153,109 @@ export function ChairsAroundTable({
       {slots.map((s, i) => (
         <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} />
       ))}
+    </group>
+  );
+}
+
+// ── Branded coffee cups ─────────────────────────────────────────────────────
+// One cup per chair, placed on the table in front of the seat. The brand
+// logo wraps around the cup as a four-quadrant decal so it reads from any
+// chair. Cups are linked to chair count + table dims so they re-flow when
+// the user expands the boardroom.
+
+const CUP_HEIGHT_M = 0.095;
+const CUP_RADIUS_M = 0.042;
+const CUP_INSET_M = 0.32;     // how far in from the table edge the cup sits
+
+export function BrandedCupsOnTable({
+  count, tableLengthM, tableWidthM, position, kit,
+}: {
+  count: number; tableLengthM: number; tableWidthM: number;
+  position: [number, number, number]; kit: BrandKit;
+}) {
+  // Mirror ChairsAroundTable's slot logic so cups line up with chair seats.
+  const slots = useMemo(() => {
+    const out: { pos: [number, number, number]; rot: number }[] = [];
+    if (count <= 0) return out;
+    const sideX = tableWidthM / 2 - CUP_INSET_M;
+    const endZ = tableLengthM / 2 - CUP_INSET_M;
+    const endN = count >= 4 ? Math.min(2, count) : 0;
+    const sideTotal = count - endN;
+    const leftN = Math.ceil(sideTotal / 2);
+    const rightN = sideTotal - leftN;
+    const spanZ = Math.max(0.01, tableLengthM - 0.8);
+    const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
+    for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
+    for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+    if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
+    if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
+    return out;
+  }, [count, tableLengthM, tableWidthM]);
+
+  return (
+    <group position={[position[0], position[1] + TABLE_HEIGHT_M + 0.001, position[2]]}>
+      {slots.map((s, i) => (
+        <BrandedCoffeeCup key={i} position={s.pos} rotationY={s.rot} kit={kit} />
+      ))}
+    </group>
+  );
+}
+
+function BrandedCoffeeCup({
+  position, rotationY, kit,
+}: { position: [number, number, number]; rotationY: number; kit: BrandKit }) {
+  const url = kit.logos.primary.rasterUrl;
+  const invert = !!kit.scene?.invertLogo;
+  const chroma = kit.scene?.logoChroma ?? "";
+  const tex = useLogoTexture(url ?? "", invert, chroma);
+  const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
+  // Logo decal sits at mid-cup height, wraps the front-facing quadrant.
+  const decalH = CUP_HEIGHT_M * 0.45;
+  const decalW = Math.min(decalH * aspect, CUP_RADIUS_M * 1.6);
+  const cupColor = kit.palette.neutralLight ?? "#F4F4F4";
+  // Four decals, one each 90° apart, so the logo reads from any chair.
+  const facings = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+  return (
+    <group position={position} rotation-y={rotationY}>
+      {/* Saucer — a thin disc under the cup */}
+      <mesh position={[0, 0.003, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[CUP_RADIUS_M * 1.55, CUP_RADIUS_M * 1.55, 0.006, 32]} />
+        <meshPhysicalMaterial color={cupColor} roughness={0.35} metalness={0.05} clearcoat={0.6} clearcoatRoughness={0.2} />
+      </mesh>
+      {/* Cup body — a slightly tapered cylinder */}
+      <mesh position={[0, CUP_HEIGHT_M / 2 + 0.006, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[CUP_RADIUS_M, CUP_RADIUS_M * 0.82, CUP_HEIGHT_M, 28, 1, false]} />
+        <meshPhysicalMaterial color={cupColor} roughness={0.32} metalness={0.05} clearcoat={0.7} clearcoatRoughness={0.18} />
+      </mesh>
+      {/* Coffee — a thin dark disc inside the cup top */}
+      <mesh position={[0, CUP_HEIGHT_M + 0.004, 0]}>
+        <cylinderGeometry args={[CUP_RADIUS_M * 0.92, CUP_RADIUS_M * 0.92, 0.002, 28]} />
+        <meshStandardMaterial color="#2a1808" roughness={0.4} />
+      </mesh>
+      {/* Logo decals — four around the cup body, slightly inset from the
+          cylinder surface so they don't z-fight. */}
+      {url && facings.map((rotY, i) => {
+        const r = CUP_RADIUS_M * 0.92 + 0.0008;
+        return (
+          <group key={i} rotation-y={rotY}>
+            <mesh position={[0, CUP_HEIGHT_M / 2 + 0.012, r]}>
+              <planeGeometry args={[decalW, decalH]} />
+              <meshStandardMaterial
+                map={tex}
+                emissiveMap={tex}
+                emissive={new THREE.Color("#ffffff")}
+                emissiveIntensity={0.25}
+                color="#ffffff"
+                transparent
+                toneMapped={false}
+                depthWrite={false}
+                alphaTest={0.04}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          </group>
+        );
+      })}
     </group>
   );
 }

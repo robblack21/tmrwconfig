@@ -13,7 +13,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
-import { BoardroomTable, ChairsAroundTable } from "./Boardroom";
+import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, auditPropOnFloor } from "./placementAudit";
 import { Flycam } from "./Flycam";
 import { PerfMonitor } from "./PerfMonitor";
@@ -400,6 +400,15 @@ export function Scene() {
                 position={[0, platformHeightM, 0]}
                 tintHex={kit.palette.secondary}
               />
+              {/* Custom branded merch — one logo-emblazoned coffee cup at
+                  every seat, count-driven so they re-flow with the chairs. */}
+              <BrandedCupsOnTable
+                count={chairCount}
+                tableLengthM={tableLengthM}
+                tableWidthM={tableWidthM}
+                position={[0, platformHeightM, 0]}
+                kit={kit}
+              />
             </Suspense>
 
             {/* Optional breakout seating — sofa pair against the front-right
@@ -710,7 +719,8 @@ function Room({
         if (windowsEnabled && (circular || (i !== backEdge && sideish))) {
           return (
             <WindowedWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick}
-              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={windowTrimColor} />
+              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={windowTrimColor}
+              logo={logo} />
           );
         }
         if (i === backEdge) {
@@ -812,12 +822,20 @@ function DoorEdgeWall({
 // Side wall with a ribbon window — a solid sill panel, a glazed band using the
 // transmission glass material, and a header panel above. Built in a local
 // frame: `lengthM` runs along local X, `wallHeightM` up Y, `thick` along Z.
+// When a `logo` is given, small extruded brand signs flank the ribbon window
+// on the exterior face (one at each end of the wall, on the sill below the
+// glazing) so the room reads symmetrically from outside.
 function WindowedWall({
-  lengthM, wallHeightM, thick, position, rotationY, sillM, color, frameColor,
+  lengthM, wallHeightM, thick, position, rotationY, sillM, color, frameColor, logo,
 }: {
   lengthM: number; wallHeightM: number; thick: number;
   position: [number, number, number]; rotationY: number;
   sillM: number; color: string; frameColor: string;
+  logo?: {
+    url: string; viewBox: [number, number, number, number];
+    invert: boolean; chroma: "white" | "black" | "";
+    sideTint: string; extrusionM: number; emissive: number;
+  };
 }) {
   const headerM = 0.35;
   const winH = Math.max(0.3, wallHeightM - sillM - headerM);
@@ -825,6 +843,12 @@ function WindowedWall({
   const winY = sillM + winH / 2;
   const glassT = thick * 0.4;
   const mullions = Math.max(1, Math.round(lengthM / 1.6) - 1);
+  // Window-flank logo: tucked onto the SILL (below the glazing) at each end,
+  // exterior face. ~50% smaller than the back-wall logo per spec and with the
+  // glow boosted so they read at distance.
+  const logoMaxW = Math.min(lengthM * 0.18, 0.9);
+  const logoEmissiveBoost = 2.4;
+  const logoEnabled = !!logo && lengthM > 2.6;
   return (
     <group position={position} rotation-y={rotationY}>
       {/* Sill panel */}
@@ -864,6 +888,34 @@ function WindowedWall({
             <boxGeometry args={[0.05, winH, thick * 1.05]} />
             <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
           </mesh>
+        );
+      })}
+      {/* Exterior brand signage flanking the ribbon window (both ends). */}
+      {logoEnabled && [-1, 1].map((sx) => {
+        const margin = logoMaxW * 0.6;
+        const xOffset = sx * (lengthM / 2 - margin);
+        // Centre vertically on the wall so the brand reads even when the
+        // glazing dominates the elevation.
+        const y = wallHeightM * 0.55;
+        return (
+          <Suspense key={sx} fallback={null}>
+            <LogoSign
+              url={logo!.url}
+              viewBox={logo!.viewBox}
+              widthM={logoMaxW}
+              heightM={wallHeightM * 0.55}
+              anchorZ={-thick / 2}
+              faceDir={-1}
+              xOffset={xOffset}
+              y={y}
+              extrusionM={logo!.extrusionM}
+              sideTint={logo!.sideTint}
+              emissive={logo!.emissive * logoEmissiveBoost}
+              invert={logo!.invert}
+              chroma={logo!.chroma}
+              maxWidthM={logoMaxW}
+            />
+          </Suspense>
         );
       })}
     </group>
@@ -1598,6 +1650,10 @@ function PendantWithLogo({ shape, widthM, depthM, heightM, yPositionM, extrusion
 
   let body: React.ReactNode = null;
   let faceLogos: { pos: [number, number, number]; rotY: number; w: number; h: number }[] = [];
+  // For the horizontal ring pendant only — a logo plane facing straight down
+  // through the donut hole, since faceLogos can't represent a downward-facing
+  // decal (it only supports Y-axis rotation).
+  let ringLogoUnderside: { y: number; w: number; h: number } | null = null;
 
   if (shape === "rectangle") {
     body = (
@@ -1754,6 +1810,15 @@ function PendantWithLogo({ shape, widthM, depthM, heightM, yPositionM, extrusion
         </mesh>
       </group>
     );
+    // Emblazon the brand logo in the centre of the ring. The horizontal
+    // (overhead) variant gets a decal under the donut hole facing the table;
+    // the vertical (camera-facing) variant gets one on the front face.
+    if (ringVertical) {
+      // Front face — logo sits just in front of the ring centre.
+      faceLogos.push({ pos: [0, yPositionM, tube * 0.6], rotY: 0, w: innerR * 1.7, h: innerR * 1.7 });
+    } else {
+      ringLogoUnderside = { y: yPositionM - tube * 0.2, w: innerR * 1.7, h: innerR * 1.7 };
+    }
   }
 
   // Render per-face logo decals.
@@ -1779,7 +1844,61 @@ function PendantWithLogo({ shape, widthM, depthM, heightM, yPositionM, extrusion
           />
         </Suspense>
       ))}
+      {url && ringLogoUnderside && (
+        <Suspense fallback={null}>
+          <PendantRingUndersideLogo
+            url={url}
+            viewBox={kit.logos.primary.viewBox}
+            y={ringLogoUnderside.y}
+            availW={ringLogoUnderside.w}
+            availH={ringLogoUnderside.h}
+            emissive={emissive}
+            invert={!!kit.scene?.invertLogo}
+            chroma={kit.scene?.logoChroma ?? ""}
+          />
+        </Suspense>
+      )}
     </group>
+  );
+}
+
+// Logo plane mounted under the centre of a horizontal ring pendant, facing
+// straight down so people sitting at the table see it. Uses rotation-x to
+// orient the plane downward (which PendantFaceLogo can't do since it only
+// rotates around Y).
+function PendantRingUndersideLogo({
+  url, viewBox, y, availW, availH, emissive = 1.2, invert = false, chroma = "",
+}: {
+  url: string;
+  viewBox: [number, number, number, number];
+  y: number;
+  availW: number;
+  availH: number;
+  emissive?: number;
+  invert?: boolean;
+  chroma?: "white" | "black" | "";
+}) {
+  const tex = useLogoTexture(url, invert, chroma);
+  const aspect = viewBox[2] / Math.max(viewBox[3], 1);
+  let w = availW * 0.9;
+  let h = w / aspect;
+  if (h > availH * 0.9) { h = availH * 0.9; w = h * aspect; }
+  return (
+    <mesh position={[0, y, 0]} rotation-x={-Math.PI / 2}>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial
+        map={tex}
+        emissiveMap={tex}
+        emissive={new THREE.Color("#ffffff")}
+        emissiveIntensity={emissive}
+        color="#ffffff"
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+        alphaTest={0.02}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
   );
 }
 

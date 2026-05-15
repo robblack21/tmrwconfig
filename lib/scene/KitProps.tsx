@@ -21,6 +21,12 @@ export type KitProp = {
    *  earth which hovers mid-room rather than sitting on the platform). */
   position: [number, number, number];
   rotationY?: number;
+  /** Extra rotation around X / Z (radians). Useful for wall-mounting a
+   *  prop that's modelled flat — e.g. the Rolex Invicta watch tipped up to
+   *  hang on a wall like a clock. Applied INSIDE the normalize step so
+   *  base-pin stays correct after rotation. */
+  rotationX?: number;
+  rotationZ?: number;
   /** Target height of the model in metres. */
   heightM: number;
   /** When set, drops a plinth under the model and stands it on top. */
@@ -58,6 +64,8 @@ function renderProp(p: KitProp, booth: BoothDims, key: number) {
       url={p.url}
       position={[p.position[0], floorY, p.position[2]]}
       rotationY={p.rotationY ?? 0}
+      rotationX={p.rotationX ?? 0}
+      rotationZ={p.rotationZ ?? 0}
       heightM={p.heightM}
       plinthHeightM={p.plinthHeightM}
       plinthColor={p.plinthColor}
@@ -145,11 +153,13 @@ export function useTintedGltf(url: string, tintHex?: string) {
 // ── Hero asset — a brand GLB, optionally on a plinth ─────────────────────────
 
 function HeroAsset({
-  url, position, rotationY, heightM, plinthHeightM, plinthColor = "#1a1c22", meshFilter,
+  url, position, rotationY, rotationX = 0, rotationZ = 0, heightM, plinthHeightM, plinthColor = "#1a1c22", meshFilter,
 }: {
   url: string;
   position: [number, number, number];
   rotationY: number;
+  rotationX?: number;
+  rotationZ?: number;
   heightM: number;
   plinthHeightM?: number;
   plinthColor?: string;
@@ -173,6 +183,20 @@ function HeroAsset({
       const m = o as THREE.Mesh;
       if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
     });
+    // Apply X / Z rotation BEFORE normalize so the bbox + height scale +
+    // base-pin are measured on the rotated geometry. The Rolex Invicta
+    // watch ships face-up; tipping it -π/2 around X makes the face vertical
+    // and 'height' refers to the dial diameter, not the wrist-band depth.
+    if (rotationX !== 0 || rotationZ !== 0) {
+      const wrap = new THREE.Group();
+      wrap.rotation.x = rotationX;
+      wrap.rotation.z = rotationZ;
+      wrap.add(s);
+      wrap.updateMatrixWorld(true);
+      // Bake rotation into geometry-space so meshOnlyBox sees the rotated bbox.
+      wrap.children = [];
+      s.applyMatrix4(wrap.matrixWorld);
+    }
     const normalised = normalizeForBase(s, heightM);
     // Dev-only audit — sometimes a GLB still dips below floor after normalise
     // (e.g. wheel arches that mesh-filter excludes). Surface it as a warning.
@@ -185,7 +209,7 @@ function HeroAsset({
       }
     }
     return normalised;
-  }, [gltf, heightM, url, meshFilter]);
+  }, [gltf, heightM, url, meshFilter, rotationX, rotationZ]);
 
   return (
     <group position={position} rotation-y={rotationY}>
