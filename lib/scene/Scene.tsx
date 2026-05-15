@@ -722,11 +722,13 @@ function Room({
         );
       })}
 
-      {/* Pavilion — a low parapet ring framing the open central atrium. */}
+      {/* Pavilion — a full-height GLASS atrium box in the centre with sliding
+          glass doors on each side. Reads as an internal courtyard you can
+          walk into through any face. */}
       {shape === "pavilion" && (() => {
         const [aw, ad] = atriumSize(widthM, depthM);
-        const h = Math.min(1.1, wallHeightM * 0.4);
         const hw = aw / 2, hd = ad / 2;
+        const innerH = Math.min(wallHeightM - 0.2, wallHeightM * 0.96);
         const ring: { pos: [number, number, number]; rotY: number; len: number }[] = [
           { pos: [0, platformTop, -hd], rotY: 0, len: aw },
           { pos: [0, platformTop, hd], rotY: 0, len: aw },
@@ -734,9 +736,15 @@ function Room({
           { pos: [hw, platformTop, 0], rotY: Math.PI / 2, len: ad },
         ];
         return ring.map((e, i) => (
-          <group key={`atrium-${i}`} position={e.pos} rotation-y={e.rotY}>
-            <WallPanelPlaster w={e.len} h={h} d={thick} pos={[0, h / 2, 0]} color={kitPrimary} />
-          </group>
+          <AtriumGlassWall
+            key={`atrium-${i}`}
+            lengthM={e.len}
+            wallHeightM={innerH}
+            thick={thick}
+            position={e.pos}
+            rotationY={e.rotY}
+            frameColor={kitAccent}
+          />
         ));
       })()}
     </group>
@@ -852,6 +860,68 @@ function WindowedWall({
           </mesh>
         );
       })}
+    </group>
+  );
+}
+
+// Full-height glass atrium wall with a centred sliding-door opening. Used
+// to enclose the central courtyard of the pavilion footprint — each of the
+// four atrium sides renders one of these, so you can step into the atrium
+// through any side.
+function AtriumGlassWall({
+  lengthM, wallHeightM, thick, position, rotationY, frameColor,
+}: {
+  lengthM: number; wallHeightM: number; thick: number;
+  position: [number, number, number]; rotationY: number; frameColor: string;
+}) {
+  const doorW = Math.min(1.6, lengthM * 0.42);
+  const halfW = Math.max(0.4, (lengthM - doorW) / 2);
+  const halfCx = doorW / 2 + halfW / 2;
+  const glassT = thick * 0.4;
+  // Each half-side renders a single glass pane; the door opening stays empty.
+  // A slim top rail spans the full length so the doorway reads as framed.
+  const headerH = 0.08;
+  return (
+    <group position={position} rotation-y={rotationY}>
+      {/* Two glass side panes flanking the door. */}
+      {[-halfCx, halfCx].map((cx, idx) => (
+        <group key={idx} position={[cx, 0, 0]}>
+          <mesh position={[0, wallHeightM / 2, 0]} castShadow={false} receiveShadow={false}>
+            <boxGeometry args={[halfW - 0.03, wallHeightM, glassT]} />
+            <meshPhysicalMaterial
+              transmission={0.95}
+              roughness={0.04}
+              metalness={0}
+              ior={1.5}
+              thickness={0.04}
+              transparent
+              color="#ffffff"
+              envMapIntensity={1.4}
+              attenuationColor="#cdd8e0"
+              attenuationDistance={3}
+            />
+          </mesh>
+          {/* Slim vertical jamb between glass and door opening. */}
+          <mesh position={[idx === 0 ? halfW / 2 - 0.015 : -halfW / 2 + 0.015, wallHeightM / 2, 0]}>
+            <boxGeometry args={[0.03, wallHeightM, thick * 1.05]} />
+            <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+          </mesh>
+        </group>
+      ))}
+      {/* Top header rail spans the entire wall (gives the atrium a
+          continuous frame so the doorway reads architecturally). */}
+      <mesh position={[0, wallHeightM - headerH / 2, 0]}>
+        <boxGeometry args={[lengthM, headerH, thick * 1.1]} />
+        <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+      </mesh>
+      {/* Bottom rail (low threshold) — only under the glass panes so the
+          door has a clear floor. */}
+      {[-halfCx, halfCx].map((cx, idx) => (
+        <mesh key={`r${idx}`} position={[cx, 0.025, 0]}>
+          <boxGeometry args={[halfW - 0.03, 0.05, thick * 1.05]} />
+          <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.6} />
+        </mesh>
+      ))}
     </group>
   );
 }

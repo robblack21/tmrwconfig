@@ -16,7 +16,9 @@ export type KitProp = {
   kind: "heroAsset";
   /** Public path, e.g. "/glb/brand-hero/apple/apple_mac_studio.glb". */
   url: string;
-  /** XZ position relative to room centre; Y is auto-pinned to the floor/plinth. */
+  /** XZ position relative to room centre; Y is added to the floor/plinth top
+   *  so positive values float the model off the floor (used for the TMRW
+   *  earth which hovers mid-room rather than sitting on the platform). */
   position: [number, number, number];
   rotationY?: number;
   /** Target height of the model in metres. */
@@ -24,6 +26,10 @@ export type KitProp = {
   /** When set, drops a plinth under the model and stands it on top. */
   plinthHeightM?: number;
   plinthColor?: string;
+  /** Regex pattern (string) — meshes whose name matches are pruned from the
+   *  cloned scene before rendering. Used to drop atmosphere shells, helper
+   *  spheres, undertray shadow proxies etc that some GLBs ship with. */
+  meshFilter?: string;
 };
 
 export type BoothDims = { widthM: number; depthM: number; wallHeightM: number; trussTopM: number; platformHeightM: number };
@@ -43,8 +49,9 @@ export function KitProps({ kit, booth }: { kit: BrandKit; booth: BoothDims }) {
 
 function renderProp(p: KitProp, booth: BoothDims, key: number) {
   if (p.kind !== "heroAsset") return null;
-  // y=0 in the manifest means "on the room floor" (top of the platform).
-  const floorY = booth.platformHeightM;
+  // The manifest's y is an offset above the floor — y=0 sits on the platform,
+  // y>0 floats the prop (used for the TMRW earth hovering mid-room).
+  const floorY = booth.platformHeightM + (p.position[1] ?? 0);
   return (
     <HeroAsset
       key={key}
@@ -54,6 +61,7 @@ function renderProp(p: KitProp, booth: BoothDims, key: number) {
       heightM={p.heightM}
       plinthHeightM={p.plinthHeightM}
       plinthColor={p.plinthColor}
+      meshFilter={p.meshFilter}
     />
   );
 }
@@ -137,7 +145,7 @@ export function useTintedGltf(url: string, tintHex?: string) {
 // ── Hero asset — a brand GLB, optionally on a plinth ─────────────────────────
 
 function HeroAsset({
-  url, position, rotationY, heightM, plinthHeightM, plinthColor = "#1a1c22",
+  url, position, rotationY, heightM, plinthHeightM, plinthColor = "#1a1c22", meshFilter,
 }: {
   url: string;
   position: [number, number, number];
@@ -145,11 +153,22 @@ function HeroAsset({
   heightM: number;
   plinthHeightM?: number;
   plinthColor?: string;
+  meshFilter?: string;
 }) {
   const gltf = useGLTF(url);
   const baseY = plinthHeightM ?? 0;
   const scene = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
+    // Prune meshes whose name matches `meshFilter` — used to drop atmosphere
+    // shells / shadow proxies (e.g. the ATM mesh in the TMRW earth GLB).
+    if (meshFilter) {
+      const re = new RegExp(meshFilter, "i");
+      const toRemove: THREE.Object3D[] = [];
+      s.traverse((o) => {
+        if (re.test(o.name)) toRemove.push(o);
+      });
+      for (const o of toRemove) o.parent?.remove(o);
+    }
     s.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
@@ -166,7 +185,7 @@ function HeroAsset({
       }
     }
     return normalised;
-  }, [gltf, heightM, url]);
+  }, [gltf, heightM, url, meshFilter]);
 
   return (
     <group position={position} rotation-y={rotationY}>

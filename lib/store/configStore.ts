@@ -204,9 +204,14 @@ export const useConfig = create<ConfigState>((set, get) => ({
     const s = get();
     switch (intent.type) {
       case "footprint.setShape": {
-        const b = bounds(intent.shape, s.tier);
+        // Atrium / pavilion is naturally a large-room shape — bump to the L
+        // tier when picked unless the user is already there. Other shapes
+        // keep whatever tier the user previously chose.
+        const nextTier = intent.shape === "pavilion" && s.tier !== "L" ? "L" : s.tier;
+        const b = bounds(intent.shape, nextTier);
         set({
           shape: intent.shape,
+          tier: nextTier,
           widthM: b.widthM.default,
           depthM: b.depthM.default,
         });

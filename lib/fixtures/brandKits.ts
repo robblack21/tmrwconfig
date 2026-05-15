@@ -378,7 +378,20 @@ for (const k of [...seedBrandKitList, tmrwBlank]) {
 // are display dressing — positions are tuned for a mid-size room and can be
 // art-directed per brand later. louisvuitton / meta / tmrw have no hero GLBs
 // on disk yet, so they simply render none.
-type HeroSpec = { file: string; heightM: number; plinth?: boolean };
+type HeroSpec = {
+  file: string;
+  heightM: number;
+  plinth?: boolean;
+  /** Override the default floor position; useful when a single prop needs
+   *  to live somewhere other than the back-left hero strip. */
+  pos?: [number, number, number];
+  /** Y offset above the floor — positive values float the prop. */
+  floatYM?: number;
+  /** Regex pattern; meshes matching this name are pruned from the GLB
+   *  before render (used for the TMRW earth's atmosphere shell). */
+  meshFilter?: string;
+  rotationY?: number;
+};
 const HERO_ASSETS: Record<string, HeroSpec[]> = {
   "brand.apple": [
     { file: "apple_mac_studio.glb",        heightM: 0.42, plinth: true },
@@ -423,31 +436,51 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
     { file: "glasses-mesh_louis_vuitton.glb",            heightM: 0.16, plinth: true },
     { file: "louis_vuitton_contrast_trim.glb",           heightM: 0.50, plinth: true },
   ],
-  "brand.tmrw": [{ file: "earth__terra_-_downloadable_model.glb", heightM: 1.30 }],
+  "brand.tmrw": [{
+    file: "earth__terra_-_downloadable_model.glb",
+    heightM: 1.60,
+    // Float the earth as a centrepiece of the room — sits left of the table,
+    // hovering at conference-table eye line rather than embedded in the floor.
+    pos: [-3.6, 0, -0.6],
+    floatYM: 1.4,
+    // The GLB ships with an atmospheric inner shell (ATM*) that reads as a
+    // second, monochrome globe near the origin once placed in the scene.
+    // Filter it out so only the EARTH mesh renders.
+    meshFilter: "ATM",
+    rotationY: -Math.PI / 8,
+  }],
 };
 
 function buildHeroProps(slug: string, specs: HeroSpec[]) {
   const props: Array<Record<string, unknown>> = [];
   const plinthItems = specs.filter((s) => s.plinth);
   const floorItems = specs.filter((s) => !s.plinth);
+  const applyFloat = (basePos: [number, number, number], s: HeroSpec): [number, number, number] => {
+    const base = s.pos ?? basePos;
+    return [base[0], base[1] + (s.floatYM ?? 0), base[2]];
+  };
   plinthItems.forEach((s, i) => {
+    const defaultPos: [number, number, number] = [-3.6 + i * 1.0, 0, -2.6];
     props.push({
       kind: "heroAsset",
       url: asset(`/glb/brand-hero/${slug}/${s.file}`),
-      position: [-3.6 + i * 1.0, 0, -2.6],
-      rotationY: 0.35,
+      position: applyFloat(defaultPos, s),
+      rotationY: s.rotationY ?? 0.35,
       heightM: s.heightM,
       plinthHeightM: 1.0,
+      ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
     });
   });
   floorItems.forEach((s, i) => {
+    // Back-left of the room, well clear of the central table + chairs.
+    const defaultPos: [number, number, number] = [-3.4, 0, -1.0 - i * 0.4];
     props.push({
       kind: "heroAsset",
       url: asset(`/glb/brand-hero/${slug}/${s.file}`),
-      // Back-left of the room, well clear of the central table + chairs.
-      position: [-3.4, 0, -1.0 - i * 0.4],
-      rotationY: -Math.PI / 5,
+      position: applyFloat(defaultPos, s),
+      rotationY: s.rotationY ?? -Math.PI / 5,
       heightM: s.heightM,
+      ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
     });
   });
   return props;
