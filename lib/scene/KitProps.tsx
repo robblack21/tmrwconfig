@@ -3,6 +3,7 @@ import { Suspense, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { BrandKit } from "@/lib/schemas";
+import { auditHeroAssetClearance } from "./placementAudit";
 
 // ── Per-kit hero-asset manifest ──────────────────────────────────────────────
 // Each brand "room" can show a handful of brand-hero GLBs (the models in
@@ -95,6 +96,17 @@ export function normalizeForBase(scene: THREE.Object3D, heightM: number, yLift =
   if (!box2.isEmpty() && isFinite(box2.min.y) && Math.abs(box2.min.y - yLift) > 1e-3) {
     scene.position.y += yLift - box2.min.y;
   }
+  // Belt-and-suspenders: some GLBs (e.g. cars) carry visible undertray meshes
+  // that the helper-name filter wrongly skips, so their actual lowest point
+  // dips below the measured visible bbox and the model sinks into the floor.
+  // Re-measure the FULL bbox (no name filter); if the dip is small enough to
+  // plausibly be real geometry rather than a far-off helper, lift to clear it.
+  scene.updateMatrixWorld(true);
+  const fullBox = new THREE.Box3().setFromObject(scene, true);
+  if (isFinite(fullBox.min.y) && fullBox.min.y < yLift) {
+    const dip = yLift - fullBox.min.y;
+    if (dip < 0.5) scene.position.y += dip;
+  }
   return scene;
 }
 
@@ -142,8 +154,19 @@ function HeroAsset({
       const m = o as THREE.Mesh;
       if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
     });
-    return normalizeForBase(s, heightM);
-  }, [gltf, heightM]);
+    const normalised = normalizeForBase(s, heightM);
+    // Dev-only audit — sometimes a GLB still dips below floor after normalise
+    // (e.g. wheel arches that mesh-filter excludes). Surface it as a warning.
+    if (process.env.NODE_ENV === "development") {
+      normalised.updateMatrixWorld(true);
+      const bbox = new THREE.Box3().setFromObject(normalised, true);
+      if (isFinite(bbox.min.y)) {
+        const label = url.split("/").pop() ?? "heroAsset";
+        auditHeroAssetClearance({ label, lowestY: bbox.min.y, floorY: 0 });
+      }
+    }
+    return normalised;
+  }, [gltf, heightM, url]);
 
   return (
     <group position={position} rotation-y={rotationY}>

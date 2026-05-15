@@ -46,6 +46,7 @@ export type ConfigState = {
   windowsEnabled: boolean;            // ribbon windows on the side walls (glass shading)
   ceilingEnabled: boolean;            // enclosed ceiling slab (off = open / exhibition look)
   windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
+  roomCount: number;                  // 1..6 — cloned rooms linked by mid-wall doorways
   tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
   tableWidthM: number;                // 1.0..3.0 — boardroom table width
   chairCount: number;                 // 0..16 — chairs arranged around the table, facing in
@@ -150,6 +151,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   windowsEnabled: true,
   ceilingEnabled: true,
   windowSillM: 0.95,
+  roomCount: 1,
   tableLengthM: 3.6,
   tableWidthM: 1.4,
   chairCount: 8,
@@ -285,6 +287,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "room.setWindowsEnabled":     { set({ windowsEnabled: intent.value }); break; }
       case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
       case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
+      case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
       case "boardroom.setTableLength":   { set({ tableLengthM: clamp(intent.value, 2.0, 8.0) }); break; }
       case "boardroom.setTableWidth":    { set({ tableWidthM: clamp(intent.value, 1.0, 3.0) }); break; }
       case "boardroom.setChairCount":    { set({ chairCount: Math.round(clamp(intent.value, 0, 16)) }); break; }
@@ -414,6 +417,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
           windowsEnabled: true,
           ceilingEnabled: true,
           windowSillM: 0.95,
+          roomCount: 1,
           tableLengthM: 3.6,
           tableWidthM: 1.4,
           chairCount: 8,

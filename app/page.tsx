@@ -36,7 +36,7 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
-    windowsEnabled, ceilingEnabled, windowSillM,
+    windowsEnabled, ceilingEnabled, windowSillM, roomCount,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId,
@@ -316,6 +316,7 @@ export default function Page() {
           {windowsEnabled && (
             <Slider label="Sill" value={windowSillM} onChange={(v) => apply({ type: "room.setWindowSill", value: v })} min={0.4} max={1.6} step={0.05} unit="m" />
           )}
+          <Slider label="Rooms" value={roomCount} onChange={(v) => apply({ type: "room.setCount", value: v })} min={1} max={6} step={1} />
         </Section>
 
         <Section label="Table">

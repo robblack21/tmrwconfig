@@ -14,6 +14,7 @@ import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
 import { BoardroomTable, ChairsAroundTable } from "./Boardroom";
+import { PROP_RADIUS_M, safeInsetForKind, auditPropOnFloor } from "./placementAudit";
 import { Flycam } from "./Flycam";
 import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
@@ -93,6 +94,7 @@ export function Scene() {
   const windowsEnabled = useConfig((s) => s.windowsEnabled);
   const ceilingEnabled = useConfig((s) => s.ceilingEnabled);
   const windowSillM = useConfig((s) => s.windowSillM);
+  const roomCount = useConfig((s) => s.roomCount);
   const tableLengthM = useConfig((s) => s.tableLengthM);
   const tableWidthM = useConfig((s) => s.tableWidthM);
   const chairCount = useConfig((s) => s.chairCount);
@@ -135,6 +137,13 @@ export function Scene() {
   // Per-kit GI / key multipliers (atelier kits dial down ambient)
   const giMult  = kit.scene?.giMultiplier  ?? 1;
   const keyMult = kit.scene?.keyMultiplier ?? 1;
+
+  // Multi-room cluster — rooms are cloned along X with doorways linking the
+  // shared side walls. `xOffsetFor` centres the cluster on the origin so
+  // OrbitControls' pivot still maps to roughly the cluster centre.
+  const roomIndices = Array.from({ length: roomCount }, (_, i) => i);
+  const xOffsetFor = (i: number) => (i - (roomCount - 1) / 2) * widthM;
+  const clusterWidthM = widthM * roomCount;
 
   // Renderer-side: exposure + soft-shadow type set once on mount.
   const gl = useThree((s) => s.gl);
@@ -197,6 +206,18 @@ export function Scene() {
       />
       <directionalLight position={[-6, 6, -4]} intensity={(isDark ? 0.22 : 0.3) * keyLightIntensity} color="#a8b4cc" />
 
+      <Suspense fallback={null}>
+        <PbrFloor isDark={isDark} />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <PlatformBlock widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} />
+      </Suspense>
+
+      <PlatformEdgeAccent widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} color={trimColor} />
+
+      {roomIndices.map((ri) => (
+        <group key={`room-${ri}`} position={[xOffsetFor(ri), 0, 0]}>
       {!editMode && (
         <>
           <BoothInteriorLights widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} accent={kit.palette.accent} isDark={isDark} />
@@ -204,16 +225,6 @@ export function Scene() {
           <BackWallSconce widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} accent={kit.palette.accent} intensity={logoGlow} />
         </>
       )}
-
-      <Suspense fallback={null}>
-        <PbrFloor isDark={isDark} />
-      </Suspense>
-
-      <Suspense fallback={null}>
-        <PlatformBlock widthM={widthM} depthM={depthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} />
-      </Suspense>
-
-      <PlatformEdgeAccent widthM={widthM} depthM={depthM} platformHeightM={platformHeightM} color={trimColor} />
 
       <TimedReveal delay={150}>
         <Suspense fallback={null}>
@@ -231,6 +242,8 @@ export function Scene() {
             windowSillM={windowSillM}
             windowTrimColor={kit.scene?.windowTrimColor ?? kit.palette.accent}
             logo={exteriorLogo}
+            connectLeft={ri > 0}
+            skipRight={ri < roomCount - 1}
           />
         </Suspense>
       </TimedReveal>
@@ -358,9 +371,6 @@ export function Scene() {
       {/* Per-kit brand-hero assets — the GLBs in /components/brand-hero/<slug>/. */}
       <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM }} />
 
-      {/* Camera sync — applies FOV + preset moves + surfaces live readouts */}
-      <CameraSync />
-
       {/* Boardroom furnishing — the table + chairs are the centrepiece; plants
           dress the corners; sofas are optional breakout seating. Suppressed
           when a kit brings its own bespoke set. */}
@@ -413,11 +423,18 @@ export function Scene() {
           <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} />
         </>
       )}
+        </group>
+      ))}
+
+      {/* Camera sync — applies FOV + preset moves + surfaces live readouts.
+          Lives outside the per-room map so it observes the cluster as a
+          whole rather than re-mounting for every room. */}
+      <CameraSync />
 
       <ContactShadows
         position={[0, 0.012, 0]}
         opacity={isDark ? 0.4 : 0.32}
-        scale={Math.max(widthM, depthM) * 1.8}
+        scale={Math.max(clusterWidthM, depthM) * 1.8}
         blur={3.5}
         far={6}
       />
@@ -520,6 +537,18 @@ function BackWallSconce({ widthM, depthM, wallHeightM, accent, intensity }: { wi
 
 function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle }: { widthM: number; depthM: number; platformHeightM: number; sideColor: string; floorStyle: "herringbone" | "diagonal" | "rectangular" }) {
   const { map, normalMap, aoMap } = useParquetTextures(floorStyle);
+  // Size-aware tiling — one parquet tile per ~2 m of floor, so the planks
+  // keep their proportion regardless of room size, and max anisotropy so the
+  // detail holds up at glancing angles instead of smearing in the centre.
+  useEffect(() => {
+    const rx = Math.max(1, widthM / 2);
+    const ry = Math.max(1, depthM / 2);
+    [map, normalMap, aoMap].forEach((t) => {
+      t.repeat.set(rx, ry);
+      t.anisotropy = 16;
+      t.needsUpdate = true;
+    });
+  }, [map, normalMap, aoMap, widthM, depthM]);
   // 6 face materials on a BoxGeometry: parquet on the top (+Y), brand-coloured on the rest.
   // Order in three: +X -X +Y -Y +Z -Z
   return (
@@ -601,6 +630,7 @@ function atriumSize(w: number, d: number): [number, number] {
 function Room({
   shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
   backWallGraphic, backWallMotif, windowsEnabled, windowSillM, windowTrimColor, logo,
+  connectLeft = false, skipRight = false,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
@@ -614,6 +644,12 @@ function Room({
     invert: boolean; chroma: "white" | "black" | "";
     sideTint: string; extrusionM: number; emissive: number;
   };
+  /** When true, the leftmost side wall becomes a doorway linking to the
+   *  room immediately to the left. */
+  connectLeft?: boolean;
+  /** When true, skip rendering the rightmost side wall — the next room
+   *  on the right renders the shared wall as its connecting doorway. */
+  skipRight?: boolean;
 }) {
   // Walls are built edge-by-edge around the footprint polygon: the rearmost
   // edge is the solid feature wall (logo + video live there), the frontmost
@@ -631,6 +667,16 @@ function Room({
     if (midZ > maxZ) { maxZ = midZ; doorEdge = i; }
     if (midZ < minZ) { minZ = midZ; backEdge = i; }
   }
+  // For multi-room linking: pick the leftmost / rightmost SIDE edges (those
+  // that aren't the door or back), so adjacent rooms can share them.
+  let leftEdge = -1, rightEdge = -1, minX = Infinity, maxX = -Infinity;
+  for (let i = 0; i < n; i++) {
+    if (i === doorEdge || i === backEdge) continue;
+    const a = poly[i]!, b = poly[(i + 1) % n]!;
+    const midX = (a[0] + b[0]) / 2;
+    if (midX < minX) { minX = midX; leftEdge = i; }
+    if (midX > maxX) { maxX = midX; rightEdge = i; }
+  }
 
   return (
     <group>
@@ -645,6 +691,15 @@ function Room({
 
         if (i === doorEdge) {
           return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} logo={logo} />;
+        }
+        // Multi-room: shared edges become connecting doorways (left) or are
+        // skipped entirely (right — the next room's left renders the doorway).
+        if (skipRight && i === rightEdge) return null;
+        if (connectLeft && i === leftEdge) {
+          return (
+            <WindowedDoorwayWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick}
+              position={mid} rotationY={rotY} sillM={windowSillM} color={kitPrimary} frameColor={windowTrimColor} />
+          );
         }
         if (windowsEnabled && (circular || (i !== backEdge && sideish))) {
           return (
@@ -797,6 +852,34 @@ function WindowedWall({
           </mesh>
         );
       })}
+    </group>
+  );
+}
+
+// Windowed side wall with an interior door opening dead-centre — used to link
+// adjacent rooms in the multi-room cluster. Glass + mullion layout on either
+// side of the door mirrors the regular windowed wall so the rhythm flows.
+function WindowedDoorwayWall({
+  lengthM, wallHeightM, thick, position, rotationY, sillM, color, frameColor,
+}: {
+  lengthM: number; wallHeightM: number; thick: number;
+  position: [number, number, number]; rotationY: number;
+  sillM: number; color: string; frameColor: string;
+}) {
+  const doorW = Math.min(1.3, lengthM * 0.4);
+  const doorH = Math.min(2.25, wallHeightM - 0.35);
+  const halfW = Math.max(0.5, (lengthM - doorW) / 2);
+  const halfCx = doorW / 2 + halfW / 2;
+  const headerH = wallHeightM - doorH;
+  return (
+    <group position={position} rotation-y={rotationY}>
+      <WindowedWall lengthM={halfW} wallHeightM={wallHeightM} thick={thick}
+        position={[-halfCx, 0, 0]} rotationY={0} sillM={sillM} color={color} frameColor={frameColor} />
+      <WindowedWall lengthM={halfW} wallHeightM={wallHeightM} thick={thick}
+        position={[halfCx, 0, 0]} rotationY={0} sillM={sillM} color={color} frameColor={frameColor} />
+      {headerH > 0.05 && (
+        <WallPanelPlaster w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
+      )}
     </group>
   );
 }
@@ -1663,6 +1746,7 @@ function PendantFaceLogo({
           toneMapped={false}
           depthWrite={false}
           alphaTest={0.02}
+          side={THREE.DoubleSide}
         />
       </mesh>
     </group>
@@ -1878,13 +1962,29 @@ function generatePlantSlots(widthM: number, depthM: number, count: number, platf
   // Heights aligned within each L/R pair so the booth reads symmetrically.
   // First pair: trees flanking the front. Second pair: low pots flanking the
   // back. Third pair: mid-height snake plants on the side walls.
+  //
+  // Insets are radius-aware (see placementAudit.ts) — each candidate's
+  // planter footprint is looked up, then we add wall clearance so the
+  // planter base never overlaps the wall regardless of room size.
+  const inT = safeInsetForKind("tree", 0.15);    // tree planter inset (+ 15cm cushion)
+  const inS = safeInsetForKind("hexapot", 0.15); // smaller-pot inset
   const candidates: { kind: PlantKind; pos: [number, number, number]; rot: number; h: number }[] = [
-    { kind: "tree",    pos: [ widthM / 2 - 0.7, y,  depthM / 2 - 0.7], rot: -Math.PI / 4, h: 2.0 },
-    { kind: "tree",    pos: [-widthM / 2 + 0.7, y,  depthM / 2 - 0.7], rot:  Math.PI / 4, h: 2.0 },
-    { kind: "hexapot", pos: [ widthM / 2 - 0.7, y, -depthM / 2 + 0.7], rot: -Math.PI / 6, h: 1.0 },
-    { kind: "tarro",   pos: [-widthM / 2 + 0.7, y, -depthM / 2 + 0.7], rot:  Math.PI / 6, h: 1.0 },
-    { kind: "snake",   pos: [ widthM / 2 - 0.7, y, 0], rot: -Math.PI / 2, h: 1.3 },
-    { kind: "snake",   pos: [-widthM / 2 + 0.7, y, 0], rot:  Math.PI / 2, h: 1.3 },
+    { kind: "tree",    pos: [ widthM / 2 - inT, y,  depthM / 2 - inT], rot: -Math.PI / 4, h: 2.0 },
+    { kind: "tree",    pos: [-widthM / 2 + inT, y,  depthM / 2 - inT], rot:  Math.PI / 4, h: 2.0 },
+    { kind: "hexapot", pos: [ widthM / 2 - inS, y, -depthM / 2 + inS], rot: -Math.PI / 6, h: 1.0 },
+    { kind: "tarro",   pos: [-widthM / 2 + inS, y, -depthM / 2 + inS], rot:  Math.PI / 6, h: 1.0 },
+    { kind: "snake",   pos: [ widthM / 2 - inS, y, 0], rot: -Math.PI / 2, h: 1.3 },
+    { kind: "snake",   pos: [-widthM / 2 + inS, y, 0], rot:  Math.PI / 2, h: 1.3 },
   ];
-  return candidates.slice(0, Math.min(count, candidates.length));
+  const picked = candidates.slice(0, Math.min(count, candidates.length));
+  // Dev-only audit — log any candidate that still overhangs a wall.
+  for (const s of picked) {
+    auditPropOnFloor({
+      label: `plant.${s.kind}`,
+      x: s.pos[0], z: s.pos[2],
+      r: PROP_RADIUS_M[s.kind] ?? 0.45,
+      widthM, depthM,
+    });
+  }
+  return picked;
 }
