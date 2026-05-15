@@ -476,17 +476,12 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
   ],
   "brand.rolex": [
     { file: "rolex_datejust.glb", heightM: 0.34, plinth: true },
-    {
-      file: "invicta_watch.glb",
-      // Presentation watch tipped onto its side and hung against the back-
-      // right wall like a regular clock. heightM = dial diameter after the
-      // rotation. Keep it at clock-on-the-wall scale (≈0.55m) so it reads
-      // as a wall fixture, not as a billboard.
-      heightM: 0.55,
-      pos: [3.6, 1.85, -3.85],
-      rotationY: Math.PI,
-      rotationX: -Math.PI / 2,
-    },
+    // Invicta GLB is modelled as a long flat bracelet strip (~16cm tall in
+    // bind pose), not a circular face — any rotation we baked into it
+    // produced a confusing 2m-wide thin slab. Reverted to a standard plinth
+    // display at watch scale; the user can now tune position / scale /
+    // rotation per-prop via the Room features → Hero props panel below.
+    { file: "invicta_watch.glb", heightM: 0.34, plinth: true },
   ],
   "brand.tesla": [{ file: "tesla_2018_model_3.glb", heightM: 1.40 }],
   "brand.louisvuitton": [

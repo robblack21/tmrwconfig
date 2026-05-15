@@ -422,6 +422,33 @@ export const useConfig = create<ConfigState>((set, get) => ({
         set({ videoMatrixCells: cells });
         break;
       }
+      case "kit.setPropField": {
+        // Live-edit a single field on a hero prop. Stored on the kit so it
+        // persists across re-applies; bump kitRev so subscribers re-read.
+        const kit = findKitById(intent.kitId);
+        if (!kit?.scene?.props) break;
+        const prop = kit.scene.props[intent.propIndex] as Record<string, unknown> | undefined;
+        if (!prop) break;
+        switch (intent.field) {
+          case "heightM":         prop.heightM = clamp(intent.value, 0.02, 4); break;
+          case "plinthHeightM":   prop.plinthHeightM = clamp(intent.value, 0, 2); break;
+          case "x":
+          case "y":
+          case "z": {
+            const pos = (prop.position as [number, number, number] | undefined) ?? [0, 0, 0];
+            const idx = intent.field === "x" ? 0 : intent.field === "y" ? 1 : 2;
+            const next: [number, number, number] = [pos[0], pos[1], pos[2]];
+            next[idx] = clamp(intent.value, -25, 25);
+            prop.position = next;
+            break;
+          }
+          case "rotationX": prop.rotationX = intent.value; break;
+          case "rotationY": prop.rotationY = intent.value; break;
+          case "rotationZ": prop.rotationZ = intent.value; break;
+        }
+        set({ kitRev: (get().kitRev ?? 0) + 1 });
+        break;
+      }
       case "brandKit.apply": {
         const kit = findKitById(intent.kitId);
         if (!kit) break;

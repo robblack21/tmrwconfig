@@ -63,6 +63,8 @@ export const Intent = z.discriminatedUnion("type", [
 
   z.object({ type: z.literal("brandKit.apply"), kitId: z.string() }),
   z.object({ type: z.literal("brandKit.toggleMaximiseReuse"), value: z.boolean() }),
+  /** Per-hero-prop tweaks. propIndex selects within kit.scene.props. */
+  z.object({ type: z.literal("kit.setPropField"), kitId: z.string(), propIndex: z.number().int(), field: z.enum(["heightM", "x", "y", "z", "rotationX", "rotationY", "rotationZ", "plinthHeightM"]), value: z.number() }),
 
   z.object({ type: z.literal("camera.gotoShot"), shotId: z.string() }),
   z.object({ type: z.literal("scene.setMode"), hall: z.enum(["gallery.light", "warehouse.dark"]) }),

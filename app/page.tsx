@@ -85,6 +85,8 @@ export default function Page() {
     return (
       <main className="relative h-screen w-screen overflow-hidden bg-[color:var(--color-bg)]">
         <HomeView
+          chromeTheme={chromeTheme}
+          onToggleChrome={() => setChromeTheme(chromeTheme === "day" ? "night" : "day")}
           onChoose={(kitId) => {
             apply({ type: "brandKit.apply", kitId });
             setView("config");
@@ -643,16 +645,17 @@ export default function Page() {
           )}
         </Section>
 
-        <Section label="Custom props" defaultOpen={false}>
+        <Section label="Hero props" defaultOpen={false}>
           {Array.isArray(kit.scene?.props) && kit.scene.props.length > 0 ? (
-            <div className="flex flex-col gap-0.5">
-              {(kit.scene.props as Array<{ kind?: string; url?: string }>).map((p, i) => (
-                <div key={i} className="t-label flex items-center justify-between gap-2">
-                  <span className="truncate" title={p.url ? prettyAssetName(p.url) : p.kind}>
-                    {p.url ? prettyAssetName(p.url) : (p.kind ?? "—")}
-                  </span>
-                  <span className="text-[0.55rem] opacity-50 flex-shrink-0">#{i + 1}</span>
-                </div>
+            <div className="flex flex-col gap-2">
+              {(kit.scene.props as Array<{ kind?: string; url?: string; position?: [number, number, number]; rotationX?: number; rotationY?: number; rotationZ?: number; heightM?: number; plinthHeightM?: number }>).map((p, i) => (
+                <HeroPropEditor
+                  key={i}
+                  prop={p}
+                  index={i}
+                  kitId={kit.id}
+                  onField={(field, value) => apply({ type: "kit.setPropField", kitId: kit.id, propIndex: i, field, value })}
+                />
               ))}
             </div>
           ) : (
@@ -824,6 +827,49 @@ function TopBtn({ children, active, onClick }: { children: React.ReactNode; acti
     >
       {children}
     </button>
+  );
+}
+
+// ── Per-prop editor for kit hero assets ────────────────────────────────────
+// Compact accordion: header shows the asset filename + a chevron to expand
+// the sliders. Edits flow through the kit.setPropField intent so the kit's
+// scene.props gets mutated in-place.
+function HeroPropEditor({
+  prop, index, kitId, onField,
+}: {
+  prop: { kind?: string; url?: string; position?: [number, number, number]; rotationX?: number; rotationY?: number; rotationZ?: number; heightM?: number; plinthHeightM?: number };
+  index: number;
+  kitId: string;
+  onField: (field: "heightM" | "x" | "y" | "z" | "rotationX" | "rotationY" | "rotationZ" | "plinthHeightM", value: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const pos = prop.position ?? [0, 0, 0];
+  const name = prop.url ? prettyAssetName(prop.url) : (prop.kind ?? "—");
+  void kitId;
+  return (
+    <div className="rounded-[8px] neumorph-inset px-2 py-1.5">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full t-label flex items-center justify-between gap-2"
+      >
+        <span className="truncate text-left">{name}</span>
+        <span className="text-[0.55rem] opacity-50 flex-shrink-0">{open ? "▾" : "▸"} #{index + 1}</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-1 mt-1.5 pt-1.5 border-t border-[color:var(--color-border-soft)]">
+          <Slider label="Height" value={prop.heightM ?? 0.4} onChange={(v) => onField("heightM", v)} min={0.05} max={3} step={0.01} unit="m" />
+          {prop.plinthHeightM != null && (
+            <Slider label="Plinth" value={prop.plinthHeightM} onChange={(v) => onField("plinthHeightM", v)} min={0} max={1.5} step={0.01} unit="m" />
+          )}
+          <Slider label="X" value={pos[0]} onChange={(v) => onField("x", v)} min={-10} max={10} step={0.05} unit="m" />
+          <Slider label="Y" value={pos[1]} onChange={(v) => onField("y", v)} min={-2} max={5} step={0.05} unit="m" />
+          <Slider label="Z" value={pos[2]} onChange={(v) => onField("z", v)} min={-10} max={10} step={0.05} unit="m" />
+          <Slider label="Rot Y" value={prop.rotationY ?? 0} onChange={(v) => onField("rotationY", v)} min={-Math.PI} max={Math.PI} step={0.05} />
+          <Slider label="Rot X" value={prop.rotationX ?? 0} onChange={(v) => onField("rotationX", v)} min={-Math.PI} max={Math.PI} step={0.05} />
+          <Slider label="Rot Z" value={prop.rotationZ ?? 0} onChange={(v) => onField("rotationZ", v)} min={-Math.PI} max={Math.PI} step={0.05} />
+        </div>
+      )}
+    </div>
   );
 }
 
