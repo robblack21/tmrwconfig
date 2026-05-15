@@ -118,6 +118,45 @@ function bounds(shape: FootprintShape, tier: SizeTier) {
   return standardSizeTiers[shape][tier];
 }
 
+/** Minimum interior room dimensions to seat chairs around a table of the
+ *  given length × width with a comfortable aisle on all sides.
+ *  Chair gap (0.42m) + chair depth (~0.55m) + aisle (1.0m) ≈ 2m per side
+ *  → 4m total buffer beyond the table itself. */
+function minRoomForTable(tableLengthM: number, tableWidthM: number): { widthM: number; depthM: number } {
+  const BUFFER = 4.0;
+  return { widthM: tableWidthM + BUFFER, depthM: tableLengthM + BUFFER };
+}
+
+/** Bump tier / width / depth so the room can accommodate a table of the
+ *  given footprint. The room only ever grows — never shrinks — so existing
+ *  larger rooms keep their dimensions. Returns the patch to merge. */
+function fitRoomForTable(
+  shape: FootprintShape,
+  currentTier: SizeTier,
+  currentWidth: number,
+  currentDepth: number,
+  tableLengthM: number,
+  tableWidthM: number,
+): { tier: SizeTier; widthM: number; depthM: number } {
+  const need = minRoomForTable(tableLengthM, tableWidthM);
+  const tierOrder: SizeTier[] = ["S", "M", "L"];
+  let tier = currentTier;
+  // Step the tier up until its max bounds can host the requested room.
+  while (true) {
+    const b = bounds(shape, tier);
+    if (need.widthM <= b.widthM.max && need.depthM <= b.depthM.max) break;
+    const idx = tierOrder.indexOf(tier);
+    if (idx >= tierOrder.length - 1) break;
+    tier = tierOrder[idx + 1]!;
+  }
+  const b = bounds(shape, tier);
+  return {
+    tier,
+    widthM: Math.min(b.widthM.max, Math.max(currentWidth, need.widthM)),
+    depthM: Math.min(b.depthM.max, Math.max(currentDepth, need.depthM)),
+  };
+}
+
 const defaultShape: FootprintShape = "rectangle";
 const defaultTier: SizeTier = "M";
 const defaultBounds = bounds(defaultShape, defaultTier);
@@ -293,8 +332,19 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
       case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
       case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
-      case "boardroom.setTableLength":   { set({ tableLengthM: clamp(intent.value, 2.0, 8.0) }); break; }
-      case "boardroom.setTableWidth":    { set({ tableWidthM: clamp(intent.value, 1.0, 3.0) }); break; }
+      case "boardroom.setTableLength": {
+        const next = clamp(intent.value, 2.0, 8.0);
+        // Grow the room (and tier if needed) so the table + chairs always fit.
+        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM);
+        set({ tableLengthM: next, ...fit });
+        break;
+      }
+      case "boardroom.setTableWidth": {
+        const next = clamp(intent.value, 1.0, 3.0);
+        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, s.tableLengthM, next);
+        set({ tableWidthM: next, ...fit });
+        break;
+      }
       case "boardroom.setChairCount":    { set({ chairCount: Math.round(clamp(intent.value, 0, 16)) }); break; }
       case "boardroom.setTableVariant":  { set({ tableVariant: intent.value }); break; }
       case "boardroom.setChairVariant":  { set({ chairVariant: intent.value }); break; }
