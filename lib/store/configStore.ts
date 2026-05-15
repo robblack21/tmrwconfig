@@ -241,8 +241,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
   videoMuted: true,
   logoOverrides: {},
   plantCount: 3,
-  logoGlow: 1.0,
-  logoExtrusionM: 0.3,
+  logoGlow: 2.1,
+  logoExtrusionM: 0.5,
   logoEmissive: 1.2,
   sofaCount: 0,
   coffeeTableVariant: "avarta",
@@ -590,11 +590,11 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "scene.setLogoGlow": {
-        set({ logoGlow: clamp(intent.value, 0, 2.0) });
+        set({ logoGlow: clamp(intent.value, 0, 4.0) });
         break;
       }
       case "scene.setLogoExtrusion": {
-        set({ logoExtrusionM: clamp(intent.value, 0, 0.5) });
+        set({ logoExtrusionM: clamp(intent.value, 0, 1.0) });
         break;
       }
       case "scene.setLogoEmissive": {

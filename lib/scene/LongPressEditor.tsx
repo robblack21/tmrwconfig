@@ -11,8 +11,8 @@ import { useConfig, useBrandKit } from "@/lib/store/configStore";
 // colour swatch + (for textured surfaces) a motif / style picker. Closes on
 // Escape or click-outside.
 
-const LONG_PRESS_MS = 400;
-const DRAG_THRESHOLD_PX = 6;
+const LONG_PRESS_MS = 350;
+const DRAG_THRESHOLD_PX = 10;
 
 type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss";
 
@@ -89,17 +89,48 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
       cancelTimer();
     };
 
-    canvas.addEventListener("pointerdown", onDown);
-    canvas.addEventListener("pointermove", onMove);
-    canvas.addEventListener("pointerup", onUp);
-    canvas.addEventListener("pointercancel", onUp);
-    canvas.addEventListener("pointerleave", onUp);
+    // Shift+Click — explicit alternative to long-press. Fires immediately
+    // on pointerdown when Shift is held, so users have a guaranteed shortcut
+    // even if their finger / trackpad makes the long-press timer flaky.
+    const onShiftClick = (e: PointerEvent) => {
+      if (!e.shiftKey || e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+      const hits = raycaster.intersectObjects(scene.children, true);
+      for (const h of hits) {
+        let o: THREE.Object3D | null = h.object;
+        while (o) {
+          const kind = (o.userData as { kind?: string } | undefined)?.kind;
+          if (kind && kind in KIND_LABEL) {
+            onOpen(kind as SurfaceKind, e.clientX, e.clientY);
+            return;
+          }
+          o = o.parent;
+        }
+      }
+    };
+
+    // Use capture phase so we fire BEFORE OrbitControls' own listeners and
+    // before any stopPropagation it might do.
+    const opts = { capture: true } as AddEventListenerOptions;
+    canvas.addEventListener("pointerdown", onDown, opts);
+    canvas.addEventListener("pointermove", onMove, opts);
+    canvas.addEventListener("pointerup", onUp, opts);
+    canvas.addEventListener("pointercancel", onUp, opts);
+    // Note: NO pointerleave listener — the cursor briefly leaving the canvas
+    // during a slow long-press shouldn't cancel the gesture.
+    canvas.addEventListener("pointerdown", onShiftClick, opts);
     return () => {
-      canvas.removeEventListener("pointerdown", onDown);
-      canvas.removeEventListener("pointermove", onMove);
-      canvas.removeEventListener("pointerup", onUp);
-      canvas.removeEventListener("pointercancel", onUp);
-      canvas.removeEventListener("pointerleave", onUp);
+      canvas.removeEventListener("pointerdown", onDown, opts);
+      canvas.removeEventListener("pointermove", onMove, opts);
+      canvas.removeEventListener("pointerup", onUp, opts);
+      canvas.removeEventListener("pointercancel", onUp, opts);
+      canvas.removeEventListener("pointerdown", onShiftClick, opts);
       cancelTimer();
     };
   }, [camera, scene, gl, onOpen]);

@@ -144,29 +144,46 @@ function ChairBackLogoDecal({ kit, backZ }: { kit: BrandKit; backZ: number }) {
   const chroma = kit.scene?.logoChroma ?? "";
   const tex = useLogoTexture(url, invert, chroma);
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
-  const w = 0.12;
-  const h = w / aspect;
+  // Doubled from 0.12m → 0.24m per user feedback (the back-of-chair mark
+  // wasn't reading at conference-room distance). Cap height at 0.2m so
+  // tall-narrow logos don't blow past the backrest.
+  const w = 0.24;
+  const h = Math.min(w / aspect, 0.2);
   // backZ is the chair-local Z of the backrest. For chairs whose model faces
   // -Z (offset = π), backZ is +0.32; for chairs that face +Z (offset = 0),
   // backZ is -0.32 — and we flip the plane 180° around Y so its normal points
   // outward.
   const rotY = backZ > 0 ? 0 : Math.PI;
+  // Slight inset for the front-facing decal so it sits ON the backrest's
+  // inner face (≈8cm forward of the back), not at the very same z as the
+  // outward one.
+  const frontZ = backZ > 0 ? backZ - 0.08 : backZ + 0.08;
+  const matProps = {
+    map: tex,
+    emissiveMap: tex,
+    emissive: new THREE.Color("#ffffff"),
+    emissiveIntensity: 0.35,
+    color: "#ffffff",
+    transparent: true,
+    toneMapped: false,
+    depthWrite: false,
+    alphaTest: 0.04,
+    side: THREE.DoubleSide,
+  };
   return (
-    <mesh position={[0, 0.92, backZ]} rotation-y={rotY}>
-      <planeGeometry args={[w, Math.min(h, 0.1)]} />
-      <meshStandardMaterial
-        map={tex}
-        emissiveMap={tex}
-        emissive={new THREE.Color("#ffffff")}
-        emissiveIntensity={0.35}
-        color="#ffffff"
-        transparent
-        toneMapped={false}
-        depthWrite={false}
-        alphaTest={0.04}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <>
+      {/* Outward-facing decal — visible from outside the table circle. */}
+      <mesh position={[0, 0.92, backZ]} rotation-y={rotY}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+      {/* Inward-facing decal — on the FRONT of the backrest, visible to
+          anyone sitting OPPOSITE this chair across the table. */}
+      <mesh position={[0, 0.92, frontZ]} rotation-y={rotY + Math.PI}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial {...matProps} />
+      </mesh>
+    </>
   );
 }
 
@@ -256,7 +273,9 @@ export function ChairsAroundTable({
   const slots = useMemo(() => {
     const out: { pos: [number, number, number]; rot: number }[] = [];
     if (count <= 0) return out;
-    const gap = 0.42;                                  // chair offset from the table edge
+    // Tightened from 0.42m → 0.18m so the chairs read as a real boardroom
+    // gathering, not socially-distanced. Knees just clear of the table edge.
+    const gap = 0.18;                                  // chair offset from the table edge
     const sideX = tableWidthM / 2 + gap;
     const endZ = tableLengthM / 2 + gap;
     const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
@@ -289,10 +308,10 @@ export function ChairsAroundTable({
 
 const CUP_HEIGHT_M = 0.105;            // matches the GLB's normalised height
 const CUP_RADIUS_M = 0.04;             // for the logo decal placement
-// Tucked well inboard of the table edge — the cup is in front of the diner
-// like a place-setting, not perched on the lip. Increased from 0.32m so the
-// brand decal isn't fighting the edge highlight.
-const CUP_INSET_M = 0.48;
+// Tucked inboard of the table edge — cup is in front of the diner like a
+// place setting. With chairs pulled in tight (0.18m gap), 0.32m of cup
+// inset means the cup sits in the diner's natural reach zone.
+const CUP_INSET_M = 0.32;
 const CUP_GLB_URL = asset("/glb/props/coffeecup.glb");
 useGLTF.preload(CUP_GLB_URL);
 
@@ -338,17 +357,13 @@ function BrandedCoffeeCup({
   const chroma = kit.scene?.logoChroma ?? "";
   const tex = useLogoTexture(url ?? "", invert, chroma);
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
-  // Decal: keep small relative to the cup radius so a flat plane on the
-  // cylinder doesn't bow noticeably at the edges (chord-to-arc error).
-  const decalW = CUP_RADIUS_M * 0.85;
-  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.4);
   // Cup body: kit-specific cup colour wins; falls back to the kit's
   // neutralLight ceramic-cream.
   const cupColor = kit.scene?.cupColor ?? kit.palette.neutralLight ?? "#F4F4F4";
   // Real coffee-cup GLB (saucer + cup with handle). Tinted to the kit's
   // cupColor — the user shipped a clean GLB that takes a tint cleanly.
   const gltf = useGLTF(CUP_GLB_URL);
-  const node = useMemo(() => {
+  const { node, decalRadius } = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
     s.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -362,36 +377,46 @@ function BrandedCoffeeCup({
         }
       }
     });
-    return normalizeForBase(s, CUP_HEIGHT_M);
+    const normalised = normalizeForBase(s, CUP_HEIGHT_M);
+    // Measure the post-normalize bbox so we know the actual cup radius (the
+    // GLB ships with a handle that throws off the X/Z extents — using the
+    // SMALLER of the two halves keeps the decal on the cup body, not on
+    // the handle). +2mm beyond the surface so it doesn't z-fight.
+    normalised.updateMatrixWorld(true);
+    const bbox = new THREE.Box3().setFromObject(normalised);
+    const size = bbox.getSize(new THREE.Vector3());
+    const radius = Math.min(size.x, size.z) / 2 + 0.002;
+    return { node: normalised, decalRadius: radius };
   }, [gltf, cupColor]);
+  // Sized to the actual cup radius — decal width = ~1.5x radius (covers
+  // about a third of the circumference, readable from front).
+  const decalW = decalRadius * 1.5;
+  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.45);
   // Two decals — front and back — so the logo reads from any seat without
   // becoming a busy orbit of marks around the cup.
   const facings = [0, Math.PI];
   return (
     <group position={position} rotation-y={rotationY}>
       <primitive object={node} />
-      {url && facings.map((rotY, i) => {
-        const r = CUP_RADIUS_M * 0.92 + 0.0008;
-        return (
-          <group key={i} rotation-y={rotY}>
-            <mesh position={[0, CUP_HEIGHT_M * 0.55, r]}>
-              <planeGeometry args={[decalW, decalH]} />
-              <meshStandardMaterial
-                map={tex}
-                emissiveMap={tex}
-                emissive={new THREE.Color("#ffffff")}
-                emissiveIntensity={0.2}
-                color="#ffffff"
-                transparent
-                toneMapped={false}
-                depthWrite={false}
-                alphaTest={0.04}
-                side={THREE.DoubleSide}
-              />
-            </mesh>
-          </group>
-        );
-      })}
+      {url && facings.map((rotY, i) => (
+        <group key={i} rotation-y={rotY}>
+          <mesh position={[0, CUP_HEIGHT_M * 0.55, decalRadius]}>
+            <planeGeometry args={[decalW, decalH]} />
+            <meshStandardMaterial
+              map={tex}
+              emissiveMap={tex}
+              emissive={new THREE.Color("#ffffff")}
+              emissiveIntensity={0.35}
+              color="#ffffff"
+              transparent
+              toneMapped={false}
+              depthWrite={false}
+              alphaTest={0.04}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </group>
+      ))}
     </group>
   );
 }

@@ -1282,7 +1282,10 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
   const { map, normalMap, aoMap } = useWallTextures();
   // Smoother, more "printed satin laminate" feel — less plaster bumpiness,
   // slight clearcoat sheen so brand-coloured walls catch the HDR.
+  // Wrapped in a group with userData so the long-press editor's raycast walk
+  // finds the surface kind even if RoundedBox swallows the mesh-level prop.
   return (
+    <group userData={{ kind: "walls" }}>
     <RoundedBox position={pos} args={[w, h, d]} radius={0.014} smoothness={4} castShadow receiveShadow userData={{ kind: "walls" }}>
       <meshPhysicalMaterial
         color={color}
@@ -1299,6 +1302,7 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
         sheenRoughness={0.5}
       />
     </RoundedBox>
+    </group>
   );
 }
 

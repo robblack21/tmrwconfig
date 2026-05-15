@@ -460,7 +460,7 @@ export default function Page() {
 
         <Section label="Lighting">
           <Slider label="Key"      value={keyLightIntensity} onChange={(v) => apply({ type: "scene.setKeyIntensity", value: v })} min={0} max={2.5} step={0.01} />
-          <Slider label="Sconce"   value={logoGlow}          onChange={(v) => apply({ type: "scene.setLogoGlow",     value: v })} min={0} max={1.6} step={0.01} />
+          <Slider label="Sconce"   value={logoGlow}          onChange={(v) => apply({ type: "scene.setLogoGlow",     value: v })} min={0} max={4.0} step={0.05} />
           <Slider label="Exposure" value={exposure}          onChange={(v) => apply({ type: "scene.setExposure",     value: v })} min={-1.5} max={1.5} step={0.01} unit="ev" />
         </Section>
 
@@ -516,7 +516,7 @@ export default function Page() {
         </Section>
 
         <Section label="Logo sign" defaultOpen={false}>
-          <Slider label="Extrusion" value={logoExtrusionM} onChange={(v) => apply({ type: "scene.setLogoExtrusion", value: v })} min={0} max={0.5} step={0.01} unit="m" />
+          <Slider label="Extrusion" value={logoExtrusionM} onChange={(v) => apply({ type: "scene.setLogoExtrusion", value: v })} min={0} max={1.0} step={0.01} unit="m" />
           <Slider label="Glow"      value={logoEmissive}   onChange={(v) => apply({ type: "scene.setLogoEmissive", value: v })} min={0} max={3.5} step={0.1} />
         </Section>
 
