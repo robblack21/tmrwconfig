@@ -15,7 +15,7 @@ const PRESETS: { id: string; label: string }[] = [
   { id: "closeup", label: "Close-up" },
 ];
 
-export function CameraPanel() {
+export function CameraPanel({ collapsed = false }: { collapsed?: boolean } = {}) {
   const fov = useConfig((s) => s.cameraFov);
   const apply = useConfig((s) => s.apply);
   const active = useConfig((s) => s.cameraActivePreset);
@@ -46,7 +46,10 @@ export function CameraPanel() {
   };
 
   return (
-    <div className="ui-overlay absolute right-3 top-14 w-[240px]">
+    <div
+      className="ui-overlay absolute right-3 top-14 w-[240px] transition-transform"
+      style={{ transform: collapsed ? "translateX(calc(100% + 16px))" : "translateX(0)" }}
+    >
       <div className="panel-glass rounded-[12px] overflow-hidden">
         {/* Header — inline FOV slider replaces the static label */}
         <div className="px-3 h-9 flex items-center gap-2.5 border-b border-[color:var(--color-border-soft)]">

@@ -21,7 +21,7 @@ import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
 import type { BrandKit } from "@/lib/schemas";
 
-// Four exterior HDRIs — each ~25 MB at 4K. Picked to give the room a sense
+// Six exterior HDRIs — each ~25 MB at 4K. Picked to give the room a sense
 // of "where is this building?" so the Environment-mode skybox actually
 // reads as somewhere specific.
 export const HDRI_OPTIONS = [
@@ -29,6 +29,8 @@ export const HDRI_OPTIONS = [
   { id: "docklands_02_4k", label: "Docklands" },
   { id: "lake_pier_4k", label: "Lake pier" },
   { id: "schadowplatz_4k", label: "Schadowplatz" },
+  { id: "limpopo_golf_course_4k", label: "Limpopo golf" },
+  { id: "little_paris_eiffel_tower_4k", label: "Paris (Eiffel)" },
 ] as const;
 
 // hallMode now picks which HDRI is shown when no explicit `hdriId` is set.
@@ -174,8 +176,13 @@ export function Scene() {
         <Environment
           files={asset(`/hdri/${hdriIdOverride || HDRI_BY_MODE[hallMode]}.hdr`)}
           background
-          backgroundBlurriness={isDark ? 0.6 : 0.35}
-          backgroundIntensity={hdrBgIntensity * (isDark ? 0.6 : 1.4)}
+          // Environment mode (hall geometry hidden) shows the HDR sharply so
+          // the captured exterior actually reads as the surroundings. Inside
+          // the warehouse box we blur + dim so it doesn't compete with the
+          // hall geometry. backgroundBlurriness 0 in environment mode, 0.55
+          // in warehouse mode.
+          backgroundBlurriness={hallVisible ? (isDark ? 0.55 : 0.3) : 0.02}
+          backgroundIntensity={hdrBgIntensity * (hallVisible ? (isDark ? 0.6 : 1.4) : 1.2)}
           environmentIntensity={hdrIntensity * (isDark ? 1.2 : 1.4)}
         />
       </Suspense>
@@ -1043,20 +1050,25 @@ function WindowedWall({
       {actualHeaderH > 0.02 && (
         <WallPanelPlaster w={lengthM} h={actualHeaderH} d={thick} pos={[0, sillM + winH + actualHeaderH / 2, 0]} color={color} />
       )}
-      {/* Glazing — the transmission glass band */}
+      {/* Glazing — the transmission glass band. envMapIntensity is now low
+          (0.35) so the HDR-as-surroundings actually reads THROUGH the
+          glass instead of being drowned out by surface reflection at
+          grazing angles. ior dropped from 1.5 → 1.15 and thickness from
+          0.04 → 0.015 to soften the refraction so the exterior reads
+          undistorted from inside the room. */}
       <mesh position={[0, winY, 0]} castShadow={false} receiveShadow={false}>
         <boxGeometry args={[lengthM - 0.06, winH, glassT]} />
         <meshPhysicalMaterial
-          transmission={0.95}
-          roughness={0.05}
+          transmission={0.98}
+          roughness={0.02}
           metalness={0}
-          ior={1.5}
-          thickness={0.04}
+          ior={1.15}
+          thickness={0.015}
           transparent
           color="#ffffff"
-          envMapIntensity={1.4}
-          attenuationColor="#cdd8e0"
-          attenuationDistance={3}
+          envMapIntensity={0.35}
+          attenuationColor="#e0e6ec"
+          attenuationDistance={6}
         />
       </mesh>
       {/* Frame rails (top + bottom of the glazed band) */}
@@ -1135,16 +1147,16 @@ function AtriumGlassWall({
           <mesh position={[0, wallHeightM / 2, 0]} castShadow={false} receiveShadow={false}>
             <boxGeometry args={[halfW - 0.03, wallHeightM, glassT]} />
             <meshPhysicalMaterial
-              transmission={0.95}
-              roughness={0.04}
+              transmission={0.98}
+              roughness={0.02}
               metalness={0}
-              ior={1.5}
-              thickness={0.04}
+              ior={1.15}
+              thickness={0.015}
               transparent
               color="#ffffff"
-              envMapIntensity={1.4}
-              attenuationColor="#cdd8e0"
-              attenuationDistance={3}
+              envMapIntensity={0.35}
+              attenuationColor="#e0e6ec"
+              attenuationDistance={6}
             />
           </mesh>
           {/* Slim vertical jamb between glass and door opening. */}

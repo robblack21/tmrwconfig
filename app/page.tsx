@@ -61,7 +61,9 @@ export default function Page() {
     document.documentElement.style.setProperty("--color-accent", kit.palette.accent);
   }, [kit.palette.accent]);
 
-  const wallHeightMax = Math.min(4.5, trussTopM - 0.5);
+  // 2× the old 4.5m cap — big rooms (16m+ wide) need ceilings that scale
+  // with the floor plan or they read as cramped warehouses.
+  const wallHeightMax = Math.min(9.5, trussTopM - 0.5);
   const trussTopMin = Math.max(3.0, wallHeightM + 0.5);
 
   // Live inventory — a plain list of what's in the room, derived from config.
@@ -77,6 +79,7 @@ export default function Page() {
 
   const [bomExpanded, setBomExpanded] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
   // Resizable BOM dims (user can drag-resize from a handle when expanded)
   const [bomW, setBomW] = useState(420);
   const [bomH, setBomH] = useState(520);
@@ -253,6 +256,21 @@ export default function Page() {
           <path d="M6 2L3 5L6 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
         </motion.svg>
       </button>
+
+      {/* Matching right caret — slides ALL THREE right-side panels
+          (camera / room features / inventory) off-screen so the scene gets
+          the full canvas on the right too. */}
+      <button
+        onClick={() => setRightCollapsed((v) => !v)}
+        className="ui-overlay absolute top-14 z-50 w-7 h-7 rounded-[6px] neumorph-raised grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)] transition-all"
+        style={{ right: rightCollapsed ? "12px" : "252px" }}
+        title={rightCollapsed ? "Show right panels" : "Hide right panels"}
+        aria-label="Toggle right panels"
+      >
+        <motion.svg animate={{ rotate: rightCollapsed ? 0 : 180 }} width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M6 2L3 5L6 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </motion.svg>
+      </button>
       <Card
         className="ui-overlay absolute left-3 top-14 bottom-3 w-[260px] p-3 overflow-y-auto scroll-pretty transition-transform"
         radius="md"
@@ -332,7 +350,7 @@ export default function Page() {
           <Slider label="Width" value={widthM} onChange={(v) => apply({ type: "footprint.set", widthM: v, depthM })} min={tierBounds.widthM.min} max={tierBounds.widthM.max} step={0.5} unit="m" />
           <Slider label="Depth" value={depthM} onChange={(v) => apply({ type: "footprint.set", widthM, depthM: v })} min={tierBounds.depthM.min} max={tierBounds.depthM.max} step={0.5} unit="m" />
           <Slider label="Height" value={wallHeightM} onChange={(v) => apply({ type: "layout.setWallHeight", value: v })} min={2.25} max={wallHeightMax} step={0.25} ticks={[2.5, 3, 3.5, 4]} unit="m" />
-          <Slider label="Truss" value={trussTopM} onChange={(v) => apply({ type: "layout.setTrussTop", value: v })} min={trussTopMin} max={6.5} step={0.25} ticks={[3.5, 4.5, 5.5]} unit="m" />
+          <Slider label="Truss" value={trussTopM} onChange={(v) => apply({ type: "layout.setTrussTop", value: v })} min={trussTopMin} max={12} step={0.25} ticks={[4, 6, 8, 10]} unit="m" />
           <Slider label="Floor"  value={platformHeightM} onChange={(v) => apply({ type: "layout.setPlatformHeight", value: v })} min={0.10} max={0.30} step={0.01} unit="m" />
         </Section>
 
@@ -537,7 +555,7 @@ export default function Page() {
       </Card>
 
       {/* Camera panel — right side aligned with footprint dock */}
-      <CameraPanel />
+      <CameraPanel collapsed={rightCollapsed} />
 
       {/* Room features dock — between Camera (top) and BOM (bottom). Holds
           the **kit-unique** features of the room: video URL, wall graphic,
@@ -547,10 +565,10 @@ export default function Page() {
           Sections expand inline; the card scrolls internally when content
           overflows. Opaque surface so expanded sections stay legible. */}
       <Card
-        className="ui-overlay absolute right-3 top-[210px] bottom-[207px] w-[240px] p-3 overflow-y-auto scroll-pretty"
+        className="ui-overlay absolute right-3 top-[210px] bottom-[207px] w-[240px] p-3 overflow-y-auto scroll-pretty transition-transform"
         radius="md"
         variant="raised"
-        style={{ background: "var(--color-surface)" }}
+        style={{ background: "var(--color-surface)", transform: rightCollapsed ? "translateX(calc(100% + 16px))" : "translateX(0)" }}
       >
         <div className="t-label uppercase tracking-wider pb-2 mb-2 border-b border-[color:var(--color-border-soft)] flex items-center justify-between">
           <span>Room features</span>
@@ -670,12 +688,15 @@ export default function Page() {
       {/* Inventory panel — bottom right. A plain list of what's in the room
           plus each item's addressable subnodes. No costs. */}
       <Card
-        className="ui-overlay absolute right-3 bottom-3 flex flex-col panel-glass"
+        className="ui-overlay absolute right-3 bottom-3 flex flex-col panel-glass transition-transform"
         radius="md"
         variant="panel"
-        style={bomExpanded
-          ? { width: "min(420px, calc(100vw - 24px))", height: "calc(100vh - 80px)" }
-          : { width: "240px", height: "188px" }}
+        style={{
+          ...(bomExpanded
+            ? { width: "min(420px, calc(100vw - 24px))", height: "calc(100vh - 80px)" }
+            : { width: "240px", height: "188px" }),
+          transform: rightCollapsed ? "translateX(calc(100% + 16px))" : "translateX(0)",
+        }}
       >
         <div className="px-3 pt-2.5 pb-1.5 flex items-center justify-between border-b border-[color:var(--color-border-soft)]">
           <span className="t-label">Inventory</span>

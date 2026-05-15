@@ -28,6 +28,14 @@ export default function CanvasShell() {
           outputColorSpace: THREE.SRGBColorSpace,
           powerPreference: "high-performance",
         }}
+        onCreated={(state) => {
+          // Improve transmission-material quality so the windowed glass
+          // actually transmits the HDR exterior cleanly. Default is 0.5
+          // which over-blurs the through-glass view.
+          if ("transmissionResolutionScale" in state.gl) {
+            (state.gl as unknown as { transmissionResolutionScale: number }).transmissionResolutionScale = 1.0;
+          }
+        }}
         camera={{ position: [10.5, 4.2, 13.5], fov: 30, near: 0.1, far: 200 }}
         style={{ width: "100%", height: "100%" }}
       >

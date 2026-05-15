@@ -290,15 +290,18 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "layout.setWallHeight": {
-        set({ wallHeightM: clamp(intent.value, 2.0, 5.0) });
+        // Max bumped from 5m → 10m so larger rooms read proportionate
+        // — big rooms felt cramped under a 5m ceiling at 16m+ width.
+        set({ wallHeightM: clamp(intent.value, 2.0, 10.0) });
         // Keep truss above walls automatically.
         const t = get().trussTopM;
-        if (t < intent.value + 0.5) set({ trussTopM: clamp(intent.value + 1.5, 2.5, 7.0) });
+        if (t < intent.value + 0.5) set({ trussTopM: clamp(intent.value + 1.5, 2.5, 12.0) });
         break;
       }
       case "layout.setTrussTop": {
+        // Truss cap raised to 12m to follow the doubled wallHeight ceiling.
         const w = get().wallHeightM;
-        set({ trussTopM: clamp(Math.max(intent.value, w + 0.5), 2.5, 7.0) });
+        set({ trussTopM: clamp(Math.max(intent.value, w + 0.5), 2.5, 12.0) });
         break;
       }
       case "pendant.setShape": {
