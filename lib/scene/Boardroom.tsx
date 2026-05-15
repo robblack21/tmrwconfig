@@ -313,12 +313,15 @@ function BrandedCoffeeCup({
   const chroma = kit.scene?.logoChroma ?? "";
   const tex = useLogoTexture(url ?? "", invert, chroma);
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
-  // Logo decal sits at mid-cup height, wraps the front-facing quadrant.
-  const decalH = CUP_HEIGHT_M * 0.45;
-  const decalW = Math.min(decalH * aspect, CUP_RADIUS_M * 1.6);
+  // Decal: keep small relative to the cup radius so a flat plane on a 4cm
+  // cylinder doesn't bow noticeably at the edges (chord-to-arc error).
+  // Cap decalW at 90% of the cup radius (≈37mm); height follows aspect.
+  const decalW = CUP_RADIUS_M * 0.9;
+  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.45);
   const cupColor = kit.palette.neutralLight ?? "#F4F4F4";
-  // Four decals, one each 90° apart, so the logo reads from any chair.
-  const facings = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+  // Two decals — front and back — so the logo reads from any seat without
+  // becoming a busy orbit of marks around the cup.
+  const facings = [0, Math.PI];
   return (
     <group position={position} rotation-y={rotationY}>
       {/* Saucer — a thin disc under the cup */}
@@ -336,10 +339,11 @@ function BrandedCoffeeCup({
         <cylinderGeometry args={[CUP_RADIUS_M * 0.92, CUP_RADIUS_M * 0.92, 0.002, 28]} />
         <meshStandardMaterial color="#2a1808" roughness={0.4} />
       </mesh>
-      {/* Logo decals — four around the cup body, slightly inset from the
-          cylinder surface so they don't z-fight. */}
+      {/* Logo decals — two, front and back. The plane is held just barely
+          off the cup surface (0.2mm) so it doesn't z-fight but also doesn't
+          read as floating proud. */}
       {url && facings.map((rotY, i) => {
-        const r = CUP_RADIUS_M * 0.92 + 0.0008;
+        const r = CUP_RADIUS_M * 0.93 + 0.0002;
         return (
           <group key={i} rotation-y={rotY}>
             <mesh position={[0, CUP_HEIGHT_M / 2 + 0.012, r]}>
@@ -348,7 +352,7 @@ function BrandedCoffeeCup({
                 map={tex}
                 emissiveMap={tex}
                 emissive={new THREE.Color("#ffffff")}
-                emissiveIntensity={0.25}
+                emissiveIntensity={0.2}
                 color="#ffffff"
                 transparent
                 toneMapped={false}

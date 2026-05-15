@@ -767,6 +767,45 @@ function Room({
         );
       })}
 
+      {/* Circular rooms: the wall is a ribbon-glass cylinder so per-segment
+          flank logos don't fit (each 32-segment chord is ~1.2m). Render four
+          large brand signs at the inter-cardinal points instead, tangent to
+          the exterior, avoiding the door (+Z) and back (-Z) axes. */}
+      {shape === "circular" && logo && (() => {
+        const r = Math.min(widthM, depthM) / 2;
+        const angles = [Math.PI / 4, 3 * Math.PI / 4, 5 * Math.PI / 4, 7 * Math.PI / 4];
+        const signWidthM = Math.min(r * 0.5, 1.6);
+        const signHeightM = wallHeightM;
+        return angles.map((ang, i) => {
+          const x = Math.cos(ang) * r;
+          const z = Math.sin(ang) * r;
+          // Local +Z should point outward (radially away from centre).
+          const rotY = Math.PI / 2 - ang;
+          return (
+            <group key={`circ-logo-${i}`} position={[x, platformTop, z]} rotation-y={rotY}>
+              <Suspense fallback={null}>
+                <LogoSign
+                  url={logo.url}
+                  viewBox={logo.viewBox}
+                  widthM={signWidthM}
+                  heightM={signHeightM}
+                  anchorZ={0}
+                  faceDir={1}
+                  xOffset={0}
+                  y={wallHeightM * 0.55}
+                  extrusionM={logo.extrusionM}
+                  sideTint={logo.sideTint}
+                  emissive={logo.emissive * 2.4}
+                  invert={logo.invert}
+                  chroma={logo.chroma}
+                  maxWidthM={signWidthM}
+                />
+              </Suspense>
+            </group>
+          );
+        });
+      })()}
+
       {/* Pavilion — a full-height GLASS atrium box in the centre with sliding
           glass doors on each side. Reads as an internal courtyard you can
           walk into through any face. */}
@@ -1326,6 +1365,22 @@ function LogoSignFlank({
           alphaTest={0.02}
         />
       </mesh>
+      {/* Mirrored back-face decal so the brand reads through the glass
+          when looking out from inside the room. */}
+      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
+        <planeGeometry args={[finalWidthM, targetHeightM]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={emissive * 0.85}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
+        />
+      </mesh>
     </group>
   );
 }
@@ -1377,7 +1432,8 @@ function LogoSign({
         <boxGeometry args={[finalWidthM, targetHeightM, d]} />
         <meshPhysicalMaterial color={sideTint} roughness={0.5} metalness={0.05} clearcoat={0.25} clearcoatRoughness={0.3} />
       </mesh>
-      {/* Logo decal — emissive so the sign self-illuminates like real backlit signage. */}
+      {/* Logo decal on the OUTWARD face (the face the sign is mounted to
+          face). Self-illuminates like real backlit signage. */}
       <mesh position={[0, 0, d / 2 + 0.0008]}>
         <planeGeometry args={[finalWidthM, targetHeightM]} />
         <meshStandardMaterial
@@ -1385,6 +1441,23 @@ function LogoSign({
           emissiveMap={tex}
           emissive={new THREE.Color("#ffffff")}
           emissiveIntensity={emissive}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
+        />
+      </mesh>
+      {/* Second logo decal on the INWARD face of the backing box so the
+          mark is also visible through the window glass from inside the
+          room. Mirrored along X so the text reads correctly from inside. */}
+      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
+        <planeGeometry args={[finalWidthM, targetHeightM]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={emissive * 0.85}
           color="#ffffff"
           transparent
           toneMapped={false}
