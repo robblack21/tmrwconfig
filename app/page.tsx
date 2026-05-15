@@ -257,13 +257,16 @@ export default function Page() {
         </motion.svg>
       </button>
 
-      {/* Matching right caret — slides ALL THREE right-side panels
-          (camera / room features / inventory) off-screen so the scene gets
-          the full canvas on the right too. */}
+      {/* Matching right caret — mirrors the left one's spacing exactly.
+          Left panel: w=260, left=3, right edge at 263 → caret at left=262
+          (1px inside panel right edge, hangs 6px past it). Right panels:
+          w=240, right=3, left edge at screen_right-243 → caret at
+          right=242 (1px inside panel left edge, hangs 6px past it). One
+          click slides ALL THREE right panels off-screen. */}
       <button
         onClick={() => setRightCollapsed((v) => !v)}
         className="ui-overlay absolute top-14 z-50 w-7 h-7 rounded-[6px] neumorph-raised grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)] transition-all"
-        style={{ right: rightCollapsed ? "12px" : "252px" }}
+        style={{ right: rightCollapsed ? "12px" : "242px" }}
         title={rightCollapsed ? "Show right panels" : "Hide right panels"}
         aria-label="Toggle right panels"
       >
