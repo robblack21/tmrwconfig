@@ -131,8 +131,13 @@ function ChairBackLogoDecal({ kit }: { kit: BrandKit }) {
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
   const w = 0.12;
   const h = w / aspect;
+  // The chair GLB's bind pose faces -Z, so the BACKREST is at +Z in chair-
+  // local. Place the decal at +z behind the backrest and let the plane's
+  // default normal (+Z) face outward — no rotation needed. This was previously
+  // wired with -z + rotation-y=π, which positioned the logo in FRONT of the
+  // chair (facing the table) instead.
   return (
-    <mesh position={[0, 0.92, -0.305]} rotation-y={Math.PI}>
+    <mesh position={[0, 0.92, 0.32]}>
       <planeGeometry args={[w, Math.min(h, 0.1)]} />
       <meshStandardMaterial
         map={tex}
@@ -269,7 +274,10 @@ export function ChairsAroundTable({
 
 const CUP_HEIGHT_M = 0.095;
 const CUP_RADIUS_M = 0.042;
-const CUP_INSET_M = 0.32;     // how far in from the table edge the cup sits
+// Tucked well inboard of the table edge — the cup is in front of the diner
+// like a place-setting, not perched on the lip. Increased from 0.32m so the
+// brand decal isn't fighting the edge highlight.
+const CUP_INSET_M = 0.48;
 
 export function BrandedCupsOnTable({
   count, tableLengthM, tableWidthM, position, kit,

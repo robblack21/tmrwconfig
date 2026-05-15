@@ -62,7 +62,7 @@ const apple: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "u3SIKAmPXY4", wallColor: "#F5F5F7", floorColor: "#E8E8EA" },
+  scene: { youtubeId: "u3SIKAmPXY4", wallColor: "#F5F5F7", floorColor: "#E8E8EA", wallMotif: "grid" },
 };
 
 // ── BMW ──────────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ const bmw: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L", floorColor: "#9DB2C6" },
+  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L", floorColor: "#9DB2C6", wallMotif: "stripes.vertical" },
 };
 
 // ── Disney ───────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ const disney: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "b-DUYQg_-AQ", floorColor: "#9FA8D4" },
+  scene: { youtubeId: "b-DUYQg_-AQ", floorColor: "#9FA8D4", wallMotif: "stars" },
 };
 
 // ── Ferrari ──────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ const ferrari: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L", floorColor: "#C4B0AA" },
+  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L", floorColor: "#C4B0AA", wallMotif: "stripes.diagonal" },
 };
 
 // ── Google ───────────────────────────────────────────────────────────────────
@@ -143,7 +143,7 @@ const google: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "4JVtVgl8oEs", wallColor: "#F1F3F4" },
+  scene: { youtubeId: "4JVtVgl8oEs", wallColor: "#F1F3F4", wallMotif: "dots" },
 };
 
 // ── Louis Vuitton ────────────────────────────────────────────────────────────
@@ -162,7 +162,7 @@ const louisvuitton: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "zCLDyNVBjRE", wallColor: "#2A1D14", floorColor: "#3D2B1F" },
+  scene: { youtubeId: "zCLDyNVBjRE", wallColor: "#2A1D14", floorColor: "#3D2B1F", wallMotif: "monogram" },
 };
 
 // ── Mercedes-Benz ────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ const mercedes: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L", floorColor: "#C2C7CC" },
+  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L", floorColor: "#C2C7CC", wallMotif: "stars" },
 };
 
 // ── Samsung ──────────────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ const samsung: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "2gYqEi8-am4", floorColor: "#A4ACCB" },
+  scene: { youtubeId: "2gYqEi8-am4", floorColor: "#A4ACCB", wallMotif: "hex" },
 };
 
 // ── Netflix ──────────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ const netflix: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralDark"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "PssKpzB0Ah0", wallColor: "#141414", floorColor: "#1C1C1C" },
+  scene: { youtubeId: "PssKpzB0Ah0", wallColor: "#141414", floorColor: "#1C1C1C", wallMotif: "stripes.vertical" },
 };
 
 // ── Nike ─────────────────────────────────────────────────────────────────────
@@ -247,7 +247,7 @@ const nike: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "_ZxqcqMB0ew", wallColor: "#161616", floorColor: "#1F1F1F" },
+  scene: { youtubeId: "_ZxqcqMB0ew", wallColor: "#161616", floorColor: "#1F1F1F", wallMotif: "swoosh" },
 };
 
 // ── Nvidia ───────────────────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ const nvidia: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "hexagon", alternates: ["hexagon", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900", floorColor: "#B4C29C" },
+  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900", floorColor: "#B4C29C", wallMotif: "circuit" },
 };
 
 // ── Rolex ────────────────────────────────────────────────────────────────────
@@ -291,7 +291,7 @@ const rolex: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26", floorColor: "#A6BCAD" },
+  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26", floorColor: "#A6BCAD", wallMotif: "crown" },
 };
 
 // ── Tesla ────────────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ const tesla: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "Txt3Wodav1o", wallColor: "#F4F4F4", floorColor: "#E4E4E4", defaultTier: "L" },
+  scene: { youtubeId: "Txt3Wodav1o", wallColor: "#F4F4F4", floorColor: "#E4E4E4", defaultTier: "L", wallMotif: "stripes.horizontal" },
 };
 
 // ── The TMRW Foundation ──────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ const tmrw: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "hexagon", alternates: ["hexagon", "ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "8yKBpthWRI4", wallColor: "#141414", floorColor: "#1C1C1C", logoChroma: "white", invertLogo: true },
+  scene: { youtubeId: "8yKBpthWRI4", wallColor: "#141414", floorColor: "#1C1C1C", logoChroma: "white", invertLogo: true, wallMotif: "triangles" },
 };
 
 // ── Blank template ───────────────────────────────────────────────────────────
@@ -424,10 +424,15 @@ type HeroSpec = {
 };
 const HERO_ASSETS: Record<string, HeroSpec[]> = {
   "brand.apple": [
-    { file: "apple_mac_studio.glb",        heightM: 0.42, plinth: true },
-    { file: "apple_vision_pro.glb",        heightM: 0.40, plinth: true },
-    { file: "apple_ipad_pro.glb",          heightM: 0.45, plinth: true },
-    { file: "apple_iphone_13_pro_max.glb", heightM: 0.40, plinth: true },
+    // Sized to real-product dimensions (heightM is approximately the
+    // tallest in-room visual extent). Earlier defaults were 2x life-size.
+    { file: "apple_mac_studio.glb",        heightM: 0.21, plinth: true },
+    { file: "apple_vision_pro.glb",        heightM: 0.20, plinth: true },
+    { file: "apple_ipad_pro.glb",          heightM: 0.30, plinth: true },
+    // iPhone has a centred bind-pose Y-range (-0.5..+0.5 in model space)
+    // so the GLB's "bottom" pin lines up after normalize; the perceived
+    // embedding in the plinth was actually the body being twice life-size.
+    { file: "apple_iphone_13_pro_max.glb", heightM: 0.18, plinth: true },
   ],
   "brand.bmw": [{ file: "bmw_m5_g90_2024__www.vecarz.com.glb", heightM: 1.45 }],
   "brand.disney": [

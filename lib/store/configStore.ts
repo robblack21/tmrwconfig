@@ -229,7 +229,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   coffeeTableVariant: "avarta",
   standingDisplayCount: 2,
   platformHeightM: 0.20,
-  cameraFov: 40,
+  cameraFov: 60,
   cameraPreset: "",
   cameraPresetOverrides: {},
   cameraActivePreset: "hero",

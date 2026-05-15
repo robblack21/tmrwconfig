@@ -158,7 +158,11 @@ export const BrandKit = z.object({
       // hero artwork rather than the default plaster + brand tint.
       wallGraphic: z.string().optional(),
       // Procedural motif applied as a tile pattern over the wall (alternative to wallGraphic).
-      wallMotif: z.enum(["stripes.diagonal", "stripes.horizontal", "dots", "hex"]).optional(),
+      wallMotif: z.enum([
+        "stripes.diagonal", "stripes.horizontal", "stripes.vertical",
+        "dots", "hex", "monogram", "chevron", "circuit", "grid", "triangles",
+        "crown", "swoosh", "stars",
+      ]).optional(),
       // Invert the logo at render time — for brands whose canonical mark is dark
       // and needs to read against dark walls (e.g. Neura on near-black wall).
       invertLogo: z.boolean().optional(),

@@ -7,7 +7,7 @@ import { useConfig, useBrandKit } from "@/lib/store/configStore";
 import type { PendantShape, FootprintShape } from "@/lib/schemas";
 import { Sofa, CoffeeTable, Plant } from "./Props";
 import { useFloorTextures, useWallTextures, useParquetTextures, useLogoTexture } from "./Textures";
-import { useWallGraphic, useMotifTexture } from "./WallGraphics";
+import { useWallGraphic, useMotifTexture, type MotifKind } from "./WallGraphics";
 import { LightShafts, LightboxLogo, RadiatingRig, GlassBalcony, CircularScreen, WraparoundScreen } from "./HeroElements";
 import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
@@ -679,7 +679,7 @@ function Room({
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
   backWallGraphic?: string;
-  backWallMotif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex";
+  backWallMotif?: MotifKind;
   windowsEnabled: boolean;
   windowSillM: number;
   windowTrimColor: string;
@@ -1084,7 +1084,7 @@ function BackWallPanel({
   w, h, d, pos, color, accent, graphicUrl, motif,
 }: {
   w: number; h: number; d: number; pos: [number, number, number]; color: string; accent: string;
-  graphicUrl?: string; motif?: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex";
+  graphicUrl?: string; motif?: MotifKind;
 }) {
   if (graphicUrl) return <WallPanelGraphic w={w} h={h} d={d} pos={pos} color={color} url={graphicUrl} />;
   if (motif) return <WallPanelMotif w={w} h={h} d={d} pos={pos} color={color} accent={accent} motif={motif} />;
@@ -1111,7 +1111,7 @@ function WallPanelGraphic({ w, h, d, pos, color, url }: { w: number; h: number; 
   );
 }
 
-function WallPanelMotif({ w, h, d, pos, color, accent, motif }: { w: number; h: number; d: number; pos: [number, number, number]; color: string; accent: string; motif: "stripes.diagonal" | "stripes.horizontal" | "dots" | "hex" }) {
+function WallPanelMotif({ w, h, d, pos, color, accent, motif }: { w: number; h: number; d: number; pos: [number, number, number]; color: string; accent: string; motif: MotifKind }) {
   const tex = useMotifTexture(motif, color, accent);
   return (
     <RoundedBox position={pos} args={[w, h, d]} radius={0.012} smoothness={4} castShadow receiveShadow>
