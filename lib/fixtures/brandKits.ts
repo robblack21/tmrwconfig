@@ -79,7 +79,7 @@ const bmw: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L" },
+  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L", floorColor: "#9DB2C6" },
 };
 
 // ── Disney ───────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ const disney: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "b-DUYQg_-AQ" },
+  scene: { youtubeId: "b-DUYQg_-AQ", floorColor: "#9FA8D4" },
 };
 
 // ── Ferrari ──────────────────────────────────────────────────────────────────
@@ -117,7 +117,7 @@ const ferrari: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L" },
+  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L", floorColor: "#C4B0AA" },
 };
 
 // ── Google ───────────────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ const mercedes: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L" },
+  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L", floorColor: "#C2C7CC" },
 };
 
 // ── Samsung ──────────────────────────────────────────────────────────────────
@@ -196,7 +196,7 @@ const samsung: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "2gYqEi8-am4" },
+  scene: { youtubeId: "2gYqEi8-am4", floorColor: "#A4ACCB" },
 };
 
 // ── Netflix ──────────────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ const nvidia: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "hexagon", alternates: ["hexagon", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900" },
+  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900", floorColor: "#B4C29C" },
 };
 
 // ── Rolex ────────────────────────────────────────────────────────────────────
@@ -272,7 +272,7 @@ const rolex: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26" },
+  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26", floorColor: "#A6BCAD" },
 };
 
 // ── Tesla ────────────────────────────────────────────────────────────────────
@@ -334,7 +334,7 @@ export const tmrwBlank: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "8yKBpthWRI4", logoChroma: "white", invertLogo: true },
+  scene: { youtubeId: "8yKBpthWRI4", logoChroma: "white", invertLogo: true, floorColor: "#C9C7C0" },
 };
 
 // In-app brand picker grid — order is the homepage / dock order.

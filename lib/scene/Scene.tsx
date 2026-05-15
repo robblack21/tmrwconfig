@@ -118,6 +118,20 @@ export function Scene() {
   const vitrineColor    = colourOverrides.vitrine ?? kit.palette.accent;
   const monitorColor    = colourOverrides.monitor ?? kit.palette.primary;
 
+  // Extruded brand signage that flanks the front door on the room's exterior.
+  const logoInvert = !!kit.scene?.invertLogo;
+  const exteriorLogo = kit.logos.primary.rasterUrl
+    ? {
+        url: kit.logos.primary.rasterUrl,
+        viewBox: kit.logos.primary.viewBox,
+        invert: logoInvert,
+        chroma: (kit.scene?.logoChroma ?? "") as "white" | "black" | "",
+        sideTint: logoInvert ? kit.palette.neutralDark : kit.palette.neutralLight,
+        extrusionM: logoExtrusionM,
+        emissive: logoEmissive,
+      }
+    : undefined;
+
   // Per-kit GI / key multipliers (atelier kits dial down ambient)
   const giMult  = kit.scene?.giMultiplier  ?? 1;
   const keyMult = kit.scene?.keyMultiplier ?? 1;
@@ -216,6 +230,7 @@ export function Scene() {
             windowsEnabled={windowsEnabled}
             windowSillM={windowSillM}
             windowTrimColor={kit.scene?.windowTrimColor ?? kit.palette.accent}
+            logo={exteriorLogo}
           />
         </Suspense>
       </TimedReveal>
@@ -234,8 +249,8 @@ export function Scene() {
       )}
 
       {/* Brand logo — prominent inside the room (migrates to the left flank
-          when the video wall occupies the back wall), plus an exterior sign
-          on the back wall's outer face so the brand reads from outside too. */}
+          when the video wall occupies the back wall). The exterior signage
+          flanking the front door is rendered by Room/DoorEdgeWall. */}
       <Suspense fallback={null}>
         <BrandLogoOnWall
           kit={kit}
@@ -247,19 +262,6 @@ export function Scene() {
           extrusionM={logoExtrusionM}
           emissive={logoEmissive}
           placement={ledWallEnabled ? "flank-left" : "back-centre"}
-        />
-      </Suspense>
-      <Suspense fallback={null}>
-        <BrandLogoOnWall
-          kit={kit}
-          widthM={widthM}
-          depthM={depthM}
-          wallHeightM={wallHeightM}
-          platformHeightM={platformHeightM}
-          glow={logoGlow}
-          extrusionM={logoExtrusionM}
-          emissive={logoEmissive}
-          placement="back-exterior"
         />
       </Suspense>
 
@@ -598,7 +600,7 @@ function atriumSize(w: number, d: number): [number, number] {
 
 function Room({
   shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
-  backWallGraphic, backWallMotif, windowsEnabled, windowSillM, windowTrimColor,
+  backWallGraphic, backWallMotif, windowsEnabled, windowSillM, windowTrimColor, logo,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
@@ -607,6 +609,11 @@ function Room({
   windowsEnabled: boolean;
   windowSillM: number;
   windowTrimColor: string;
+  logo?: {
+    url: string; viewBox: [number, number, number, number];
+    invert: boolean; chroma: "white" | "black" | "";
+    sideTint: string; extrusionM: number; emissive: number;
+  };
 }) {
   // Walls are built edge-by-edge around the footprint polygon: the rearmost
   // edge is the solid feature wall (logo + video live there), the frontmost
@@ -637,7 +644,7 @@ function Room({
         const sideish = Math.abs(dz) >= Math.abs(dx);
 
         if (i === doorEdge) {
-          return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} />;
+          return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} logo={logo} />;
         }
         if (windowsEnabled && (circular || (i !== backEdge && sideish))) {
           return (
@@ -683,23 +690,52 @@ function Room({
 
 // Wall along an edge with a central door opening — two segments + a header,
 // built in a local frame: `lengthM` runs along local X, `wallHeightM` up Y.
+// When a `logo` is given, extruded brand signs flank the door on the
+// exterior (local -Z) face.
 function DoorEdgeWall({
-  lengthM, wallHeightM, thick, position, rotationY, color,
+  lengthM, wallHeightM, thick, position, rotationY, color, logo,
 }: {
   lengthM: number; wallHeightM: number; thick: number;
   position: [number, number, number]; rotationY: number; color: string;
+  logo?: {
+    url: string; viewBox: [number, number, number, number];
+    invert: boolean; chroma: "white" | "black" | "";
+    sideTint: string; extrusionM: number; emissive: number;
+  };
 }) {
   const doorW = Math.min(1.3, lengthM * 0.6);
   const doorH = Math.min(2.25, wallHeightM - 0.35);
   const segW = Math.max(0.02, (lengthM - doorW) / 2);
   const headerH = wallHeightM - doorH;
+  const segCx = doorW / 2 + segW / 2;
   return (
     <group position={position} rotation-y={rotationY}>
-      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[-(doorW / 2 + segW / 2), wallHeightM / 2, 0]} color={color} />
-      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[doorW / 2 + segW / 2, wallHeightM / 2, 0]} color={color} />
+      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[-segCx, wallHeightM / 2, 0]} color={color} />
+      <WallPanelPlaster w={segW} h={wallHeightM} d={thick} pos={[segCx, wallHeightM / 2, 0]} color={color} />
       {headerH > 0.05 && (
         <WallPanelPlaster w={doorW} h={headerH} d={thick} pos={[0, doorH + headerH / 2, 0]} color={color} />
       )}
+      {/* Extruded brand signage flanking the door on the exterior face */}
+      {logo && segW > 0.6 && [-1, 1].map((sx) => (
+        <Suspense key={sx} fallback={null}>
+          <LogoSign
+            url={logo.url}
+            viewBox={logo.viewBox}
+            widthM={segW}
+            heightM={wallHeightM}
+            anchorZ={-thick / 2}
+            faceDir={-1}
+            xOffset={sx * segCx}
+            y={wallHeightM * 0.52}
+            extrusionM={logo.extrusionM}
+            sideTint={logo.sideTint}
+            emissive={logo.emissive}
+            invert={logo.invert}
+            chroma={logo.chroma}
+            maxWidthM={Math.min(segW * 0.8, 2.6)}
+          />
+        </Suspense>
+      ))}
     </group>
   );
 }
@@ -951,7 +987,7 @@ function CornerPillars({
 
 // ── Logos ───────────────────────────────────────────────────────────────────
 
-type LogoPlacement = "back-centre" | "flank-left" | "flank-right" | "back-exterior";
+type LogoPlacement = "back-centre" | "flank-left" | "flank-right";
 
 function BrandLogoOnWall({
   kit, widthM, depthM, wallHeightM, platformHeightM, glow, extrusionM, emissive, placement = "back-centre",
@@ -987,29 +1023,6 @@ function BrandLogoOnWall({
         invert={invert}
         chroma={chroma}
         maxWidthM={Math.min(widthM * 0.45, 3.2)}
-      />
-    );
-  }
-  if (placement === "back-exterior") {
-    // Bold logo on the back wall's OUTER face — reads the brand from outside
-    // the room. Sits behind the wall, facing away from it.
-    return (
-      <LogoSign
-        url={url}
-        viewBox={kit.logos.primary.viewBox}
-        widthM={widthM}
-        heightM={wallHeightM}
-        anchorZ={-depthM / 2}
-        faceDir={-1}
-        y={yCentre}
-        extrusionM={extrusionM}
-        accent={accent}
-        sideTint={sideTint}
-        emissiveBoost={boost}
-        emissive={emissive}
-        invert={invert}
-        chroma={chroma}
-        maxWidthM={Math.min(widthM * 0.6, 4.5)}
       />
     );
   }
@@ -1085,7 +1098,7 @@ function LogoSignFlank({
  * so the logo reads as ink-on-brand, not as a cut-out into the wall.
  */
 function LogoSign({
-  url, viewBox, widthM, heightM, anchorZ, y, extrusionM, sideTint, maxWidthM, emissive = 1.2, invert = false, chroma = "", faceDir = 1,
+  url, viewBox, widthM, heightM, anchorZ, y, extrusionM, sideTint, maxWidthM, emissive = 1.2, invert = false, chroma = "", faceDir = 1, xOffset = 0,
 }: {
   url: string;
   viewBox: [number, number, number, number];
@@ -1107,6 +1120,8 @@ function LogoSign({
   emissiveBoost?: number;
   /** +1 = sign faces +Z (into the room); -1 = faces -Z (exterior signage). */
   faceDir?: 1 | -1;
+  /** Horizontal offset within the parent frame — for door-flanking signs. */
+  xOffset?: number;
 }) {
   const tex = useLogoTexture(url, invert, chroma);
   const aspect = viewBox[2] / Math.max(viewBox[3], 1);
@@ -1117,7 +1132,7 @@ function LogoSign({
   const z = anchorZ + faceDir * (d / 2 + 0.005);
 
   return (
-    <group position={[0, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
+    <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
       <mesh castShadow receiveShadow>
         <boxGeometry args={[finalWidthM, targetHeightM, d]} />
         <meshPhysicalMaterial color={sideTint} roughness={0.5} metalness={0.05} clearcoat={0.25} clearcoatRoughness={0.3} />
