@@ -54,6 +54,8 @@ export type ConfigState = {
   windowsEnabled: boolean;            // ribbon windows on the side walls (glass shading)
   ceilingEnabled: boolean;            // enclosed ceiling slab (off = open / exhibition look)
   wallTextureEnabled: boolean;        // plastered-wall texture detail on/off (off = matte painted)
+  windowSegments: number;             // number of mullion bays per ribbon window (1..8)
+  tableOrientationDeg: 0 | 90;        // table+chairs+cups orientation: 0 (long axis along Z) or 90 (along X)
   windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
   roomCount: number;                  // 1..6 — cloned rooms linked by mid-wall doorways
   tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
@@ -139,8 +141,13 @@ function bounds(shape: FootprintShape, tier: SizeTier) {
  *  given length × width with a comfortable aisle on all sides.
  *  Chair gap (0.42m) + chair depth (~0.55m) + aisle (1.0m) ≈ 2m per side
  *  → 4m total buffer beyond the table itself. */
-function minRoomForTable(tableLengthM: number, tableWidthM: number): { widthM: number; depthM: number } {
+function minRoomForTable(tableLengthM: number, tableWidthM: number, orientationDeg: 0 | 90 = 0): { widthM: number; depthM: number } {
   const BUFFER = 4.0;
+  // Orientation 0°: table length runs along Z (room depth), width along X.
+  // Orientation 90°: table length runs along X (room width), width along Z.
+  if (orientationDeg === 90) {
+    return { widthM: tableLengthM + BUFFER, depthM: tableWidthM + BUFFER };
+  }
   return { widthM: tableWidthM + BUFFER, depthM: tableLengthM + BUFFER };
 }
 
@@ -154,8 +161,9 @@ function fitRoomForTable(
   currentDepth: number,
   tableLengthM: number,
   tableWidthM: number,
+  orientationDeg: 0 | 90 = 0,
 ): { tier: SizeTier; widthM: number; depthM: number } {
-  const need = minRoomForTable(tableLengthM, tableWidthM);
+  const need = minRoomForTable(tableLengthM, tableWidthM, orientationDeg);
   const tierOrder: SizeTier[] = ["S", "M", "L"];
   let tier = currentTier;
   // Step the tier up until its max bounds can host the requested room.
@@ -207,6 +215,8 @@ export const useConfig = create<ConfigState>((set, get) => ({
   windowsEnabled: true,
   ceilingEnabled: true,
   wallTextureEnabled: true,
+  windowSegments: 4,
+  tableOrientationDeg: 90,
   windowSillM: 0.95,
   roomCount: 1,
   tableLengthM: 3.6,
@@ -278,13 +288,13 @@ export const useConfig = create<ConfigState>((set, get) => ({
         const b = bounds(intent.shape, seedTier);
         // Then run fit-to-table — if the table doesn't fit the new shape's
         // default room (e.g. circular S would clip a long table), grow.
-        const fit = fitRoomForTable(intent.shape, seedTier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM);
+        const fit = fitRoomForTable(intent.shape, seedTier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM, s.tableOrientationDeg);
         set({ shape: intent.shape, ...fit });
         break;
       }
       case "footprint.setTier": {
         const b = bounds(s.shape, intent.tier);
-        const fit = fitRoomForTable(s.shape, intent.tier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM);
+        const fit = fitRoomForTable(s.shape, intent.tier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM, s.tableOrientationDeg);
         set(fit);
         break;
       }
@@ -294,7 +304,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
         // shrink below what the table needs — chairs must stay inside.
         const nextW = clamp(intent.widthM, b.widthM.min, b.widthM.max);
         const nextD = clamp(intent.depthM, b.depthM.min, b.depthM.max);
-        const fit = fitRoomForTable(s.shape, s.tier, nextW, nextD, s.tableLengthM, s.tableWidthM);
+        const fit = fitRoomForTable(s.shape, s.tier, nextW, nextD, s.tableLengthM, s.tableWidthM, s.tableOrientationDeg);
         set(fit);
         break;
       }
@@ -359,11 +369,19 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "room.setWindowsEnabled":     { set({ windowsEnabled: intent.value }); break; }
       case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
       case "room.setWallTextureEnabled": { set({ wallTextureEnabled: intent.value }); break; }
+      case "room.setWindowSegments":     { set({ windowSegments: Math.round(clamp(intent.value, 1, 8)) }); break; }
+      case "boardroom.setTableOrientation": {
+        // Re-fit the room when rotating — what fit along Z at 0° must now
+        // fit along X at 90°, so width / depth swap roles.
+        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, s.tableLengthM, s.tableWidthM, intent.value);
+        set({ tableOrientationDeg: intent.value, ...fit });
+        break;
+      }
       case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
       case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
       case "boardroom.setTableLength": {
         const next = clamp(intent.value, 2.0, 8.0);
-        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM);
+        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM, s.tableOrientationDeg);
         // Auto-adjust chairs: ~1 chair per 0.75m along each side, plus head
         // + foot chairs once the table is long enough. User can still
         // override via the Chairs slider — but the default tracks the
@@ -377,7 +395,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       }
       case "boardroom.setTableWidth": {
         const next = clamp(intent.value, 1.0, 3.0);
-        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, s.tableLengthM, next);
+        const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, s.tableLengthM, next, s.tableOrientationDeg);
         set({ tableWidthM: next, ...fit });
         break;
       }

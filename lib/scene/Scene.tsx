@@ -109,6 +109,7 @@ export function Scene() {
   const tableWidthM = useConfig((s) => s.tableWidthM);
   const chairCount = useConfig((s) => s.chairCount);
   const tableVariant = useConfig((s) => s.tableVariant);
+  const tableOrientationDeg = useConfig((s) => s.tableOrientationDeg);
   const chairVariant = useConfig((s) => s.chairVariant);
   const colourOverrides = useConfig((s) => s.colourOverrides);
   const shape = useConfig((s) => s.shape);
@@ -428,44 +429,44 @@ export function Scene() {
             when a kit brings its own bespoke set. */}
         {!kit.scene?.noDefaultDressing && (
           <>
-            {/* Boardroom table + chairs arranged around it, all facing inward. */}
+            {/* Boardroom table + chairs + cups + decals all share the SAME
+                tableLengthM/tableWidthM and centre on the room origin —
+                wrapping them in one rotation group lets the user flip the
+                whole ensemble between long-axis-along-Z (0°) and long-axis-
+                along-X (90°) via boardroom.setTableOrientation. Default 90°
+                so the long table aligns with the room's wider dimension. */}
             <Suspense fallback={null}>
-              <BoardroomTable
-                variant={tableVariant}
-                lengthM={tableLengthM}
-                widthM={tableWidthM}
-                position={[0, platformHeightM, 0]}
-                // Table reads as a dark anchor against the brand-coloured
-                // chairs — avoids the Samsung-style "everything is one shade
-                // of brand blue" problem. Per-kit override available.
-                tintHex={colourOverrides.table ?? kit.scene?.tableColor ?? kit.palette.neutralDark}
-              />
-              <ChairsAroundTable
-                count={chairCount}
-                tableLengthM={tableLengthM}
-                tableWidthM={tableWidthM}
-                chairVariant={chairVariant}
-                position={[0, platformHeightM, 0]}
-                tintHex={colourOverrides.chair ?? kit.palette.secondary}
-                kit={kit}
-              />
-              {/* Custom branded merch — one logo-emblazoned coffee cup at
-                  every seat, count-driven so they re-flow with the chairs. */}
-              <BrandedCupsOnTable
-                count={chairCount}
-                tableLengthM={tableLengthM}
-                tableWidthM={tableWidthM}
-                position={[0, platformHeightM, 0]}
-                kit={kit}
-              />
-              {/* Brand decals on the table top — head + foot ovals plus a
-                  faint watermark in the centre — and on each chair back. */}
-              <TableTopBrandDecals
-                position={[0, platformHeightM, 0]}
-                tableLengthM={tableLengthM}
-                tableWidthM={tableWidthM}
-                kit={kit}
-              />
+              <group rotation-y={(tableOrientationDeg * Math.PI) / 180}>
+                <BoardroomTable
+                  variant={tableVariant}
+                  lengthM={tableLengthM}
+                  widthM={tableWidthM}
+                  position={[0, platformHeightM, 0]}
+                  tintHex={colourOverrides.table ?? kit.scene?.tableColor ?? kit.palette.neutralDark}
+                />
+                <ChairsAroundTable
+                  count={chairCount}
+                  tableLengthM={tableLengthM}
+                  tableWidthM={tableWidthM}
+                  chairVariant={chairVariant}
+                  position={[0, platformHeightM, 0]}
+                  tintHex={colourOverrides.chair ?? kit.palette.secondary}
+                  kit={kit}
+                />
+                <BrandedCupsOnTable
+                  count={chairCount}
+                  tableLengthM={tableLengthM}
+                  tableWidthM={tableWidthM}
+                  position={[0, platformHeightM, 0]}
+                  kit={kit}
+                />
+                <TableTopBrandDecals
+                  position={[0, platformHeightM, 0]}
+                  tableLengthM={tableLengthM}
+                  tableWidthM={tableWidthM}
+                  kit={kit}
+                />
+              </group>
             </Suspense>
 
             {/* Optional breakout seating — sofa pair against the front-right
@@ -1047,7 +1048,10 @@ function WindowedWall({
   const actualHeaderH = wallHeightM - sillM - winH;
   const winY = sillM + winH / 2;
   const glassT = thick * 0.4;
-  const mullions = Math.max(1, Math.round(lengthM / 1.6) - 1);
+  // Mullion count comes from `room.setWindowSegments` (1..8 panes). The
+  // mullion count is `panes - 1` since N panes have N-1 vertical bars.
+  const segments = useConfig((s) => s.windowSegments);
+  const mullions = Math.max(0, segments - 1);
   // Window-flank logo: tucked onto the SILL (below the glazing) at each end,
   // exterior face. ~50% smaller than the back-wall logo per spec and with the
   // glow boosted so they read at distance.
@@ -1564,25 +1568,29 @@ function BrandLogoOnWall({
       />
     );
   }
-  const flankZ = -depthM / 4;
   const sides: Array<"flank-left" | "flank-right"> =
     placement === "flank-both" ? ["flank-left", "flank-right"]
     : placement === "flank-right" ? ["flank-right"]
     : ["flank-left"];
+  // Two logos per side wall — centred at 30% and 70% along the wall's
+  // depth axis, each 15% of depth wide. Falls between the default window
+  // mullion bays so they don't fight the glass detail.
+  const zOffsets = [-depthM * 0.2, depthM * 0.2];  // 30% and 70% along [-d/2, +d/2]
+  const logoMaxW = Math.min(depthM * 0.15, 1.8);
   return (
     <>
       {sides.map((side) => {
         const flankX = side === "flank-left" ? -widthM / 2 : widthM / 2;
         const rotY = side === "flank-left" ? Math.PI / 2 : -Math.PI / 2;
-        return (
+        return zOffsets.map((zOff, i) => (
           <LogoSignFlank
-            key={side}
+            key={`${side}-${i}`}
             url={url}
             viewBox={kit.logos.primary.viewBox}
             depthM={depthM}
             wallHeightM={wallHeightM}
             x={flankX}
-            z={flankZ}
+            z={zOff}
             rotY={rotY}
             y={yCentre}
             extrusionM={extrusionM}
@@ -1592,9 +1600,9 @@ function BrandLogoOnWall({
             emissive={emissive}
             invert={invert}
             chroma={chroma}
-            maxWidthM={Math.min(depthM * 0.5, 3.4)}
+            maxWidthM={logoMaxW}
           />
-        );
+        ));
       })}
     </>
   );
@@ -1995,34 +2003,29 @@ function LedWall({
         <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
       </mesh>
 
-      {/* Shared video — one iframe spanning the whole wall, cropped to fit.
-          Drawn BEHIND the per-cell layer so the cell bezels overlay it
-          like real screen separators. */}
+      {/* Shared video — one iframe spanning the whole wall, with the
+          bezel grid as DOM overlay inside the Html container. */}
       {showSharedVideo && (
         <SharedMatrixVideo
           ytId={youtubeId}
           wallW={w169}
           wallH={h169}
           zFront={bezelD / 2 + 0.002}
+          cols={cols}
+          rows={rows}
         />
       )}
 
-      {Array.from({ length: cols * rows }, (_, idx) => {
+      {/* Per-cell content — only renders for cells that explicitly opt out
+          of the shared-video default (kind = "youtube" or "image"). When
+          shared video is rendering, default cells are blank because the
+          iframe already covers them. */}
+      {!showSharedVideo && Array.from({ length: cols * rows }, (_, idx) => {
         const col = idx % cols;
         const row = Math.floor(idx / cols);
         const cx = -w169 / 2 + gutter * (col + 1) + cellW * (col + 0.5);
         const cy2 = h169 / 2 - gutter * (row + 1) - cellH * (row + 0.5);
         const cell = cells[idx] ?? { kind: "default", value: "" };
-        // When the shared video is rendering, default cells just draw a
-        // thin bezel outline (no inner content). Overridden cells still
-        // render their own image / iframe over the shared video.
-        if (showSharedVideo && cell.kind === "default") {
-          return (
-            <group key={idx} position={[cx, cy2, 0]}>
-              <MatrixBezelOutline cellW={cellW} cellH={cellH} zFront={bezelD / 2 + 0.006} />
-            </group>
-          );
-        }
         return (
           <MatrixCell
             key={idx}
@@ -2032,6 +2035,28 @@ function LedWall({
             x={cx}
             y={cy2}
             zFront={bezelD / 2 + 0.004}
+            cellW={cellW}
+            cellH={cellH}
+            brightness={brightness}
+          />
+        );
+      })}
+      {/* Per-cell overrides on top of the shared video. */}
+      {showSharedVideo && cells.map((cell, idx) => {
+        if (!cell || cell.kind === "default" || !cell.value) return null;
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const cx = -w169 / 2 + gutter * (col + 1) + cellW * (col + 0.5);
+        const cy2 = h169 / 2 - gutter * (row + 1) - cellH * (row + 0.5);
+        return (
+          <MatrixCell
+            key={`over-${idx}`}
+            cell={cell}
+            isPrimary={false}
+            kit={kit}
+            x={cx}
+            y={cy2}
+            zFront={bezelD / 2 + 0.008}
             cellW={cellW}
             cellH={cellH}
             brightness={brightness}
@@ -2051,11 +2076,11 @@ function LedWall({
   );
 }
 
-/** Shared video — ONE YouTube iframe spanning the full back wall.
- *  Sized to fill the wall width; if the resulting 16:9 height overflows
- *  the wall, the iframe's parent crops it (overflow:hidden) so the video
- *  reads as a cinema-style strip with top + bottom cropped. */
-function SharedMatrixVideo({ ytId, wallW, wallH, zFront }: { ytId: string; wallW: number; wallH: number; zFront: number }) {
+/** Shared video — ONE YouTube iframe spanning the full back wall, with
+ *  the bezel grid drawn AS DOM ON TOP OF the iframe (3D meshes can't
+ *  occlude HTML in r3f's CSS3D layer, so the grid lives in the same
+ *  HTML container as the video). */
+function SharedMatrixVideo({ ytId, wallW, wallH, zFront, cols, rows }: { ytId: string; wallW: number; wallH: number; zFront: number; cols: number; rows: number }) {
   const videoMuted = useConfig((s) => s.videoMuted);
   const videoVolume = useConfig((s) => s.videoVolume);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -2071,6 +2096,7 @@ function SharedMatrixVideo({ ytId, wallW, wallH, zFront }: { ytId: string; wallW
   const wallPxW = Math.round(wallW * 200);
   const wallPxH = Math.round(wallH * 200);
   const videoPxH = Math.round(wallPxW * 9 / 16);   // 16:9 at wall width
+  const bezelPx = 4;                                // CSS thickness of the bezel grid
   return (
     <Html
       transform
@@ -2106,25 +2132,21 @@ function SharedMatrixVideo({ ytId, wallW, wallH, zFront }: { ytId: string; wallW
             } catch { /* cross-origin */ }
           }}
         />
+        {/* Bezel grid — DOM divs absolutely-positioned over the iframe.
+            r3f's `<Html>` is a CSS3D layer that always paints over the
+            WebGL canvas, so 3D meshes can't occlude it. Drawing the grid
+            here is the reliable way to read the wall as N×M segmented
+            screens with the video continuous behind. */}
+        {Array.from({ length: cols - 1 }, (_, i) => {
+          const x = ((i + 1) * wallPxW) / cols - bezelPx / 2;
+          return <div key={`v${i}`} style={{ position: "absolute", top: 0, height: "100%", left: x, width: bezelPx, background: "#0a0c10" }} />;
+        })}
+        {Array.from({ length: rows - 1 }, (_, i) => {
+          const y = ((i + 1) * wallPxH) / rows - bezelPx / 2;
+          return <div key={`h${i}`} style={{ position: "absolute", left: 0, width: "100%", top: y, height: bezelPx, background: "#0a0c10" }} />;
+        })}
       </div>
     </Html>
-  );
-}
-
-/** Thin emissive outline drawn around each cell when the shared video is
- *  active — gives the visual cue that the wall is segmented into screens
- *  without occluding the video underneath. */
-function MatrixBezelOutline({ cellW, cellH, zFront }: { cellW: number; cellH: number; zFront: number }) {
-  const t = 0.012;
-  return (
-    <group position={[0, 0, zFront]}>
-      {/* Top + bottom */}
-      <mesh position={[0,  cellH / 2 - t / 2, 0]}><boxGeometry args={[cellW, t, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
-      <mesh position={[0, -cellH / 2 + t / 2, 0]}><boxGeometry args={[cellW, t, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
-      {/* Left + right */}
-      <mesh position={[ cellW / 2 - t / 2, 0, 0]}><boxGeometry args={[t, cellH, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
-      <mesh position={[-cellW / 2 + t / 2, 0, 0]}><boxGeometry args={[t, cellH, t]} /><meshStandardMaterial color="#0a0c10" emissive="#000" /></mesh>
-    </group>
   );
 }
 
@@ -2298,22 +2320,24 @@ function DoorWallSatellites({
 }: {
   kit: BrandKit; roomDepthM: number; roomWidthM: number; wallHeightM: number; platformHeightM: number;
 }) {
-  // Door dims mirror DoorEdgeWall: doorW capped at 2.0m or 55% of wall.
   const wallLen = roomWidthM;
   const doorW = Math.min(2.0, wallLen * 0.55);
   const segW = Math.max(0.02, (wallLen - doorW) / 2);
-  // Monitor fits inside the door-flanking segment, with a small margin.
-  const margin = 0.4;
-  const w = segW - margin * 2;
-  if (w < 0.7) return null;
-  const h = Math.min(w * 9 / 16, wallHeightM - 1.6);
-  if (h < 0.45) return null;
-  const bezelD = 0.1;
-  // Interior face of the front wall is at z = depthM/2 - wallThickness.
-  // We mount the screen JUST IN FRONT of the wall, facing -Z (into the room).
+  // Monitor sized smaller than before (was filling the whole segment minus
+  // 0.4m margin → now 55% of the segment), and lifted upward to sit nearer
+  // the top of the wall like a real signage display.
+  const margin = 0.5;
+  const w = Math.min(segW - margin * 2, 1.6);
+  if (w < 0.6) return null;
+  const h = Math.min(w * 9 / 16, wallHeightM - 2.2);
+  if (h < 0.4) return null;
+  const bezelD = 0.08;
   const wallThick = 0.08;
   const z = roomDepthM / 2 - wallThick - bezelD / 2 - 0.015;
-  const cy = platformHeightM + 0.5 + h / 2;
+  // Mount the monitor's CENTRE at ~72% of wall height (was 0.5 + h/2 ≈
+  // 1.5m, now ~3.6m for a 5m wall) so it reads as overhead signage rather
+  // than at eye level.
+  const cy = platformHeightM + wallHeightM * 0.72;
   const segCx = doorW / 2 + segW / 2;
   return (
     <group>
@@ -3018,8 +3042,11 @@ type PlantKind = "snake" | "hexapot" | "tree" | "cactus" | "tarro";
 function generatePlantSlots(widthM: number, depthM: number, count: number, platformHeightM: number, shape: FootprintShape = "rectangle") {
   if (count <= 0) return [];
   const y = platformHeightM;
+  // Larger cushion (35cm) for the hex pot since its bounding box still
+  // grazes the wall at the corner due to its hexagonal silhouette poking
+  // past the radial half-width estimate.
   const inT = safeInsetForKind("tree", 0.15);
-  const inS = safeInsetForKind("hexapot", 0.15);
+  const inS = safeInsetForKind("hexapot", 0.35);
 
   // For circular rooms the rectangle-corner candidates sit OUTSIDE the
   // wall (a corner at half-width / half-depth is at distance r√2, which

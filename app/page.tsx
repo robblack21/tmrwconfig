@@ -36,7 +36,7 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
-    windowsEnabled, ceilingEnabled, wallTextureEnabled, windowSillM, roomCount,
+    windowsEnabled, ceilingEnabled, wallTextureEnabled, windowSegments, tableOrientationDeg, windowSillM, roomCount,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
@@ -364,6 +364,9 @@ export default function Page() {
           {windowsEnabled && (
             <Slider label="Sill" value={windowSillM} onChange={(v) => apply({ type: "room.setWindowSill", value: v })} min={0.4} max={1.6} step={0.05} unit="m" />
           )}
+          {windowsEnabled && (
+            <Slider label="Panes" value={windowSegments} onChange={(v) => apply({ type: "room.setWindowSegments", value: v })} min={1} max={8} step={1} />
+          )}
           <Slider label="Rooms" value={roomCount} onChange={(v) => apply({ type: "room.setCount", value: v })} min={1} max={6} step={1} />
         </Section>
 
@@ -380,6 +383,16 @@ export default function Page() {
           />
           <Slider label="Length" value={tableLengthM} onChange={(v) => apply({ type: "boardroom.setTableLength", value: v })} min={2.0} max={8.0} step={0.1} unit="m" />
           <Slider label="Width"  value={tableWidthM}  onChange={(v) => apply({ type: "boardroom.setTableWidth", value: v })} min={1.0} max={3.0} step={0.1} unit="m" />
+          {/* Rotate the table + chairs + cups + decals together. 90° default
+              aligns the long axis with the room's wider dimension. */}
+          <PillRow
+            options={[
+              { value: "90", label: "90°" },
+              { value: "0",  label: "0°" },
+            ]}
+            value={String(tableOrientationDeg)}
+            onSelect={(v) => apply({ type: "boardroom.setTableOrientation", value: v === "90" ? 90 : 0 })}
+          />
         </Section>
 
         <Section label="Chairs">
