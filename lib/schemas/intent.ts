@@ -57,6 +57,9 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("ledWall.setHeight"), value: z.number() }),
   z.object({ type: z.literal("ledWall.setBrightness"), value: z.number() }),
   z.object({ type: z.literal("ledWall.setYoutubeId"), value: z.string() }),
+  z.object({ type: z.literal("videoMatrix.setCols"), value: z.number().int() }),
+  z.object({ type: z.literal("videoMatrix.setRows"), value: z.number().int() }),
+  z.object({ type: z.literal("videoMatrix.setCell"), index: z.number().int(), kind: z.enum(["default", "youtube", "image"]), value: z.string() }),
 
   z.object({ type: z.literal("brandKit.apply"), kitId: z.string() }),
   z.object({ type: z.literal("brandKit.toggleMaximiseReuse"), value: z.boolean() }),

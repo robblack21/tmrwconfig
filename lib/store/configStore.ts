@@ -11,6 +11,14 @@ import type { TableVariant, ChairVariant } from "@/lib/scene/Boardroom";
 
 export type HallMode = "gallery.light" | "warehouse.dark";
 
+/** One cell in the LED-wall video matrix. `kind: "default"` falls back to
+ *  the kit's logo for that cell. `kind: "youtube"` plays the value as a
+ *  YouTube ID; `kind: "image"` renders the URL (HTTP or data URL upload). */
+export type VideoCell = {
+  kind: "default" | "youtube" | "image";
+  value: string;
+};
+
 export type ConfigState = {
   // footprint
   shape: FootprintShape;
@@ -57,6 +65,12 @@ export type ConfigState = {
   ledWallWidthM: number;        // 2.0..14.0
   ledWallHeightM: number;       // 1.2..7.0
   ledWallBrightness: number;    // 0..2.5
+  // Video-matrix display — the LED wall splits into N×N cells. Cell (0,0)
+  // hosts the kit's YouTube video by default; other cells show the brand
+  // logo, or a per-cell override (image URL / uploaded data URL).
+  videoMatrixCols: number;      // 1..4
+  videoMatrixRows: number;      // 1..4
+  videoMatrixCells: VideoCell[];// length = cols*rows (sparse — defaults applied at render)
   // scene
   hallMode: HallMode;
   hdriId: string;                   // explicit selection (empty = auto from hallMode)
@@ -202,6 +216,9 @@ export const useConfig = create<ConfigState>((set, get) => ({
                                 // flanking monitors on either side.
   ledWallHeightM: 3.15,         // 5.6 / 3.15 = 16:9
   ledWallBrightness: 1.4,
+  videoMatrixCols: 1,
+  videoMatrixRows: 1,
+  videoMatrixCells: [],
   hallMode: "warehouse.dark",
   hdriId: "",
   hallVisible: true,
@@ -388,6 +405,21 @@ export const useConfig = create<ConfigState>((set, get) => ({
         kit.scene.youtubeId = intent.value.trim();
         // Bump a revision counter so subscribers re-read kit fields.
         set({ kitRev: (get().kitRev ?? 0) + 1 });
+        break;
+      }
+      case "videoMatrix.setCols": {
+        set({ videoMatrixCols: Math.round(clamp(intent.value, 1, 4)) });
+        break;
+      }
+      case "videoMatrix.setRows": {
+        set({ videoMatrixRows: Math.round(clamp(intent.value, 1, 4)) });
+        break;
+      }
+      case "videoMatrix.setCell": {
+        const cells = [...s.videoMatrixCells];
+        while (cells.length <= intent.index) cells.push({ kind: "default", value: "" });
+        cells[intent.index] = { kind: intent.kind, value: intent.value };
+        set({ videoMatrixCells: cells });
         break;
       }
       case "brandKit.apply": {

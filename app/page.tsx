@@ -41,6 +41,7 @@ export default function Page() {
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
     exposure, keyLightIntensity, plantCount, sofaCount, coffeeTableVariant, standingDisplayCount, logoGlow, logoExtrusionM, logoEmissive, platformHeightM,
+    videoMatrixCols, videoMatrixRows, videoMatrixCells,
     cgBrightness, cgContrast, cgSaturation, cgVibrance, cgWhiteBalance,
     videoMuted, videoVolume, logoOverrides,
     hdriId, hallVisible, hdrIntensity, hdrBgIntensity, hallDarkness,
@@ -203,8 +204,14 @@ export default function Page() {
               {chromeTheme === "day" ? "Night" : "Day"}
             </span>
           </NavBtn>
-          <NavBtn onClick={() => apply({ type: "scene.setMode", hall: hallMode === "warehouse.dark" ? "gallery.light" : "warehouse.dark" })}>
-            {hallMode === "warehouse.dark" ? "Warehouse" : "Gallery"}
+          {/* Hall geometry toggle — Warehouse shows the surrounding hall
+              context box; Environment hides it so the HDRI skybox reads as
+              the actual surroundings of the room. */}
+          <NavBtn
+            onClick={() => apply({ type: "scene.setHallVisible", value: !hallVisible })}
+            title={hallVisible ? "Hide the hall geometry around the room (Environment mode)" : "Show the hall geometry around the room (Warehouse mode)"}
+          >
+            {hallVisible ? "Warehouse" : "Environment"}
           </NavBtn>
           <span className="t-label text-[0.55rem] uppercase tracking-wider opacity-60 select-none" title="The two switches to the right control render cost. The configurator also auto-degrades them when frame-rate dips.">
             Performance toggles ▸
@@ -592,6 +599,11 @@ export default function Page() {
               <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.0} max={Math.max(1.0, wallHeightM - 1.0)} step={0.25} unit="m" />
               <Slider label="Brightness" value={ledWallBrightness} onChange={(v) => apply({ type: "ledWall.setBrightness", value: v })} min={0}   max={2.5} step={0.05} />
               <Slider label="Volume"     value={videoVolume}       onChange={(v) => apply({ type: "video.setVolume", value: v })} min={0} max={100} step={1} />
+              {/* NxN matrix — splits the LED wall into a grid of cells.
+                  Cell (0,0) hosts the YouTube ID by default; remaining cells
+                  carry the brand logo (or a per-cell URL / uploaded image). */}
+              <Slider label="Columns" value={videoMatrixCols} onChange={(v) => apply({ type: "videoMatrix.setCols", value: v })} min={1} max={4} step={1} />
+              <Slider label="Rows"    value={videoMatrixRows} onChange={(v) => apply({ type: "videoMatrix.setRows", value: v })} min={1} max={4} step={1} />
               <div className="flex items-center gap-2 mt-1">
                 <span className="t-label w-[55px] flex-shrink-0">YouTube</span>
                 <input
@@ -603,6 +615,14 @@ export default function Page() {
                   className="t-num flex-1 min-w-0 rounded-[6px] px-2 py-1 text-[0.65rem] neumorph-inset bg-transparent outline-none"
                 />
               </div>
+              {(videoMatrixCols * videoMatrixRows > 1) && (
+                <VideoMatrixCellEditor
+                  cols={videoMatrixCols}
+                  rows={videoMatrixRows}
+                  cells={videoMatrixCells}
+                  onCell={(index, kind, value) => apply({ type: "videoMatrix.setCell", index, kind, value })}
+                />
+              )}
             </>
           )}
         </Section>
@@ -804,6 +824,54 @@ function TopBtn({ children, active, onClick }: { children: React.ReactNode; acti
     >
       {children}
     </button>
+  );
+}
+
+// ── Per-cell editor for the LED-wall video matrix ──────────────────────────
+function VideoMatrixCellEditor({
+  cols, rows, cells, onCell,
+}: {
+  cols: number; rows: number;
+  cells: import("@/lib/store/configStore").VideoCell[];
+  onCell: (index: number, kind: "default" | "youtube" | "image", value: string) => void;
+}) {
+  return (
+    <div className="mt-2 grid gap-1.5" style={{ gridTemplateColumns: "1fr" }}>
+      <div className="t-label text-[0.6rem] opacity-70">Cells (row × col)</div>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {Array.from({ length: cols * rows }, (_, idx) => {
+          const cell = cells[idx] ?? { kind: "default" as const, value: "" };
+          const row = Math.floor(idx / cols);
+          const col = idx % cols;
+          return (
+            <div key={idx} className="rounded-[6px] neumorph-inset px-1.5 py-1 flex flex-col gap-1">
+              <div className="flex items-center gap-1 text-[0.55rem] opacity-50">
+                <span>r{row + 1}c{col + 1}</span>
+                <select
+                  value={cell.kind}
+                  onChange={(e) => onCell(idx, e.target.value as "default" | "youtube" | "image", cell.value)}
+                  className="ml-auto text-[0.6rem] bg-transparent outline-none"
+                >
+                  <option value="default">logo</option>
+                  <option value="youtube">yt id</option>
+                  <option value="image">image url</option>
+                </select>
+              </div>
+              {cell.kind !== "default" && (
+                <input
+                  type="text"
+                  value={cell.value}
+                  onChange={(e) => onCell(idx, cell.kind, e.target.value)}
+                  placeholder={cell.kind === "youtube" ? "YouTube ID" : "https:// or data:"}
+                  spellCheck={false}
+                  className="t-num text-[0.6rem] rounded-[4px] px-1.5 py-1 bg-transparent outline-none neumorph-inset"
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

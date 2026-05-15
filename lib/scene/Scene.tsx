@@ -3,7 +3,7 @@ import { Suspense, useMemo, useEffect, useRef } from "react";
 import { Environment, OrbitControls, ContactShadows, RoundedBox, Html } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useConfig, useBrandKit } from "@/lib/store/configStore";
+import { useConfig, useBrandKit, type VideoCell } from "@/lib/store/configStore";
 import type { PendantShape, FootprintShape } from "@/lib/schemas";
 import { Sofa, CoffeeTable, Plant } from "./Props";
 import { useFloorTextures, useWallTextures, useParquetTextures, useLogoTexture } from "./Textures";
@@ -13,6 +13,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
+import { ExtrudedSvgLogo, canExtrude } from "./SvgLogo";
 import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, auditPropOnFloor } from "./placementAudit";
 import { Flycam } from "./Flycam";
@@ -20,17 +21,22 @@ import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
 import type { BrandKit } from "@/lib/schemas";
 
-// Pruned to 3 (was 9) to keep the repo under a sensible size — each 4K HDRI
-// is ~25 MB. Re-add presets from polyhaven.com if you need more variety.
+// Four exterior HDRIs — each ~25 MB at 4K. Picked to give the room a sense
+// of "where is this building?" so the Environment-mode skybox actually
+// reads as somewhere specific.
 export const HDRI_OPTIONS = [
-  { id: "events_hall_interior_4k", label: "Events hall" },
-  { id: "newman_lobby_4k", label: "Newman lobby" },
-  { id: "studio_kominka_01_4k", label: "Kominka" },
+  { id: "canary_wharf_4k", label: "Canary Wharf" },
+  { id: "docklands_02_4k", label: "Docklands" },
+  { id: "lake_pier_4k", label: "Lake pier" },
+  { id: "schadowplatz_4k", label: "Schadowplatz" },
 ] as const;
 
+// hallMode now picks which HDRI is shown when no explicit `hdriId` is set.
+// "warehouse.dark" → Canary Wharf (the city-glass-tower default);
+// "gallery.light" → Docklands (a lighter exterior).
 const HDRI_BY_MODE: Record<"gallery.light" | "warehouse.dark", string> = {
-  "gallery.light": "newman_lobby_4k",
-  "warehouse.dark": "events_hall_interior_4k",
+  "gallery.light": "docklands_02_4k",
+  "warehouse.dark": "canary_wharf_4k",
 };
 
 /** How many wall-mounted TVs fit at the given booth width. Re-exported via
@@ -290,37 +296,41 @@ export function Scene() {
             extrusionM={logoExtrusionM}
             emissive={logoEmissive}
             placement={ledWallEnabled ? "flank-left" : "back-centre"}
+            shape={shape}
           />
         </Suspense>
 
-        {/* LED / video wall — emissive panel mounted on the back wall */}
-        {ledWallEnabled && (
-          <Suspense fallback={null}>
-            <LedWall
-              kit={kit}
-              backWallZ={-depthM / 2}
-              widthM={ledWallWidthM}
-              heightM={ledWallHeightM}
-              roomWidthM={widthM}
-              roomHeightM={wallHeightM}
-              platformHeightM={platformHeightM}
-              brightness={ledWallBrightness}
-            />
-            {/* Flanking monitors — two smaller screens on either side of the
-                LED wall, like the trade-show layout. They render a static
-                brand-tinted glow rather than a second video stream, so the
-                eye reads them as side-panel signage. */}
-            <FlankingMonitors
-              kit={kit}
-              backWallZ={-depthM / 2}
-              roomWidthM={widthM}
-              wallHeightM={wallHeightM}
-              platformHeightM={platformHeightM}
-              ledWallWidthM={ledWallWidthM}
-              ledWallHeightM={ledWallHeightM}
-            />
-          </Suspense>
-        )}
+        {/* LED / video wall — emissive panel mounted on the back wall. For
+            circular rooms we pull the back-wall Z inward onto the chord that
+            actually fits the assembly (LED + flanking monitors); otherwise
+            the panels poke through the curved wall at their x-edges. */}
+        {ledWallEnabled && (() => {
+          const assemblyHalfW = ledWallWidthM / 2 + 1.4 * 2 + 0.7; // led + ~2 monitors + gap
+          const ledBackZ = circularBackWallZ(shape, widthM, depthM, assemblyHalfW);
+          return (
+            <Suspense fallback={null}>
+              <LedWall
+                kit={kit}
+                backWallZ={ledBackZ}
+                widthM={ledWallWidthM}
+                heightM={ledWallHeightM}
+                roomWidthM={widthM}
+                roomHeightM={wallHeightM}
+                platformHeightM={platformHeightM}
+                brightness={ledWallBrightness}
+              />
+              <FlankingMonitors
+                kit={kit}
+                backWallZ={ledBackZ}
+                roomWidthM={widthM}
+                wallHeightM={wallHeightM}
+                platformHeightM={platformHeightM}
+                ledWallWidthM={ledWallWidthM}
+                ledWallHeightM={ledWallHeightM}
+              />
+            </Suspense>
+          );
+        })()}
 
         {/* The branded pendant stays in both modes — it hangs from the ceiling
             when enclosed, from the truss when open (see pendantYM above). */}
@@ -415,7 +425,10 @@ export function Scene() {
                 lengthM={tableLengthM}
                 widthM={tableWidthM}
                 position={[0, platformHeightM, 0]}
-                tintHex={kit.palette.primary}
+                // Table reads as a dark anchor against the brand-coloured
+                // chairs — avoids the Samsung-style "everything is one shade
+                // of brand blue" problem. Per-kit override available.
+                tintHex={kit.scene?.tableColor ?? kit.palette.neutralDark}
               />
               <ChairsAroundTable
                 count={chairCount}
@@ -666,6 +679,15 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
       t.needsUpdate = true;
     });
   }, [map, normalMap, aoMap, widthM, depthM]);
+  // SUBTLE parquet brand tint: the top-surface multiply colour washes the
+  // PBR diffuse map by ~30% toward the brand floor colour, so a Rolex room
+  // reads as warm-green-wood-grain instead of plain oak. The sides keep
+  // the full brand colour for stronger fascia signalling.
+  const parquetTint = useMemo(() => {
+    const base = new THREE.Color(sideColor);
+    const white = new THREE.Color("#ffffff");
+    return base.clone().lerp(white, 0.65).getStyle();
+  }, [sideColor]);
   // Circular room → a cylindrical plinth so the floor matches the cylindrical
   // wall ring instead of leaving uncarpeted slivers at the corners.
   if (shape === "circular") {
@@ -681,7 +703,7 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
             and the parquet AO doesn't z-fight with the side. */}
         <mesh receiveShadow rotation-x={-Math.PI / 2} position={[0, platformHeightM / 2 + 0.001, 0]}>
           <circleGeometry args={[radius, 64]} />
-          <meshPhysicalMaterial map={map} normalMap={normalMap} aoMap={aoMap} color={sideColor} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
+          <meshPhysicalMaterial map={map} normalMap={normalMap} aoMap={aoMap} color={parquetTint} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
         </mesh>
       </group>
     );
@@ -693,7 +715,7 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
       <boxGeometry args={[widthM, platformHeightM, depthM]} />
       <meshPhysicalMaterial attach="material-0" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-1" color={sideColor} roughness={0.7} metalness={0.04} />
-      <meshPhysicalMaterial attach="material-2" map={map} normalMap={normalMap} aoMap={aoMap} color={sideColor} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
+      <meshPhysicalMaterial attach="material-2" map={map} normalMap={normalMap} aoMap={aoMap} color={parquetTint} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
       <meshPhysicalMaterial attach="material-3" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-4" color={sideColor} roughness={0.7} metalness={0.04} />
       <meshPhysicalMaterial attach="material-5" color={sideColor} roughness={0.7} metalness={0.04} />
@@ -1399,11 +1421,23 @@ function CornerPillars({
 
 type LogoPlacement = "back-centre" | "flank-left" | "flank-right";
 
+/** For circular rooms: returns the back-wall Z value that places the chord
+ *  needed to host an element with the given half-width without the element
+ *  poking through the curved wall. For non-circular rooms returns the flat
+ *  back-wall z (`-depthM/2`). */
+function circularBackWallZ(shape: FootprintShape, widthM: number, depthM: number, halfWidthM: number): number {
+  if (shape !== "circular") return -depthM / 2;
+  const r = Math.min(widthM, depthM) / 2;
+  const hw = Math.min(halfWidthM, r * 0.92);
+  // 5cm safety margin pushed inward from the chord.
+  return -(Math.sqrt(Math.max(0, r * r - hw * hw)) - 0.05);
+}
+
 function BrandLogoOnWall({
-  kit, widthM, depthM, wallHeightM, platformHeightM, glow, extrusionM, emissive, placement = "back-centre",
+  kit, widthM, depthM, wallHeightM, platformHeightM, glow, extrusionM, emissive, placement = "back-centre", shape = "rectangle",
 }: {
   kit: BrandKit; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
-  glow: number; extrusionM: number; emissive: number; placement?: LogoPlacement;
+  glow: number; extrusionM: number; emissive: number; placement?: LogoPlacement; shape?: FootprintShape;
 }) {
   const invert = !!kit.scene?.invertLogo;
   const chroma = kit.scene?.logoChroma ?? "";
@@ -1417,13 +1451,18 @@ function BrandLogoOnWall({
   const boost = glow * 0.6;
 
   if (placement === "back-centre") {
+    const targetMaxW = Math.min(widthM * 0.45, 3.2);
+    // For round rooms, pull the sign forward onto a chord wide enough to
+    // host its visible width — keeps the sign inside the curved wall
+    // instead of poking past it at the edges.
+    const anchorZ = circularBackWallZ(shape, widthM, depthM, targetMaxW / 2) + 0.08;
     return (
       <LogoSign
         url={url}
         viewBox={kit.logos.primary.viewBox}
         widthM={widthM * 0.5}
         heightM={wallHeightM}
-        anchorZ={-depthM / 2 + 0.08}
+        anchorZ={anchorZ}
         y={yCentre}
         extrusionM={extrusionM}
         accent={accent}
@@ -1432,7 +1471,32 @@ function BrandLogoOnWall({
         emissive={emissive}
         invert={invert}
         chroma={chroma}
-        maxWidthM={Math.min(widthM * 0.45, 3.2)}
+        maxWidthM={targetMaxW}
+      />
+    );
+  }
+  // Circular rooms don't have flat side walls — fall back to the back
+  // centre placement (the side-wall LogoSignFlank would poke through the
+  // curve at the same z extent).
+  if (shape === "circular") {
+    const targetMaxW = Math.min(widthM * 0.45, 3.2);
+    const anchorZ = circularBackWallZ(shape, widthM, depthM, targetMaxW / 2) + 0.08;
+    return (
+      <LogoSign
+        url={url}
+        viewBox={kit.logos.primary.viewBox}
+        widthM={widthM * 0.5}
+        heightM={wallHeightM}
+        anchorZ={anchorZ}
+        y={yCentre}
+        extrusionM={extrusionM}
+        accent={accent}
+        sideTint={sideTint}
+        emissiveBoost={boost}
+        emissive={emissive}
+        invert={invert}
+        chroma={chroma}
+        maxWidthM={targetMaxW}
       />
     );
   }
@@ -1476,6 +1540,25 @@ function LogoSignFlank({
   const finalWidthM = targetHeightM * aspect;
   const d = Math.max(0.0001, extrusionM);
   const offsetOut = (x < 0 ? 1 : -1) * (0.04 + d / 2);
+  // SVG → in-engine extruded geometry; JPG → rasterised plane fallback.
+  if (canExtrude(url)) {
+    return (
+      <group position={[x + offsetOut, y, z]} rotation-y={rotY}>
+        <Suspense fallback={null}>
+          <ExtrudedSvgLogo
+            url={url}
+            widthM={finalWidthM}
+            heightM={targetHeightM}
+            depthM={d}
+            tintHex={invert ? "#FFFFFF" : sideTint}
+            emissive={Math.max(0, emissive - 0.5)}
+            metalness={0.4}
+            roughness={0.4}
+          />
+        </Suspense>
+      </group>
+    );
+  }
   return (
     <group position={[x + offsetOut, y, z]} rotation-y={rotY}>
       <mesh castShadow receiveShadow>
@@ -1556,6 +1639,31 @@ function LogoSign({
   const finalWidthM = targetHeightM * aspect;
   const d = Math.max(0.0001, extrusionM);
   const z = anchorZ + faceDir * (d / 2 + 0.005);
+
+  // ── In-engine SVG extrusion ────────────────────────────────────────────
+  // When the logo is an SVG, extrude the actual letter / mark shapes as 3D
+  // geometry instead of slapping a rasterised PNG onto a rectangular box.
+  // This is what the user means by "extrude the logo lettering / shape
+  // instead of the whole logo block". Falls back to the rasterised approach
+  // for JPGs (TMRW, Rolex) where alpha isn't reliable.
+  if (canExtrude(url)) {
+    return (
+      <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
+        <Suspense fallback={null}>
+          <ExtrudedSvgLogo
+            url={url}
+            widthM={finalWidthM}
+            heightM={targetHeightM}
+            depthM={d}
+            tintHex={invert ? "#FFFFFF" : sideTint}
+            emissive={Math.max(0, emissive - 0.5)}
+            metalness={0.4}
+            roughness={0.4}
+          />
+        </Suspense>
+      </group>
+    );
+  }
 
   return (
     <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
@@ -1785,8 +1893,81 @@ function LedWall({
   if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
   if (h169 > maxH) { h169 = maxH; w169 = h169 * (16 / 9); }
   const bezelD = 0.14;                       // the panel extrudes off the wall
+  const cols = useConfig((s) => s.videoMatrixCols);
+  const rows = useConfig((s) => s.videoMatrixRows);
+  const cells = useConfig((s) => s.videoMatrixCells);
+  // Sit just in front of the back wall's inner face (wall thickness 0.08),
+  // proud of it by the bezel's half-depth. Anchored ~0.5m off the floor so
+  // the (clamped) panel always clears the ceiling.
+  const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
+  const cy = platformHeightM + 0.5 + h169 / 2;
+  // Cell sub-bezel + inner content size — inset slightly so each cell reads
+  // as a distinct panel within the matrix.
+  const gutter = cols * rows > 1 ? 0.04 : 0;
+  const cellW = (w169 - gutter * (cols + 1)) / cols;
+  const cellH = (h169 - gutter * (rows + 1)) / rows;
+  return (
+    <group position={[0, cy, z]}>
+      {/* Outer dark bezel frame */}
+      <mesh receiveShadow castShadow>
+        <boxGeometry args={[w169, h169, bezelD]} />
+        <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
+      </mesh>
+
+      {Array.from({ length: cols * rows }, (_, idx) => {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        const cx = -w169 / 2 + gutter * (col + 1) + cellW * (col + 0.5);
+        const cy2 = h169 / 2 - gutter * (row + 1) - cellH * (row + 0.5);
+        const cell = cells[idx] ?? { kind: "default", value: "" };
+        return (
+          <MatrixCell
+            key={idx}
+            cell={cell}
+            isPrimary={idx === 0}
+            kit={kit}
+            x={cx}
+            y={cy2}
+            zFront={bezelD / 2 + 0.004}
+            cellW={cellW}
+            cellH={cellH}
+            brightness={brightness}
+          />
+        );
+      })}
+
+      {/* Small backlight for the room (soft brand glow into the booth) */}
+      <pointLight
+        position={[0, 0, 0.5]}
+        intensity={brightness * 4}
+        distance={Math.max(widthM, heightM) * 3}
+        decay={1.6}
+        color={kit.palette.primary}
+      />
+    </group>
+  );
+}
+
+// One cell of the LED-wall matrix. Renders a YouTube iframe, an image plane,
+// or (default) a brand-glow panel with the kit logo overlaid.
+function MatrixCell({
+  cell, isPrimary, kit, x, y, zFront, cellW, cellH, brightness,
+}: {
+  cell: VideoCell;
+  isPrimary: boolean;          // (0,0) cell — falls back to kit.scene.youtubeId when default
+  kit: BrandKit;
+  x: number; y: number; zFront: number;
+  cellW: number; cellH: number;
+  brightness: number;
+}) {
   const videoVolume = useConfig((s) => s.videoVolume);
   const videoMuted = useConfig((s) => s.videoMuted);
+  // Resolve cell kind — "default" → youtube if primary + kit has id, else logo.
+  const resolved: VideoCell = cell.kind === "default"
+    ? (isPrimary && kit.scene?.youtubeId
+        ? { kind: "youtube", value: kit.scene.youtubeId }
+        : { kind: "image", value: "" })  // empty value triggers logo fallback below
+    : cell;
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   useEffect(() => {
     const w = iframeRef.current?.contentWindow;
@@ -1796,42 +1977,19 @@ function LedWall({
       w.postMessage(JSON.stringify({ event: "command", func: "setVolume", args: [videoVolume] }), "*");
     } catch { /* cross-origin throws — ignore */ }
   }, [videoMuted, videoVolume]);
-  // Sit just in front of the back wall's inner face (wall thickness 0.08),
-  // proud of it by the bezel's half-depth. Anchored ~0.5m off the floor so
-  // the (clamped) panel always clears the ceiling.
-  const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
-  const cy = platformHeightM + 0.5 + h169 / 2;
-  return (
-    <group position={[0, cy, z]}>
-      {/* Outer dark bezel frame — extruded off the back wall */}
-      <mesh receiveShadow castShadow>
-        <boxGeometry args={[w169, h169, bezelD]} />
-        <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
-      </mesh>
-
-      {/* YouTube iframe via drei Html — only if a YouTube ID is set on the kit */}
-      {kit.scene?.youtubeId ? (
-        <Html
-          transform
-          position={[0, 0, bezelD / 2 + 0.006]}
-          distanceFactor={1}
-          occlude="blending"
-          style={{ pointerEvents: "auto" }}
-          // Sized in CSS pixels but `transform` makes 1 metre ≈ 1 unit;
-          // so we set the iframe to match the panel size in world units * a fixed
-          // pixel multiplier. Quality is acceptable for the demo target.
-        >
+  if (resolved.kind === "youtube" && resolved.value) {
+    const ytId = resolved.value;
+    return (
+      <group position={[x, y, 0]}>
+        <Html transform position={[0, 0, zFront]} distanceFactor={1} occlude="blending" style={{ pointerEvents: "auto" }}>
           <iframe
             ref={iframeRef}
-            width={Math.round(w169 * 200)}
-            height={Math.round(h169 * 200)}
-            src={`https://www.youtube-nocookie.com/embed/${kit.scene.youtubeId}?autoplay=1&mute=1&loop=1&playlist=${kit.scene.youtubeId}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&disablekb=1&iv_load_policy=3&fs=0`}
-            title={`${kit.name} video`}
+            width={Math.round(cellW * 200)}
+            height={Math.round(cellH * 200)}
+            src={`https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1&disablekb=1&iv_load_policy=3&fs=0`}
+            title="cell video"
             allow="autoplay; encrypted-media; picture-in-picture"
             referrerPolicy="strict-origin-when-cross-origin"
-            // pointer-events:none kills hover-spawned bottom controls + the
-            // YouTube logo click target. The video keeps playing because
-            // autoplay is set in the URL; users never need to click on it.
             style={{ border: "0", display: "block", pointerEvents: "none" }}
             onLoad={(e) => {
               const w = (e.currentTarget as HTMLIFrameElement).contentWindow;
@@ -1843,51 +2001,37 @@ function LedWall({
             }}
           />
         </Html>
+      </group>
+    );
+  }
+  // Image or default-logo fallback
+  return (
+    <group position={[x, y, 0]}>
+      <mesh position={[0, 0, zFront]}>
+        <planeGeometry args={[cellW, cellH]} />
+        <meshStandardMaterial
+          color={kit.palette.primary}
+          emissive={new THREE.Color(kit.palette.primary)}
+          emissiveIntensity={brightness * 0.9}
+          toneMapped={false}
+        />
+      </mesh>
+      {resolved.kind === "image" && resolved.value ? (
+        <MatrixCellImage url={resolved.value} cellW={cellW} cellH={cellH} zFront={zFront + 0.003} />
       ) : (
-        <>
-          {/* Emissive fallback panel — brand colour wash */}
-          <mesh position={[0, 0, bezelD / 2 + 0.004]}>
-            <planeGeometry args={[w169, h169]} />
-            <meshStandardMaterial
-              color={kit.palette.primary}
-              emissive={new THREE.Color(kit.palette.primary)}
-              emissiveIntensity={brightness * 0.9}
-              toneMapped={false}
-            />
-          </mesh>
-          {/* Accent vignette — soft secondary colour wash on the bottom */}
-          <mesh position={[0, -h169 * 0.32, bezelD / 2 + 0.006]}>
-            <planeGeometry args={[w169 * 0.96, h169 * 0.35]} />
-            <meshStandardMaterial
-              color={kit.palette.accent}
-              emissive={new THREE.Color(kit.palette.accent)}
-              emissiveIntensity={brightness * 0.6}
-              transparent
-              opacity={0.55}
-              toneMapped={false}
-            />
-          </mesh>
-          {/* Brand logo overlaid — positioned upper-right ("WORLD OF ..." vibe) */}
-          <LedWallContent
-            kit={kit}
-            widthM={w169}
-            heightM={h169}
-            brightness={brightness}
-          />
-          {/* Tile bezel grid — 4 cols × 3 rows lines */}
-          <TileBezelGrid widthM={w169} heightM={h169} cols={4} rows={3} />
-        </>
+        <LedWallContent kit={kit} widthM={cellW} heightM={cellH} brightness={brightness} />
       )}
-
-      {/* Small backlight for the room (soft brand glow into the booth) */}
-      <pointLight
-        position={[0, 0, 0.5]}
-        intensity={brightness * 4}
-        distance={Math.max(widthM, heightM) * 3}
-        decay={1.6}
-        color={kit.palette.primary}
-      />
     </group>
+  );
+}
+
+function MatrixCellImage({ url, cellW, cellH, zFront }: { url: string; cellW: number; cellH: number; zFront: number }) {
+  const tex = useWallGraphic(url);
+  return (
+    <mesh position={[0, 0, zFront]}>
+      <planeGeometry args={[cellW * 0.95, cellH * 0.93]} />
+      <meshStandardMaterial map={tex} toneMapped={false} emissive={new THREE.Color("#ffffff")} emissiveMap={tex} emissiveIntensity={0.6} />
+    </mesh>
   );
 }
 
@@ -2333,6 +2477,27 @@ function PendantFaceLogo({
   // Boost emissive so the logo reads through the windowed-wall glass
   // (transmission=0.95 takes a noticeable bite out of distant emissives).
   const glassReadable = emissive * 2.2;
+  if (canExtrude(url)) {
+    // Pendant face logo as a real 3D extrusion. No backing-box plate — the
+    // extruded letters / mark catch the pendant body colour through HDR
+    // reflections and the brand reads from any angle.
+    return (
+      <group position={position} rotation-y={rotY}>
+        <Suspense fallback={null}>
+          <ExtrudedSvgLogo
+            url={url}
+            widthM={w}
+            heightM={h}
+            depthM={d}
+            tintHex={invert ? "#FFFFFF" : sideTint}
+            emissive={Math.max(0, glassReadable - 0.6)}
+            metalness={0.5}
+            roughness={0.35}
+          />
+        </Suspense>
+      </group>
+    );
+  }
   return (
     <group position={position} rotation-y={rotY}>
       <mesh castShadow>

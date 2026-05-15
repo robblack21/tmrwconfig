@@ -143,7 +143,18 @@ const google: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "4JVtVgl8oEs", wallColor: "#F1F3F4", wallMotif: "dots", cupColor: "#FBBC05" },
+  // Google goes full Material Design — saturated red walls, yellow floor
+  // wash, green chairs, and a blue accent. Maximum brand playfulness, not
+  // a conservative office. The cup carries the wordmark gold.
+  scene: {
+    youtubeId: "4JVtVgl8oEs",
+    wallColor: "#EA4335",
+    floorColor: "#FDEBBA",
+    wallMotif: "dots",
+    cupColor: "#FBBC05",
+    tableColor: "#202124",
+    windowTrimColor: "#4285F4",
+  },
 };
 
 // ── Louis Vuitton ────────────────────────────────────────────────────────────
@@ -162,7 +173,9 @@ const louisvuitton: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "ring"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "zCLDyNVBjRE", wallColor: "#2A1D14", floorColor: "#3D2B1F", wallMotif: "monogram", cupColor: "#E8D9B8" },
+  // Louis Vuitton — light maple-wood table (#7B5D40) against the dark
+  // walls + cream chairs for the boutique-atelier feel.
+  scene: { youtubeId: "zCLDyNVBjRE", wallColor: "#2A1D14", floorColor: "#3D2B1F", wallMotif: "monogram", cupColor: "#E8D9B8", tableColor: "#7B5D40" },
 };
 
 // ── Mercedes-Benz ────────────────────────────────────────────────────────────
@@ -276,7 +289,8 @@ const rolex: BrandKit = {
   id: "brand.rolex",
   name: "Rolex",
   // Rolex gold chairs — match the crown gilt against the deep-green walls.
-  palette: { primary: "#006039", secondary: "#C8A45C", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#0A2A1C" },
+  // neutralDark stays nearly black so the table reads as a dark anchor.
+  palette: { primary: "#006039", secondary: "#C8A45C", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#08130D" },
   derivation: "analogous",
   // TODO(asset-team): Rolex SVG ships with a baked white plate. For table-top
   // and chair-back decals we want a clean transparent-PNG of just the crown +

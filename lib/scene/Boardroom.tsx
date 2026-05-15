@@ -285,12 +285,14 @@ export function ChairsAroundTable({
 // chair. Cups are linked to chair count + table dims so they re-flow when
 // the user expands the boardroom.
 
-const CUP_HEIGHT_M = 0.095;
-const CUP_RADIUS_M = 0.042;
+const CUP_HEIGHT_M = 0.105;            // matches the GLB's normalised height
+const CUP_RADIUS_M = 0.04;             // for the logo decal placement
 // Tucked well inboard of the table edge — the cup is in front of the diner
 // like a place-setting, not perched on the lip. Increased from 0.32m so the
 // brand decal isn't fighting the edge highlight.
 const CUP_INSET_M = 0.48;
+const CUP_GLB_URL = asset("/glb/props/coffeecup.glb");
+useGLTF.preload(CUP_GLB_URL);
 
 export function BrandedCupsOnTable({
   count, tableLengthM, tableWidthM, position, kit,
@@ -334,43 +336,43 @@ function BrandedCoffeeCup({
   const chroma = kit.scene?.logoChroma ?? "";
   const tex = useLogoTexture(url ?? "", invert, chroma);
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
-  // Decal: keep small relative to the cup radius so a flat plane on a 4cm
+  // Decal: keep small relative to the cup radius so a flat plane on the
   // cylinder doesn't bow noticeably at the edges (chord-to-arc error).
-  // Cap decalW at 90% of the cup radius (≈37mm); height follows aspect.
-  const decalW = CUP_RADIUS_M * 0.9;
-  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.45);
+  const decalW = CUP_RADIUS_M * 0.85;
+  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.4);
   // Cup body: kit-specific cup colour wins; falls back to the kit's
-  // neutralLight ceramic-cream. Updated via `kit.scene.cupColor` in
-  // lib/fixtures/brandKits.ts.
+  // neutralLight ceramic-cream.
   const cupColor = kit.scene?.cupColor ?? kit.palette.neutralLight ?? "#F4F4F4";
+  // Real coffee-cup GLB (saucer + cup with handle). Tinted to the kit's
+  // cupColor — the user shipped a clean GLB that takes a tint cleanly.
+  const gltf = useGLTF(CUP_GLB_URL);
+  const node = useMemo(() => {
+    const s = (gltf?.scene ?? new THREE.Group()).clone(true);
+    s.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) {
+        m.castShadow = true; m.receiveShadow = true;
+        const mat = m.material as THREE.MeshStandardMaterial | undefined;
+        if (mat && "color" in mat) {
+          const next = mat.clone();
+          next.color = new THREE.Color(cupColor);
+          m.material = next;
+        }
+      }
+    });
+    return normalizeForBase(s, CUP_HEIGHT_M);
+  }, [gltf, cupColor]);
   // Two decals — front and back — so the logo reads from any seat without
   // becoming a busy orbit of marks around the cup.
   const facings = [0, Math.PI];
   return (
     <group position={position} rotation-y={rotationY}>
-      {/* Saucer — a thin disc under the cup */}
-      <mesh position={[0, 0.003, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[CUP_RADIUS_M * 1.55, CUP_RADIUS_M * 1.55, 0.006, 32]} />
-        <meshPhysicalMaterial color={cupColor} roughness={0.35} metalness={0.05} clearcoat={0.6} clearcoatRoughness={0.2} />
-      </mesh>
-      {/* Cup body — a slightly tapered cylinder */}
-      <mesh position={[0, CUP_HEIGHT_M / 2 + 0.006, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[CUP_RADIUS_M, CUP_RADIUS_M * 0.82, CUP_HEIGHT_M, 28, 1, false]} />
-        <meshPhysicalMaterial color={cupColor} roughness={0.32} metalness={0.05} clearcoat={0.7} clearcoatRoughness={0.18} />
-      </mesh>
-      {/* Coffee — a thin dark disc inside the cup top */}
-      <mesh position={[0, CUP_HEIGHT_M + 0.004, 0]}>
-        <cylinderGeometry args={[CUP_RADIUS_M * 0.92, CUP_RADIUS_M * 0.92, 0.002, 28]} />
-        <meshStandardMaterial color="#2a1808" roughness={0.4} />
-      </mesh>
-      {/* Logo decals — two, front and back. The plane is held just barely
-          off the cup surface (0.2mm) so it doesn't z-fight but also doesn't
-          read as floating proud. */}
+      <primitive object={node} />
       {url && facings.map((rotY, i) => {
-        const r = CUP_RADIUS_M * 0.93 + 0.0002;
+        const r = CUP_RADIUS_M * 0.92 + 0.0008;
         return (
           <group key={i} rotation-y={rotY}>
-            <mesh position={[0, CUP_HEIGHT_M / 2 + 0.012, r]}>
+            <mesh position={[0, CUP_HEIGHT_M * 0.55, r]}>
               <planeGeometry args={[decalW, decalH]} />
               <meshStandardMaterial
                 map={tex}
