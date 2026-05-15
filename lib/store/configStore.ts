@@ -197,8 +197,10 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tableVariant: "main",
   chairVariant: "studio",
   ledWallEnabled: true,
-  ledWallWidthM: 12.0,          // big back-wall screen — LedWall clamps it to fit
-  ledWallHeightM: 6.75,         // 12 / 6.75 = 16:9
+  ledWallWidthM: 5.6,           // 16:9 default — sized for a typical M-tier
+                                // back wall (12m wide), leaves room for the
+                                // flanking monitors on either side.
+  ledWallHeightM: 3.15,         // 5.6 / 3.15 = 16:9
   ledWallBrightness: 1.4,
   hallMode: "warehouse.dark",
   hdriId: "",
@@ -350,11 +352,29 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "ledWall.setWidth": {
-        set({ ledWallWidthM: clamp(intent.value, 2.0, 48.0) });
+        // Clamp to room dimensions — the LED panel never wants to push past
+        // 85% of the wall width (leaves room for flanking monitors), and is
+        // bounded below at 1.5m so the slider isn't useless on tight rooms.
+        const maxW = Math.max(2, Math.min(s.widthM * 0.85, 12));
+        const w = clamp(intent.value, 1.5, maxW);
+        // Lock 16:9 — if the new width pushes height past the wall, scale
+        // down together so we never produce a "cinema screen" overshoot.
+        const wallCap = Math.max(1.0, s.wallHeightM - 1.0);
+        const h169 = w * 9 / 16;
+        const finalW = h169 > wallCap ? wallCap * 16 / 9 : w;
+        const finalH = Math.min(h169, wallCap);
+        set({ ledWallWidthM: finalW, ledWallHeightM: finalH });
         break;
       }
       case "ledWall.setHeight": {
-        set({ ledWallHeightM: clamp(intent.value, 1.2, 27.0) });
+        const wallCap = Math.max(1.0, s.wallHeightM - 1.0);
+        const h = clamp(intent.value, 1.0, wallCap);
+        // Lock 16:9 the other way too — height drives width.
+        const maxW = Math.max(2, Math.min(s.widthM * 0.85, 12));
+        const w169 = h * 16 / 9;
+        const finalH = w169 > maxW ? maxW * 9 / 16 : h;
+        const finalW = Math.min(w169, maxW);
+        set({ ledWallHeightM: finalH, ledWallWidthM: finalW });
         break;
       }
       case "ledWall.setBrightness": {

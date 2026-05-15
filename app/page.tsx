@@ -583,8 +583,12 @@ export default function Page() {
           <ToggleRow label="Video wall" value={ledWallEnabled} onToggle={(v) => apply({ type: "ledWall.setEnabled", enabled: v })} />
           {ledWallEnabled && (
             <>
-              <Slider label="Width"      value={ledWallWidthM}     onChange={(v) => apply({ type: "ledWall.setWidth",      value: v })} min={2.0} max={48.0} step={0.5} unit="m" />
-              <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.2} max={27.0} step={0.5} unit="m" />
+              {/* Slider max tracks the room: 85% of width / wall-height - 1m,
+                  capped at sensible product limits. Avoids the "ginormous
+                  cinema screen" outcome by never letting the slider push past
+                  what fits. The reducer also locks 16:9 on both axes. */}
+              <Slider label="Width"      value={ledWallWidthM}     onChange={(v) => apply({ type: "ledWall.setWidth",      value: v })} min={1.5} max={Math.min(widthM * 0.85, 12)} step={0.25} unit="m" />
+              <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.0} max={Math.max(1.0, wallHeightM - 1.0)} step={0.25} unit="m" />
               <Slider label="Brightness" value={ledWallBrightness} onChange={(v) => apply({ type: "ledWall.setBrightness", value: v })} min={0}   max={2.5} step={0.05} />
               <Slider label="Volume"     value={videoVolume}       onChange={(v) => apply({ type: "video.setVolume", value: v })} min={0} max={100} step={1} />
               <div className="flex items-center gap-2 mt-1">

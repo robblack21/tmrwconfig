@@ -91,6 +91,17 @@ function renderProp(p: KitProp, booth: BoothDims, key: number) {
 
 // ── GLB helpers (shared with furniture + props) ──────────────────────────────
 
+/** Per-mesh exclusion patterns. We keep two name-pattern lists:
+ *   • `EXCLUDE_NAME`: outright noise (helper / shadow / collider / ground).
+ *   • `OUTLIER_NAME`: meshes that *might* be legitimate but are commonly
+ *     used as ground-reflection / under-tray planes that sit BELOW the
+ *     visible body. The Tesla GLB ships `glass_glass.0_0` /
+ *     `glass_glass.1_0` (un-named generic glass) — these are reflection
+ *     planes, not the windscreen. We only exclude them from the bbox
+ *     measurement; they STILL render. */
+const EXCLUDE_NAME = /(helper|debug|bound|collider|navmesh|shadowproxy|shadow|ground|floor|plane_floor|backdrop|reflection_plane|undertray)/i;
+const OUTLIER_NAME = /^(glass_glass(\.\d+)?|chassis_glass|reflect(ion)?_glass)/i;
+
 export function meshOnlyBox(scene: THREE.Object3D): THREE.Box3 {
   // GLBs ship a lot of noise: invisible armatures, empty groups, lights,
   // skinned bind-pose poses with bones way below the visible geometry. Restrict
@@ -102,7 +113,8 @@ export function meshOnlyBox(scene: THREE.Object3D): THREE.Box3 {
   scene.traverseVisible((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.geometry) return;
-    if (/(helper|debug|bound|collider|navmesh|shadowproxy|shadow|ground|floor|plane_floor|backdrop)/i.test(m.name)) return;
+    if (EXCLUDE_NAME.test(m.name)) return;
+    if (OUTLIER_NAME.test(m.name)) return;
     tmp.setFromObject(m, true);
     if (isFinite(tmp.min.x)) out.union(tmp);
   });
@@ -132,11 +144,15 @@ export function normalizeForBase(scene: THREE.Object3D, heightM: number, yLift =
   // dips below the measured visible bbox and the model sinks into the floor.
   // Re-measure the FULL bbox (no name filter); if the dip is small enough to
   // plausibly be real geometry rather than a far-off helper, lift to clear it.
+  //
+  // 1.5m threshold tolerates the Tesla GLB's `glass_glass.*` reflection plane
+  // which dips up to ~1.3m below the body after scaling — still real geometry
+  // (just inverted), and we'd rather lift than leave the car half-embedded.
   scene.updateMatrixWorld(true);
   const fullBox = new THREE.Box3().setFromObject(scene, true);
   if (isFinite(fullBox.min.y) && fullBox.min.y < yLift) {
     const dip = yLift - fullBox.min.y;
-    if (dip < 0.5) scene.position.y += dip;
+    if (dip < 1.5) scene.position.y += dip;
   }
   return scene;
 }

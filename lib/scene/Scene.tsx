@@ -306,6 +306,19 @@ export function Scene() {
               platformHeightM={platformHeightM}
               brightness={ledWallBrightness}
             />
+            {/* Flanking monitors — two smaller screens on either side of the
+                LED wall, like the trade-show layout. They render a static
+                brand-tinted glow rather than a second video stream, so the
+                eye reads them as side-panel signage. */}
+            <FlankingMonitors
+              kit={kit}
+              backWallZ={-depthM / 2}
+              roomWidthM={widthM}
+              wallHeightM={wallHeightM}
+              platformHeightM={platformHeightM}
+              ledWallWidthM={ledWallWidthM}
+              ledWallHeightM={ledWallHeightM}
+            />
           </Suspense>
         )}
 
@@ -325,6 +338,18 @@ export function Scene() {
               ringVertical={pendantRingVertical}
               colorOverride={pendantColor}
               kit={kit}
+            />
+            {/* Pool of light cast straight down by the pendant onto the table,
+                making the fixture read as a working downlight rather than
+                purely decorative. Two spotlights aimed at the long axis of
+                the table so a long boardroom table is evenly lit. */}
+            <PendantDownlight
+              centerXZ={[0, 0]}
+              yPendant={pendantYM}
+              yFloor={platformHeightM + 0.74}
+              widthM={pendantWidthM}
+              depthM={pendantDepthM}
+              color={kit.palette.neutralLight}
             />
           </TimedReveal>
         )}
@@ -552,6 +577,57 @@ function BackWallSconce({ widthM, depthM, wallHeightM, accent, intensity }: { wi
         distance={4}
         decay={2}
         color={accent}
+      />
+    </group>
+  );
+}
+
+// ── Pendant downlight ──────────────────────────────────────────────────────
+// Casts a soft pool of warm light from the pendant fixture straight down onto
+// the table. Pair of spotlights along the long axis ensures even coverage for
+// long boardroom tables — for a square pendant they overlap and read as one.
+function PendantDownlight({
+  centerXZ, yPendant, yFloor, widthM, depthM, color,
+}: {
+  centerXZ: [number, number]; yPendant: number; yFloor: number;
+  widthM: number; depthM: number; color: string;
+}) {
+  const [cx, cz] = centerXZ;
+  // Split into two spots along the long axis so a 4m-long pendant still pools
+  // light onto a 3.6m table evenly. For short / square pendants the pair sits
+  // close to the centre and acts like one.
+  const longAxis = depthM > widthM ? "z" : "x";
+  const longSpan = Math.max(widthM, depthM);
+  const offset = Math.min(longSpan * 0.25, 0.8);
+  const seats = longAxis === "z"
+    ? [[cx, cz - offset], [cx, cz + offset]]
+    : [[cx - offset, cz], [cx + offset, cz]];
+  // Pendant lights are notional 0.05m below the body — aimed at the table top.
+  const lampY = yPendant - 0.05;
+  return (
+    <group>
+      {seats.map(([sx, sz], i) => (
+        <spotLight
+          key={i}
+          position={[sx, lampY, sz]}
+          target-position={[sx, yFloor, sz]}
+          angle={0.7}
+          penumbra={0.85}
+          intensity={6}
+          decay={1.4}
+          distance={Math.max(2.5, lampY - yFloor + 1.5)}
+          color={color}
+          castShadow={false}
+        />
+      ))}
+      {/* Soft warm fill — wraps the pool with a warm glow so the under-pendant
+          area reads as a "lit" zone, not just a hard spot. */}
+      <pointLight
+        position={[cx, (lampY + yFloor) / 2, cz]}
+        intensity={1.8}
+        distance={Math.max(widthM, depthM) * 1.8}
+        decay={2}
+        color={color}
       />
     </group>
   );
@@ -1659,6 +1735,76 @@ function LedWall({
   );
 }
 
+// ── Flanking monitors ──────────────────────────────────────────────────────
+// Two smaller side panels on the same back wall, left and right of the LED
+// video wall. Static brand-glow signage rather than a second video stream so
+// they read as "supporting screens" — like the trade-show layout.
+function FlankingMonitors({
+  kit, backWallZ, roomWidthM, wallHeightM, platformHeightM, ledWallWidthM, ledWallHeightM,
+}: {
+  kit: BrandKit; backWallZ: number; roomWidthM: number; wallHeightM: number;
+  platformHeightM: number; ledWallWidthM: number; ledWallHeightM: number;
+}) {
+  // Each monitor is ~45% the LED wall width, on a 16:9 panel. We carve them
+  // out of whatever space remains on the back wall after the LED screen.
+  const gap = 0.35;
+  const remainingPerSide = (roomWidthM - ledWallWidthM) / 2 - gap;
+  if (remainingPerSide < 0.9) return null;     // not enough wall to host a sensible side screen
+  const w = Math.min(remainingPerSide - 0.2, ledWallWidthM * 0.48);
+  const h = Math.min(w * 9 / 16, wallHeightM - 1.4);
+  if (h < 0.5) return null;
+  const bezelD = 0.1;
+  const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
+  // Centre vertically on the LED wall so the row of screens reads as a band.
+  const ledCy = platformHeightM + 0.5 + ledWallHeightM / 2;
+  const cx = ledWallWidthM / 2 + gap + w / 2;
+  return (
+    <group>
+      {[-1, 1].map((sx) => (
+        <FlankingMonitor key={sx} kit={kit} x={sx * cx} y={ledCy} z={z} w={w} h={h} bezelD={bezelD} />
+      ))}
+    </group>
+  );
+}
+
+function FlankingMonitor({ kit, x, y, z, w, h, bezelD }: { kit: BrandKit; x: number; y: number; z: number; w: number; h: number; bezelD: number }) {
+  const url = kit.logos.primary.rasterUrl;
+  return (
+    <group position={[x, y, z]}>
+      {/* Dark bezel housing */}
+      <mesh receiveShadow castShadow>
+        <boxGeometry args={[w, h, bezelD]} />
+        <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
+      </mesh>
+      {/* Glow panel — brand primary, soft */}
+      <mesh position={[0, 0, bezelD / 2 + 0.004]}>
+        <planeGeometry args={[w * 0.96, h * 0.94]} />
+        <meshStandardMaterial
+          color={kit.palette.primary}
+          emissive={new THREE.Color(kit.palette.primary)}
+          emissiveIntensity={0.6}
+          toneMapped={false}
+        />
+      </mesh>
+      {/* Brand logo overlay (~40% of monitor height) */}
+      {url && (
+        <Suspense fallback={null}>
+          <LedWallLogo
+            url={url}
+            viewBox={kit.logos.primary.viewBox}
+            widthM={w}
+            heightM={h}
+            brightness={0.9}
+            tint={kit.palette.neutralLight}
+            invert={!!kit.scene?.invertLogo}
+            chroma={kit.scene?.logoChroma ?? ""}
+          />
+        </Suspense>
+      )}
+    </group>
+  );
+}
+
 function LedWallContent({ kit, widthM, heightM, brightness }: { kit: BrandKit; widthM: number; heightM: number; brightness: number }) {
   const url = kit.logos.primary.rasterUrl;
   if (!url) return null;
@@ -1985,6 +2131,9 @@ function PendantRingUndersideLogo({
   let w = availW * 0.9;
   let h = w / aspect;
   if (h > availH * 0.9) { h = availH * 0.9; w = h * aspect; }
+  // Same glass-readable boost as PendantFaceLogo so the logo pops through
+  // the windowed wall's transmission attenuation.
+  const glassReadable = emissive * 2.2;
   return (
     <mesh position={[0, y, 0]} rotation-x={-Math.PI / 2}>
       <planeGeometry args={[w, h]} />
@@ -1992,7 +2141,7 @@ function PendantRingUndersideLogo({
         map={tex}
         emissiveMap={tex}
         emissive={new THREE.Color("#ffffff")}
-        emissiveIntensity={emissive}
+        emissiveIntensity={glassReadable}
         color="#ffffff"
         transparent
         toneMapped={false}
@@ -2025,19 +2174,42 @@ function PendantFaceLogo({
   let h = w / aspect;
   if (h > availH * 0.85) { h = availH * 0.85; w = h * aspect; }
   const d = Math.max(0.0001, extrusionM * 0.6);
+  // Boost emissive so the logo reads through the windowed-wall glass
+  // (transmission=0.95 takes a noticeable bite out of distant emissives).
+  const glassReadable = emissive * 2.2;
   return (
     <group position={position} rotation-y={rotY}>
       <mesh castShadow>
         <boxGeometry args={[w, h, d]} />
         <meshPhysicalMaterial color={sideTint} roughness={0.45} metalness={0.05} clearcoat={0.3} />
       </mesh>
+      {/* Front-face decal */}
       <mesh position={[0, 0, d / 2 + 0.0008]}>
         <planeGeometry args={[w, h]} />
         <meshStandardMaterial
           map={tex}
           emissiveMap={tex}
           emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={emissive}
+          emissiveIntensity={glassReadable}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Back-face decal mirrored 180° around Y so when a camera looks at the
+          pendant from the OPPOSITE side of this face (through the room's
+          opposing glass wall), it still sees the brand. Slightly dimmer than
+          the front so the front still feels primary. */}
+      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={glassReadable * 0.8}
           color="#ffffff"
           transparent
           toneMapped={false}
