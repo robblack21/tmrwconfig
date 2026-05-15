@@ -127,11 +127,13 @@ function BoardroomChair({
   // model faces +Z (offset = 0), the back is at local -Z.
   const backZ = offset === Math.PI ? 0.32 : -0.32;
   return (
-    <group position={position} rotation-y={rotationY + offset}>
-      <primitive object={node} />
-      {/* Small brand decal on the back of the chair backrest, visible
-          from outside the table circle. Sits ~0.95m up + ~0.3m behind the
-          chair pivot (the chair's seat origin). */}
+    <group position={position} rotation-y={rotationY + offset} userData={{ kind: "chair" }}>
+      {/* Wrapped in an inner group with userData so the long-press editor's
+          raycast walk finds "chair" even if the picked mesh happens to be
+          the back-logo decal plane (which has no userData of its own). */}
+      <group userData={{ kind: "chair" }}>
+        <primitive object={node} />
+      </group>
       {kit && <ChairBackLogoDecal kit={kit} backZ={backZ} />}
     </group>
   );
@@ -161,7 +163,7 @@ function ChairBackLogoDecal({ kit, backZ }: { kit: BrandKit; backZ: number }) {
   const frontZ = backZ > 0 ? backZ - 0.08 : backZ + 0.08;
   const frontY = 0.92 - h * 0.5;
   return (
-    <mesh position={[0, frontY, frontZ]} rotation-y={rotY + Math.PI}>
+    <mesh position={[0, frontY, frontZ]} rotation-y={rotY + Math.PI} userData={{ kind: "chair" }}>
       <planeGeometry args={[w, h]} />
       <meshStandardMaterial
         map={tex}
@@ -332,8 +334,14 @@ export function BrandedCupsOnTable({
     return out;
   }, [count, tableLengthM, tableWidthM]);
 
+  // Drop the cup an extra 0.04m below "table top + 0.001" so the GLB's
+  // SAUCER footprint sinks INTO the table and the cup BODY reads as
+  // sitting directly on the surface (user reported floating, which is
+  // the saucer-on-table illusion making the cup BODY look 4-5cm above
+  // the wood — a no-saucer place setting reads better at conference
+  // angles). The cup's internal bbox bottom is the SAUCER edge.
   return (
-    <group position={[position[0], position[1] + TABLE_HEIGHT_M + 0.001, position[2]]}>
+    <group position={[position[0], position[1] + TABLE_HEIGHT_M - 0.04, position[2]]}>
       {slots.map((s, i) => (
         <BrandedCoffeeCup key={i} position={s.pos} rotationY={s.rot} kit={kit} />
       ))}

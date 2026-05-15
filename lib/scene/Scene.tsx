@@ -531,13 +531,19 @@ export function Scene() {
 
       {/* OrbitControls owns no static target — CameraSync is the single source
           of truth for the orbit pivot, so it stays synced to the look-at. */}
+      {/* Stiff "strafing" feel was the combo of low rotate speed (0.85) and
+          heavy damping (0.08 → drag carries on after release for ~12 frames).
+          Bumped rotate speed and dropped damping factor for a more direct
+          one-to-one feel. Mouse buttons set explicitly so left-drag is
+          ALWAYS rotate (was the same default but explicit is safer). */}
       <OrbitControls
         makeDefault
         enableDamping
-        dampingFactor={0.08}
-        zoomSpeed={0.3}
-        rotateSpeed={0.85}
-        panSpeed={0.7}
+        dampingFactor={0.22}
+        zoomSpeed={0.6}
+        rotateSpeed={1.4}
+        panSpeed={1.0}
+        mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
         minDistance={2}
         maxDistance={80}
         maxPolarAngle={Math.PI / 2 - 0.04}
