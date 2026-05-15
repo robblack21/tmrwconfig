@@ -3,7 +3,7 @@ import { Suspense, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { BrandKit } from "@/lib/schemas";
-import { auditHeroAssetClearance } from "./placementAudit";
+import { auditHeroAssetClearance, auditHeroVsWalls, clampProportionate } from "./placementAudit";
 
 // ── Per-kit hero-asset manifest ──────────────────────────────────────────────
 // Each brand "room" can show a handful of brand-hero GLBs (the models in
@@ -58,15 +58,30 @@ function renderProp(p: KitProp, booth: BoothDims, key: number) {
   // The manifest's y is an offset above the floor — y=0 sits on the platform,
   // y>0 floats the prop (used for the TMRW earth hovering mid-room).
   const floorY = booth.platformHeightM + (p.position[1] ?? 0);
+  // Proportionate-size guard — never let a hero asset exceed 35% of the
+  // shorter room dimension. Keeps cars car-sized and watches watch-sized
+  // regardless of the heightM the manifest requests.
+  const heightM = clampProportionate(p.heightM, booth.widthM, booth.depthM, { maxFraction: 0.35 });
+  // Wall-clearance clamp — pull the prop in from the walls so it doesn't
+  // occlude the wall geometry. Half-extent ≈ heightM so this is conservative
+  // (most heroes are tall+thin or roughly cubic).
+  const half = heightM * 0.55;
+  const fitted = auditHeroVsWalls({
+    label: p.url.split("/").pop() ?? "heroAsset",
+    x: p.position[0], z: p.position[2],
+    halfW: half, halfD: half,
+    roomWidthM: booth.widthM, roomDepthM: booth.depthM,
+    clearance: 0.15,
+  });
   return (
     <HeroAsset
       key={key}
       url={p.url}
-      position={[p.position[0], floorY, p.position[2]]}
+      position={[fitted.suggestedX, floorY, fitted.suggestedZ]}
       rotationY={p.rotationY ?? 0}
       rotationX={p.rotationX ?? 0}
       rotationZ={p.rotationZ ?? 0}
-      heightM={p.heightM}
+      heightM={heightM}
       plinthHeightM={p.plinthHeightM}
       plinthColor={p.plinthColor}
       meshFilter={p.meshFilter}

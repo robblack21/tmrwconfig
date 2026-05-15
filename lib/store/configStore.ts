@@ -246,31 +246,28 @@ export const useConfig = create<ConfigState>((set, get) => ({
         // Atrium / pavilion is naturally a large-room shape — bump to the L
         // tier when picked unless the user is already there. Other shapes
         // keep whatever tier the user previously chose.
-        const nextTier = intent.shape === "pavilion" && s.tier !== "L" ? "L" : s.tier;
-        const b = bounds(intent.shape, nextTier);
-        set({
-          shape: intent.shape,
-          tier: nextTier,
-          widthM: b.widthM.default,
-          depthM: b.depthM.default,
-        });
+        const seedTier = intent.shape === "pavilion" && s.tier !== "L" ? "L" : s.tier;
+        const b = bounds(intent.shape, seedTier);
+        // Then run fit-to-table — if the table doesn't fit the new shape's
+        // default room (e.g. circular S would clip a long table), grow.
+        const fit = fitRoomForTable(intent.shape, seedTier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM);
+        set({ shape: intent.shape, ...fit });
         break;
       }
       case "footprint.setTier": {
         const b = bounds(s.shape, intent.tier);
-        set({
-          tier: intent.tier,
-          widthM: b.widthM.default,
-          depthM: b.depthM.default,
-        });
+        const fit = fitRoomForTable(s.shape, intent.tier, b.widthM.default, b.depthM.default, s.tableLengthM, s.tableWidthM);
+        set(fit);
         break;
       }
       case "footprint.set": {
         const b = bounds(s.shape, s.tier);
-        set({
-          widthM: clamp(intent.widthM, b.widthM.min, b.widthM.max),
-          depthM: clamp(intent.depthM, b.depthM.min, b.depthM.max),
-        });
+        // Honour the user's explicit slider input but never let the room
+        // shrink below what the table needs — chairs must stay inside.
+        const nextW = clamp(intent.widthM, b.widthM.min, b.widthM.max);
+        const nextD = clamp(intent.depthM, b.depthM.min, b.depthM.max);
+        const fit = fitRoomForTable(s.shape, s.tier, nextW, nextD, s.tableLengthM, s.tableWidthM);
+        set(fit);
         break;
       }
       case "layout.setWallHeight": {

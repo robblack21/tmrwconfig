@@ -278,6 +278,9 @@ const rolex: BrandKit = {
   // Rolex gold chairs — match the crown gilt against the deep-green walls.
   palette: { primary: "#006039", secondary: "#C8A45C", accent: "#C8A45C", neutralLight: "#F0EDE3", neutralDark: "#0A2A1C" },
   derivation: "analogous",
+  // TODO(asset-team): Rolex SVG ships with a baked white plate. For table-top
+  // and chair-back decals we want a clean transparent-PNG of just the crown +
+  // wordmark so the chroma-key fallback isn't needed at small scale.
   logos: logoSet("/logos/Rolex_logo.svg", [0, 0, 105, 60]),
   typography: fonts("Cormorant Garamond", "Inter"),
   motifs: [],
@@ -322,6 +325,10 @@ const tmrw: BrandKit = {
   // with the near-black walls and the saturated brand-blue accent.
   palette: { primary: "#0A0A0A", secondary: "#D7D2C6", accent: "#3D7EFF", neutralLight: "#F4F2ED", neutralDark: "#000000" },
   derivation: "monochrome",
+  // TODO(asset-team): tmrwwhite.jpg is a JPG with baked-white background.
+  // Replace with a transparent PNG (or SVG) of the TMRW mark so the chair-
+  // back / table-top decals don't need a chroma-key (which leaves soft
+  // halos at small sizes).
   logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
   typography: fonts("Inter", "Inter"),
   motifs: [],
@@ -452,11 +459,12 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
     { file: "rolex_datejust.glb", heightM: 0.34, plinth: true },
     {
       file: "invicta_watch.glb",
-      // Big presentation watch tipped onto its side and hung against the
-      // back-right wall like a giant timepiece. Tipping it -π/2 around X
-      // makes the dial face the room.
-      heightM: 1.45,
-      pos: [3.4, 1.7, -3.6],
+      // Presentation watch tipped onto its side and hung against the back-
+      // right wall like a regular clock. heightM = dial diameter after the
+      // rotation. Keep it at clock-on-the-wall scale (≈0.55m) so it reads
+      // as a wall fixture, not as a billboard.
+      heightM: 0.55,
+      pos: [3.6, 1.85, -3.85],
       rotationY: Math.PI,
       rotationX: -Math.PI / 2,
     },

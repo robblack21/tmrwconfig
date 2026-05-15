@@ -94,8 +94,8 @@ export function BoardroomTable({
 // ── Chair ────────────────────────────────────────────────────────────────────
 
 function BoardroomChair({
-  url, position, rotationY, tintHex,
-}: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string }) {
+  url, position, rotationY, tintHex, kit,
+}: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string; kit?: BrandKit }) {
   const gltf = useGLTF(url);
   const node = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
@@ -114,7 +114,110 @@ function BoardroomChair({
   return (
     <group position={position} rotation-y={rotationY + CHAIR_FACE_OFFSET}>
       <primitive object={node} />
+      {/* Small brand decal on the back of the chair backrest, visible
+          from outside the table circle. Sits ~0.95m up + ~0.3m behind the
+          chair pivot (the chair's seat origin). */}
+      {kit && <ChairBackLogoDecal kit={kit} />}
     </group>
+  );
+}
+
+function ChairBackLogoDecal({ kit }: { kit: BrandKit }) {
+  const url = kit.logos.primary.rasterUrl;
+  if (!url) return null;
+  const invert = !!kit.scene?.invertLogo;
+  const chroma = kit.scene?.logoChroma ?? "";
+  const tex = useLogoTexture(url, invert, chroma);
+  const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
+  const w = 0.12;
+  const h = w / aspect;
+  return (
+    <mesh position={[0, 0.92, -0.305]} rotation-y={Math.PI}>
+      <planeGeometry args={[w, Math.min(h, 0.1)]} />
+      <meshStandardMaterial
+        map={tex}
+        emissiveMap={tex}
+        emissive={new THREE.Color("#ffffff")}
+        emissiveIntensity={0.35}
+        color="#ffffff"
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+        alphaTest={0.04}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+  );
+}
+
+// Table-top brand decal — sits flat at the head + foot of the table so
+// you read the brand once you sit down. Two plates per table; small so
+// they don't fight the centrepiece cups.
+export function TableTopBrandDecals({
+  position, tableLengthM, tableWidthM, kit,
+}: { position: [number, number, number]; tableLengthM: number; tableWidthM: number; kit: BrandKit }) {
+  const url = kit.logos.primary.rasterUrl;
+  if (!url) return null;
+  return (
+    <group position={[position[0], position[1] + TABLE_HEIGHT_M + 0.001, position[2]]}>
+      <TableTopDecal kit={kit} url={url} z={tableLengthM / 2 - 0.22} />
+      <TableTopDecal kit={kit} url={url} z={-(tableLengthM / 2 - 0.22)} flipped />
+      <TableTopCentreDecal kit={kit} url={url} tableLengthM={tableLengthM} tableWidthM={tableWidthM} />
+    </group>
+  );
+}
+
+function TableTopDecal({ kit, url, z, flipped = false }: { kit: BrandKit; url: string; z: number; flipped?: boolean }) {
+  const invert = !!kit.scene?.invertLogo;
+  const chroma = kit.scene?.logoChroma ?? "";
+  const tex = useLogoTexture(url, invert, chroma);
+  const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
+  const w = 0.22;
+  const h = w / aspect;
+  return (
+    <mesh position={[0, 0.002, z]} rotation-x={-Math.PI / 2} rotation-z={flipped ? Math.PI : 0}>
+      <planeGeometry args={[w, Math.min(h, 0.14)]} />
+      <meshStandardMaterial
+        map={tex}
+        emissiveMap={tex}
+        emissive={new THREE.Color("#ffffff")}
+        emissiveIntensity={0.15}
+        color="#ffffff"
+        transparent
+        toneMapped={false}
+        depthWrite={false}
+        alphaTest={0.04}
+      />
+    </mesh>
+  );
+}
+
+function TableTopCentreDecal({ kit, url, tableLengthM, tableWidthM }: { kit: BrandKit; url: string; tableLengthM: number; tableWidthM: number }) {
+  // Dim watermark-style centre logo — sized to the table footprint but
+  // emissive low so it doesn't compete with the cups + meeting paperwork.
+  const invert = !!kit.scene?.invertLogo;
+  const chroma = kit.scene?.logoChroma ?? "";
+  const tex = useLogoTexture(url, invert, chroma);
+  const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
+  const wMax = Math.min(tableWidthM * 0.55, tableLengthM * 0.25);
+  const w = wMax;
+  const h = Math.min(w / aspect, tableWidthM * 0.4);
+  return (
+    <mesh position={[0, 0.001, 0]} rotation-x={-Math.PI / 2}>
+      <planeGeometry args={[w, h]} />
+      <meshStandardMaterial
+        map={tex}
+        emissiveMap={tex}
+        emissive={new THREE.Color("#ffffff")}
+        emissiveIntensity={0.05}
+        color="#ffffff"
+        transparent
+        opacity={0.55}
+        toneMapped={false}
+        depthWrite={false}
+        alphaTest={0.04}
+      />
+    </mesh>
   );
 }
 
@@ -123,10 +226,11 @@ function BoardroomChair({
 // chair offset off the table edge and rotated to face the table centre.
 
 export function ChairsAroundTable({
-  count, tableLengthM, tableWidthM, chairVariant, position, tintHex,
+  count, tableLengthM, tableWidthM, chairVariant, position, tintHex, kit,
 }: {
   count: number; tableLengthM: number; tableWidthM: number;
   chairVariant: ChairVariant; position: [number, number, number]; tintHex?: string;
+  kit?: BrandKit;
 }) {
   const url = CHAIR_VARIANTS[chairVariant];
   const slots = useMemo(() => {
@@ -151,7 +255,7 @@ export function ChairsAroundTable({
   return (
     <group position={position}>
       {slots.map((s, i) => (
-        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} />
+        <BoardroomChair key={i} url={url} position={s.pos} rotationY={s.rot} tintHex={tintHex} kit={kit} />
       ))}
     </group>
   );

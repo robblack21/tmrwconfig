@@ -13,7 +13,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
-import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable } from "./Boardroom";
+import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, auditPropOnFloor } from "./placementAudit";
 import { Flycam } from "./Flycam";
 import { PerfMonitor } from "./PerfMonitor";
@@ -211,10 +211,10 @@ export function Scene() {
       </Suspense>
 
       <Suspense fallback={null}>
-        <PlatformBlock widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} />
+        <PlatformBlock widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} shape={shape} />
       </Suspense>
 
-      <PlatformEdgeAccent widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} color={trimColor} />
+      <PlatformEdgeAccent widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} color={trimColor} shape={shape} />
 
       {roomIndices.map((ri) => (
         <group key={`room-${ri}`} position={[xOffsetFor(ri), 0, 0]}>
@@ -399,6 +399,7 @@ export function Scene() {
                 chairVariant={chairVariant}
                 position={[0, platformHeightM, 0]}
                 tintHex={kit.palette.secondary}
+                kit={kit}
               />
               {/* Custom branded merch — one logo-emblazoned coffee cup at
                   every seat, count-driven so they re-flow with the chairs. */}
@@ -407,6 +408,14 @@ export function Scene() {
                 tableLengthM={tableLengthM}
                 tableWidthM={tableWidthM}
                 position={[0, platformHeightM, 0]}
+                kit={kit}
+              />
+              {/* Brand decals on the table top — head + foot ovals plus a
+                  faint watermark in the centre — and on each chair back. */}
+              <TableTopBrandDecals
+                position={[0, platformHeightM, 0]}
+                tableLengthM={tableLengthM}
+                tableWidthM={tableWidthM}
                 kit={kit}
               />
             </Suspense>
@@ -550,7 +559,7 @@ function BackWallSconce({ widthM, depthM, wallHeightM, accent, intensity }: { wi
 
 // ── Floor ───────────────────────────────────────────────────────────────────
 
-function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle }: { widthM: number; depthM: number; platformHeightM: number; sideColor: string; floorStyle: "herringbone" | "diagonal" | "rectangular" }) {
+function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle, shape = "rectangle" }: { widthM: number; depthM: number; platformHeightM: number; sideColor: string; floorStyle: "herringbone" | "diagonal" | "rectangular"; shape?: FootprintShape }) {
   const { map, normalMap, aoMap } = useParquetTextures(floorStyle);
   // Size-aware tiling — one parquet tile per ~2 m of floor, so the planks
   // keep their proportion regardless of room size, and max anisotropy so the
@@ -564,6 +573,26 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle 
       t.needsUpdate = true;
     });
   }, [map, normalMap, aoMap, widthM, depthM]);
+  // Circular room → a cylindrical plinth so the floor matches the cylindrical
+  // wall ring instead of leaving uncarpeted slivers at the corners.
+  if (shape === "circular") {
+    const radius = Math.min(widthM, depthM) / 2;
+    return (
+      <group position={[0, platformHeightM / 2, 0]}>
+        <mesh receiveShadow castShadow>
+          <cylinderGeometry args={[radius, radius, platformHeightM, 64, 1, false]} />
+          <meshPhysicalMaterial color={sideColor} roughness={0.7} metalness={0.04} />
+        </mesh>
+        {/* Top cap carries the parquet — separate mesh so we don't have to
+            re-uv the cylinder. Slight Y lift so it sits proud of the body
+            and the parquet AO doesn't z-fight with the side. */}
+        <mesh receiveShadow rotation-x={-Math.PI / 2} position={[0, platformHeightM / 2 + 0.001, 0]}>
+          <circleGeometry args={[radius, 64]} />
+          <meshPhysicalMaterial map={map} normalMap={normalMap} aoMap={aoMap} color={sideColor} roughness={0.4} metalness={0.05} clearcoat={0.45} clearcoatRoughness={0.25} envMapIntensity={1.2} />
+        </mesh>
+      </group>
+    );
+  }
   // 6 face materials on a BoxGeometry: parquet on the top (+Y), brand-coloured on the rest.
   // Order in three: +X -X +Y -Y +Z -Z
   return (
@@ -1998,9 +2027,19 @@ function GlassVitrine({ position, widthM, depthM, heightM, glowColor }: { positi
 
 // ── Other dressing ──────────────────────────────────────────────────────────
 
-function PlatformEdgeAccent({ widthM, depthM, platformHeightM, color }: { widthM: number; depthM: number; platformHeightM: number; color: string }) {
+function PlatformEdgeAccent({ widthM, depthM, platformHeightM, color, shape = "rectangle" }: { widthM: number; depthM: number; platformHeightM: number; color: string; shape?: FootprintShape }) {
   const y = platformHeightM + 0.005;
   const t = 0.02;
+  if (shape === "circular") {
+    const radius = Math.min(widthM, depthM) / 2;
+    const tube = t * 0.8;
+    return (
+      <mesh position={[0, y, 0]} rotation-x={-Math.PI / 2}>
+        <torusGeometry args={[radius - tube * 0.5, tube, 12, 96]} />
+        <meshStandardMaterial emissive={new THREE.Color(color)} emissiveIntensity={1.4} color="#000" toneMapped={false} />
+      </mesh>
+    );
+  }
   const make = (w: number, d: number, pos: [number, number, number], key: string) => (
     <mesh key={key} position={pos}>
       <boxGeometry args={[w, t, d]} />

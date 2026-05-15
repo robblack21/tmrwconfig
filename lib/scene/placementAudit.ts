@@ -91,3 +91,43 @@ export function auditHeroAssetClearance(opts: {
   }
   return true;
 }
+
+/** Hero-asset proportionate-size cap. Returns the input `heightM` clamped
+ *  so the prop never exceeds a sensible fraction of the room (default 35%
+ *  of min(width, depth) — so a 1.4m car in a 4m room stays a car instead of
+ *  swallowing the floor, and a watch on a wall stays watch-sized). */
+export function clampProportionate(heightM: number, widthM: number, depthM: number, opts?: { maxFraction?: number; absoluteMax?: number }): number {
+  const max = (opts?.maxFraction ?? 0.35) * Math.min(widthM, depthM);
+  return Math.min(heightM, opts?.absoluteMax ?? Number.POSITIVE_INFINITY, max);
+}
+
+/** Hero-asset wall-clearance audit. Given the prop's world xz position
+ *  and its bbox half-extent, warn when it pokes past the room's interior
+ *  bounds (or sits within 5cm of a wall). Also clamps to a recommended
+ *  inset so callers can re-position if they want. */
+export function auditHeroVsWalls(opts: {
+  label: string;
+  x: number;
+  z: number;
+  halfW: number;
+  halfD: number;
+  roomWidthM: number;
+  roomDepthM: number;
+  clearance?: number;
+}): { ok: boolean; suggestedX: number; suggestedZ: number } {
+  const { label, x, z, halfW, halfD, roomWidthM, roomDepthM, clearance = 0.05 } = opts;
+  const xLim = roomWidthM / 2 - halfW - clearance;
+  const zLim = roomDepthM / 2 - halfD - clearance;
+  const suggestedX = Math.max(-xLim, Math.min(xLim, x));
+  const suggestedZ = Math.max(-zLim, Math.min(zLim, z));
+  const ok = Math.abs(suggestedX - x) < 1e-3 && Math.abs(suggestedZ - z) < 1e-3;
+  if (!ok && process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[placementAudit] ${label} pokes through a wall — recommended ` +
+      `(${suggestedX.toFixed(2)}, ${suggestedZ.toFixed(2)}) instead of ` +
+      `(${x.toFixed(2)}, ${z.toFixed(2)}) in ${roomWidthM}×${roomDepthM} room.`,
+    );
+  }
+  return { ok, suggestedX, suggestedZ };
+}
