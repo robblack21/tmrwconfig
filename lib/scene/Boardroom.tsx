@@ -102,22 +102,50 @@ export function BoardroomTable({
 
 // ── Chair ────────────────────────────────────────────────────────────────────
 
+/** Tag a chair material by its likely role from its name. Used so the
+ *  brand-tint only paints the FABRIC (seat / backrest / upholstery) and
+ *  leaves the FRAME (legs / metal base / chrome) alone — otherwise the
+ *  whole chair becomes one monochrome lozenge. For ambiguous materials
+ *  (single-material chairs like the executive variant) we still tint,
+ *  but at reduced strength via a lerp toward the original colour. */
+function classifyChairMaterialRole(name: string): "fabric" | "frame" | "ambiguous" {
+  const n = name.toLowerCase();
+  if (/(leg|metal|chrome|steel|base|frame|leather worn brown)/.test(n)) return "frame";
+  // `Leather Worn Brown` is the upholstery on ny_studio (despite the
+  // ambiguous wording — empirically THIS is the fabric, the legs material
+  // is literally named "chair_legs").
+  if (n === "leather worn brown") return "fabric";
+  if (/(fabric|cloth|upholst|seat|cushion|back|chairs?$)/.test(n)) return "fabric";
+  return "ambiguous";
+}
+
 function BoardroomChair({
   url, position, rotationY, tintHex, kit, variant,
 }: { url: string; position: [number, number, number]; rotationY: number; tintHex?: string; kit?: BrandKit; variant: ChairVariant }) {
   const gltf = useGLTF(url);
   const node = useMemo(() => {
     const s = (gltf?.scene ?? new THREE.Group()).clone(true);
+    const tint = tintHex ? new THREE.Color(tintHex) : null;
     s.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        m.castShadow = true; m.receiveShadow = true;
-        m.userData = { ...m.userData, kind: "chair" };
-        if (tintHex) {
-          const mat = m.material as THREE.MeshStandardMaterial | undefined;
-          if (mat && "color" in mat) { const nx = mat.clone(); nx.color = new THREE.Color(tintHex); m.material = nx; }
-        }
+      if (!m.isMesh) return;
+      m.castShadow = true; m.receiveShadow = true;
+      m.userData = { ...m.userData, kind: "chair" };
+      if (!tint) return;
+      const mat = m.material as THREE.MeshStandardMaterial | undefined;
+      if (!mat || !("color" in mat)) return;
+      const role = classifyChairMaterialRole(mat.name ?? "");
+      if (role === "frame") return;                                // leave legs / metal alone
+      const next = mat.clone();
+      if (role === "fabric") {
+        next.color = tint.clone();
+      } else {
+        // ambiguous: lerp the existing colour 60% toward the brand tint so
+        // single-material chairs still pick up the brand without fully
+        // monochroming the legs + arms.
+        next.color = next.color.clone().lerp(tint, 0.6);
       }
+      m.material = next;
     });
     return normalizeForBase(s, CHAIR_HEIGHT_M);
   }, [gltf, tintHex]);

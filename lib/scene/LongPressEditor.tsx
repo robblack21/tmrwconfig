@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { useConfig, useBrandKit } from "@/lib/store/configStore";
+import { generateTexture, isFalConfigured, type FalModel } from "@/lib/services/falTexture";
 
 // ── Long-press surface editor ──────────────────────────────────────────────
 // Hold the pointer on a wall / floor / pendant / chair etc for 400ms without
@@ -277,9 +278,84 @@ export function LongPressModal({ kind, screenX, screenY, onClose }: {
             </div>
           </>
         )}
+
+        {/* AI texture generation — only for walls + floor for now. The
+            client posts to a Cloudflare worker (see workers/fal-proxy/)
+            that holds the FAL_KEY and returns an image URL. The URL gets
+            written into kit.scene.wallGraphic so the back wall picks
+            it up. */}
+        {(kind === "walls" || kind === "floor") && (
+          <FalTextureSection kitId={kit.id} />
+        )}
       </div>
     </>,
     document.body,
+  );
+}
+
+/** AI texture generation — POSTs to the fal.ai proxy worker, then writes
+ *  the resulting image URL into `kit.scene.wallGraphic` via the existing
+ *  intent. Disabled (with a clear notice) when NEXT_PUBLIC_FAL_PROXY_URL
+ *  isn't set, so devs running locally don't see a broken affordance. */
+function FalTextureSection({ kitId }: { kitId: string }) {
+  const apply = useConfig((s) => s.apply);
+  const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState<FalModel>("fal-ai/patina");
+  const [status, setStatus] = useState<"idle" | "loading" | "error" | "done">("idle");
+  const [err, setErr] = useState<string | null>(null);
+  const configured = isFalConfigured();
+  return (
+    <div className="mt-3 pt-2.5 border-t border-[color:var(--color-border-soft)]">
+      <div className="t-label uppercase tracking-wider text-[0.6rem] opacity-70 mb-1.5">Generate texture · AI</div>
+      {!configured ? (
+        <div className="t-label text-[0.6rem] opacity-60 leading-snug">
+          Set <code>NEXT_PUBLIC_FAL_PROXY_URL</code> on the build to enable.
+          See <code>workers/fal-proxy/</code> for the deploy template.
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-1 mb-1.5">
+            {([
+              { id: "fal-ai/patina",                            label: "patina" },
+              { id: "fal-ai/gpt-image-1/text-to-image/byok",    label: "gpt-image" },
+              { id: "fal-ai/flux/schnell",                      label: "flux" },
+            ] as const).map((m) => {
+              const selected = model === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setModel(m.id as FalModel)}
+                  className={"t-label text-[0.55rem] flex-1 py-1 rounded-[5px] transition-all " + (selected ? "neumorph-inset text-[color:var(--color-accent)]" : "neumorph-raised text-[color:var(--color-text-soft)]")}
+                >{m.label}</button>
+              );
+            })}
+          </div>
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="brushed concrete with subtle warm undertones, tileable"
+            className="t-num text-[0.65rem] w-full px-2 py-1.5 rounded-[5px] neumorph-inset bg-transparent outline-none"
+          />
+          <button
+            disabled={!prompt.trim() || status === "loading"}
+            onClick={async () => {
+              setStatus("loading"); setErr(null);
+              const result = await generateTexture(prompt.trim(), { model });
+              if (!result.ok) {
+                setErr(result.error); setStatus("error"); return;
+              }
+              apply({ type: "kit.setWallGraphic", kitId, url: result.url });
+              setStatus("done");
+            }}
+            className={"mt-1.5 w-full t-label text-[0.65rem] py-1.5 rounded-[5px] transition-all " + ((!prompt.trim() || status === "loading") ? "neumorph-inset opacity-50" : "neumorph-raised text-[color:var(--color-accent)] hover:opacity-90")}
+          >
+            {status === "loading" ? "Generating…" : status === "done" ? "Applied ✓" : "Generate"}
+          </button>
+          {err && <div className="t-label text-[0.55rem] mt-1 opacity-70 leading-snug" style={{ color: "var(--color-accent)" }}>{err}</div>}
+        </>
+      )}
+    </div>
   );
 }
 
