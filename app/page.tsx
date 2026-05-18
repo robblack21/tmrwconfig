@@ -11,6 +11,8 @@ import { HDRI_OPTIONS } from "@/lib/scene/Scene";
 import { asset } from "@/lib/assetPath";
 import { SceneLoadingOverlay } from "@/lib/scene/SceneReveal";
 import { HomeView } from "@/lib/views/HomeView";
+import { Wizard } from "@/lib/wizard";
+import { meetingRoomSizes, meetingRoomDesignLines, applyWizardResult } from "@/lib/wizard-presets/meetingRooms";
 import { deriveInventory, prettyAssetName } from "@/lib/bom/derive";
 import type { InventoryGroup } from "@/lib/bom/derive";
 import { useConfig, useBrandKit, useTierBounds } from "@/lib/store/configStore";
@@ -51,7 +53,7 @@ export default function Page() {
   const kit = useBrandKit();
   const tierBounds = useTierBounds();
 
-  const [view, setView] = useState<"home" | "config">("home");
+  const [view, setView] = useState<"home" | "wizard" | "config">("home");
   const [chromeTheme, setChromeTheme] = useState<"day" | "night">("day");
   useEffect(() => {
     document.documentElement.dataset.theme = chromeTheme;
@@ -91,7 +93,40 @@ export default function Page() {
           chromeTheme={chromeTheme}
           onToggleChrome={() => setChromeTheme(chromeTheme === "day" ? "night" : "day")}
           onChoose={(kitId) => {
+            // "Create new" tile (brand.new) opens the wizard rather than
+            // dropping straight into the blank kit — the wizard collects
+            // the logo + colours + design line and dispatches them all
+            // before transitioning into the configurator.
+            if (kitId === "brand.new") {
+              setView("wizard");
+              return;
+            }
             apply({ type: "brandKit.apply", kitId });
+            setView("config");
+          }}
+        />
+      </main>
+    );
+  }
+
+  if (view === "wizard") {
+    return (
+      <main className="relative h-screen w-screen overflow-hidden bg-[color:var(--color-bg)]">
+        <Wizard
+          sizes={meetingRoomSizes}
+          designLines={meetingRoomDesignLines}
+          ratePerSqm={1800}
+          copy={{
+            brandName: "TMRW Foundation",
+            sizeStep:    { title: "Choose your meeting-room size" },
+            logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll extract the brand colours automatically." },
+            artworkStep: { title: "Hero artwork", hint: "An image for the back-wall LED panel. Skip for the default video." },
+            coloursStep: { labels: ["Walls", "Trim", "Accent"] },
+            summaryStep: { cta: "Generate room →" },
+          }}
+          onClose={() => setView("home")}
+          onComplete={(result) => {
+            applyWizardResult(apply, result);
             setView("config");
           }}
         />
