@@ -10,6 +10,7 @@ export type {
   WizardSize,
   WizardDesignLine,
   WizardResult,
+  WizardState,
   WizardCopy,
   WizardProps,
 } from "./types";

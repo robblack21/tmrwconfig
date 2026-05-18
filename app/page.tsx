@@ -11,8 +11,8 @@ import { HDRI_OPTIONS } from "@/lib/scene/Scene";
 import { asset } from "@/lib/assetPath";
 import { SceneLoadingOverlay } from "@/lib/scene/SceneReveal";
 import { HomeView } from "@/lib/views/HomeView";
-import { Wizard } from "@/lib/wizard";
-import { meetingRoomSizes, meetingRoomDesignLines, applyWizardResult } from "@/lib/wizard-presets/meetingRooms";
+import { Wizard, type WizardState } from "@/lib/wizard";
+import { meetingRoomSizes, meetingRoomDesignLines, applyWizardResult, applyWizardState } from "@/lib/wizard-presets/meetingRooms";
 import { deriveInventory, prettyAssetName } from "@/lib/bom/derive";
 import type { InventoryGroup } from "@/lib/bom/derive";
 import { useConfig, useBrandKit, useTierBounds } from "@/lib/store/configStore";
@@ -85,6 +85,9 @@ export default function Page() {
   // Resizable BOM dims (user can drag-resize from a handle when expanded)
   const [bomW, setBomW] = useState(420);
   const [bomH, setBomH] = useState(520);
+  // Tracks the previous WizardState so applyWizardState can diff and only
+  // re-dispatch the intents that actually changed each tick.
+  const wizardPrevRef = useRef<WizardState | null>(null);
 
   if (view === "home") {
     return (
@@ -112,21 +115,34 @@ export default function Page() {
   if (view === "wizard") {
     return (
       <main className="relative h-screen w-screen overflow-hidden bg-[color:var(--color-bg)]">
+        {/* Live 3D preview behind the wizard — every selection in the
+            wizard panel pulses through onState → applyWizardState, so
+            the room visibly builds itself as the user progresses. */}
+        <SceneCanvas />
         <Wizard
           sizes={meetingRoomSizes}
           designLines={meetingRoomDesignLines}
           ratePerSqm={1800}
+          layout="panel"
           copy={{
-            brandName: "TMRW Foundation",
-            sizeStep:    { title: "Choose your meeting-room size" },
-            logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll extract the brand colours automatically." },
-            artworkStep: { title: "Hero artwork", hint: "An image for the back-wall LED panel. Skip for the default video." },
+            brandName: "home",
+            sizeStep:    { title: "Choose a meeting-room size" },
+            logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll extract the colours." },
+            artworkStep: { title: "Hero artwork", hint: "Image for the back-wall video matrix." },
             coloursStep: { labels: ["Walls", "Trim", "Accent"] },
             summaryStep: { cta: "Generate room →" },
           }}
-          onClose={() => setView("home")}
+          onClose={() => {
+            wizardPrevRef.current = null;
+            setView("home");
+          }}
+          onState={(state) => {
+            applyWizardState(apply, state, wizardPrevRef.current ?? undefined);
+            wizardPrevRef.current = state;
+          }}
           onComplete={(result) => {
             applyWizardResult(apply, result);
+            wizardPrevRef.current = null;
             setView("config");
           }}
         />

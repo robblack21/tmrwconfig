@@ -12,7 +12,7 @@
 // routes the user from the home view straight into the configurator
 // with the resulting kit applied.
 
-import type { WizardSize, WizardDesignLine, WizardResult } from "@/lib/wizard";
+import type { WizardSize, WizardDesignLine, WizardResult, WizardState } from "@/lib/wizard";
 import type { useConfig } from "@/lib/store/configStore";
 import { tmrwBlank } from "@/lib/fixtures/brandKits";
 
@@ -117,6 +117,61 @@ const designLineEffects: Record<string, DesignLinePatch> = {
     wallTextureEnabled: false,
   },
 };
+
+/**
+ * Live-build dispatcher. Fires every time the wizard state changes
+ * (after each step / selection edit). Idempotent — re-dispatches the
+ * full visible state every tick. The store de-dupes equal sets so
+ * repeated identical calls are cheap.
+ *
+ * Two-phase: the FIRST tick (step 0, no logo yet) clears the slate by
+ * applying the blank TMRW kit; subsequent ticks layer in size /
+ * colours / logo / artwork / design-line as the user picks them.
+ */
+export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: WizardState): void {
+  // First call — initialise to the blank kit + suppress hero props.
+  if (!prev) {
+    apply({ type: "brandKit.apply", kitId: tmrwBlank.id });
+  }
+
+  // Size — always applied (it's chosen on step 0, default to the first
+  // size card). Re-dispatching the same widthM × depthM is a no-op.
+  if (!prev || prev.size.id !== state.size.id) {
+    apply({ type: "footprint.set", widthM: state.size.widthM, depthM: state.size.depthM });
+  }
+
+  // Colours — re-dispatch when any swatch changes.
+  if (!prev || prev.colours.some((c, i) => c !== state.colours[i])) {
+    const [primary, , accent] = state.colours;
+    apply({ type: "colourOverride.set", surface: "walls", value: primary });
+    apply({ type: "colourOverride.set", surface: "trim",  value: accent });
+  }
+
+  // Logo override.
+  if (state.logoUrl && (!prev || prev.logoUrl !== state.logoUrl)) {
+    apply({ type: "kit.setLogoOverride", kitId: tmrwBlank.id, dataUrl: state.logoUrl });
+  } else if (!state.logoUrl && prev?.logoUrl) {
+    apply({ type: "kit.clearLogoOverride", kitId: tmrwBlank.id });
+  }
+
+  // Hero artwork on the back wall.
+  if (state.artworkUrl && (!prev || prev.artworkUrl !== state.artworkUrl)) {
+    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: state.artworkUrl });
+  } else if (!state.artworkUrl && prev?.artworkUrl) {
+    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: null });
+  }
+
+  // Design line — refresh the scene defaults when the user picks a new one.
+  if (!prev || prev.designLine.id !== state.designLine.id) {
+    const patch = designLineEffects[state.designLine.id] ?? designLineEffects.warm!;
+    apply({ type: "scene.setFloorStyle", value: patch.floorStyle });
+    apply({ type: "boardroom.setChairVariant", value: patch.chairVariant });
+    apply({ type: "boardroom.setTableVariant", value: patch.tableVariant });
+    apply({ type: "pendant.setShape", shape: patch.pendantShape });
+    apply({ type: "layout.setPlantCount", value: patch.plantCount });
+    apply({ type: "room.setWallTextureEnabled", value: patch.wallTextureEnabled });
+  }
+}
 
 export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   // 1. Start from the blank TMRW template — gives a clean palette without

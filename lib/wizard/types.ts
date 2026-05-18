@@ -64,6 +64,19 @@ export type WizardCopy = {
   summaryStep?:    { title?: string; subtitle?: string; cta?: string };
 };
 
+/** Live snapshot of in-flight wizard state. Fired by `onState` so the host
+ *  can build the scene up step-by-step (e.g. apply size as walls grow,
+ *  recolour walls as the user tweaks swatches). The host does NOT have to
+ *  wait for `onComplete` — every step's choice arrives here. */
+export type WizardState = {
+  step: number;
+  size: WizardSize;
+  designLine: WizardDesignLine;
+  logoUrl: string | null;
+  artworkUrl: string | null;
+  colours: [string, string, string];
+};
+
 /** Top-level props. Host-defined `sizes` + `designLines` are the only
  *  mandatory inputs; everything else has a default. */
 export type WizardProps = {
@@ -79,8 +92,15 @@ export type WizardProps = {
   /** Optional CSS-variable name for the accent colour. Default
    *  "--color-accent" — set by the host's stylesheet. */
   accentVar?: string;
+  /** Render the wizard as a docked side-panel overlay instead of a
+   *  full-screen card grid. Use when the host has a live 3D preview
+   *  behind the wizard. */
+  layout?: "full" | "panel";
   /** Close button — host typically routes back to its home view. */
   onClose: () => void;
   /** Called when the user clicks "Build my stand". */
   onComplete: (result: WizardResult) => void;
+  /** Live state pulse — fires on every selection change so the host can
+   *  build the scene incrementally. Optional. */
+  onState?: (state: WizardState) => void;
 };

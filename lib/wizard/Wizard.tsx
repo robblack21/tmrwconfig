@@ -25,8 +25,10 @@ export function Wizard({
   initialDesignLineId,
   copy = {},
   accentVar = "--color-accent",
+  layout = "full",
   onClose,
   onComplete,
+  onState,
 }: WizardProps) {
   if (sizes.length === 0 || designLines.length === 0) {
     throw new Error("Wizard requires at least one size and one design line.");
@@ -43,6 +45,13 @@ export function Wizard({
 
   const size = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
   const designLine = designLines.find((d) => d.id === designLineId) ?? designLines[0]!;
+
+  // Live state pulse — fires whenever any selection changes so the host
+  // can build a scene in lock-step with the user's progress.
+  useEffect(() => {
+    if (!onState) return;
+    onState({ step, size, designLine, logoUrl, artworkUrl, colours });
+  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -89,15 +98,25 @@ export function Wizard({
 
   const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent"];
 
+  // Panel mode docks the wizard to the right side as a translucent overlay
+  // so the host can render a live 3D preview behind it. Full mode keeps
+  // the original page-takeover gradient.
+  const panelMode = layout === "panel";
   return (
     <div
-      className="absolute inset-0 overflow-y-auto"
+      className={panelMode ? "absolute top-0 right-0 bottom-0 overflow-y-auto" : "absolute inset-0 overflow-y-auto"}
       style={{
         zIndex: 70,
-        background: `radial-gradient(ellipse at top, color-mix(in srgb, ${accent} 8%, var(--color-bg)) 0%, var(--color-bg) 60%)`,
+        width: panelMode ? "min(440px, 100vw)" : undefined,
+        background: panelMode
+          ? `linear-gradient(to bottom, color-mix(in srgb, var(--color-bg) 88%, transparent), color-mix(in srgb, var(--color-bg) 78%, transparent))`
+          : `radial-gradient(ellipse at top, color-mix(in srgb, ${accent} 8%, var(--color-bg)) 0%, var(--color-bg) 60%)`,
+        backdropFilter: panelMode ? "blur(14px)" : undefined,
+        boxShadow: panelMode ? "-12px 0 32px -16px rgba(0,0,0,0.28)" : undefined,
+        borderLeft: panelMode ? "1px solid var(--color-border-soft)" : undefined,
       }}
     >
-      <div className="max-w-[1100px] mx-auto px-8 py-10">
+      <div className={panelMode ? "px-5 py-7" : "max-w-[1100px] mx-auto px-8 py-10"}>
         {/* Header — close + progress dots */}
         <div className="flex items-center justify-between mb-8">
           <button
