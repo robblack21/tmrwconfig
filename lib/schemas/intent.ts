@@ -45,6 +45,7 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("room.setWindowsEnabled"), value: z.boolean() }),
   z.object({ type: z.literal("room.setCeilingEnabled"), value: z.boolean() }),
   z.object({ type: z.literal("room.setWallTextureEnabled"), value: z.boolean() }),
+  z.object({ type: z.literal("merch.setCupsEnabled"), value: z.boolean() }),
   z.object({ type: z.literal("room.setWindowSegments"), value: z.number().int() }),
   z.object({ type: z.literal("boardroom.setTableOrientation"), value: z.union([z.literal(0), z.literal(90)]) }),
   z.object({ type: z.literal("room.setWindowSill"), value: z.number() }),

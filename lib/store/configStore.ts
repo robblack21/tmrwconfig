@@ -54,6 +54,7 @@ export type ConfigState = {
   windowsEnabled: boolean;            // ribbon windows on the side walls (glass shading)
   ceilingEnabled: boolean;            // enclosed ceiling slab (off = open / exhibition look)
   wallTextureEnabled: boolean;        // plastered-wall texture detail on/off (off = matte painted)
+  cupsEnabled: boolean;               // branded coffee cups at each seat — flourish, defaults on
   windowSegments: number;             // number of mullion bays per ribbon window (1..8)
   tableOrientationDeg: 0 | 90;        // table+chairs+cups orientation: 0 (long axis along Z) or 90 (along X)
   windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
@@ -215,6 +216,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   windowsEnabled: true,
   ceilingEnabled: true,
   wallTextureEnabled: true,
+  cupsEnabled: true,
   windowSegments: 4,
   tableOrientationDeg: 90,
   windowSillM: 0.95,
@@ -369,6 +371,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "room.setWindowsEnabled":     { set({ windowsEnabled: intent.value }); break; }
       case "room.setCeilingEnabled":     { set({ ceilingEnabled: intent.value }); break; }
       case "room.setWallTextureEnabled": { set({ wallTextureEnabled: intent.value }); break; }
+      case "merch.setCupsEnabled":       { set({ cupsEnabled: intent.value }); break; }
       case "room.setWindowSegments":     { set({ windowSegments: Math.round(clamp(intent.value, 1, 8)) }); break; }
       case "boardroom.setTableOrientation": {
         // Re-fit the room when rotating — what fit along Z at 0° must now

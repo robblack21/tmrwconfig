@@ -128,10 +128,28 @@ const designLineEffects: Record<string, DesignLinePatch> = {
  * applying the blank TMRW kit; subsequent ticks layer in size /
  * colours / logo / artwork / design-line as the user picks them.
  */
+// Step-indexed camera presets. Each step in the wizard frames a different
+// part of the room so the user sees the consequence of their selection.
+const CAMERA_BY_STEP: Record<number, string> = {
+  0: "top",      // Size — looks down on the empty platform; the walls grow in
+  1: "pendant",  // Logo — pulled into the room so the pendant + side-wall signs read
+  2: "front",    // Artwork — frames the back-wall video matrix
+  3: "side",     // Colours — wall-on-wall view so the recolour reads
+  4: "closeup",  // Design line — tight on the table + chairs
+  5: "hero",     // Summary — the brand-room hero shot
+};
+
 export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: WizardState): void {
   // First call — initialise to the blank kit + suppress hero props.
   if (!prev) {
     apply({ type: "brandKit.apply", kitId: tmrwBlank.id });
+  }
+
+  // Camera move on step transitions — flies to a preset framing what the
+  // current step is asking about.
+  if (!prev || prev.step !== state.step) {
+    const preset = CAMERA_BY_STEP[state.step] ?? "hero";
+    apply({ type: "camera.gotoPreset", preset });
   }
 
   // Size — always applied (it's chosen on step 0, default to the first

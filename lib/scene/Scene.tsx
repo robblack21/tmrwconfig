@@ -98,6 +98,7 @@ export function Scene() {
   const logoExtrusionM = useConfig((s) => s.logoExtrusionM);
   const logoEmissive = useConfig((s) => s.logoEmissive);
   const sofaCount = useConfig((s) => s.sofaCount);
+  const cupsEnabled = useConfig((s) => s.cupsEnabled);
   const coffeeTableVariant = useConfig((s) => s.coffeeTableVariant);
   const standingDisplayCount = useConfig((s) => s.standingDisplayCount);
   const platformHeightM = useConfig((s) => s.platformHeightM);
@@ -453,13 +454,15 @@ export function Scene() {
                   tintHex={colourOverrides.chair ?? kit.palette.secondary}
                   kit={kit}
                 />
-                <BrandedCupsOnTable
-                  count={chairCount}
-                  tableLengthM={tableLengthM}
-                  tableWidthM={tableWidthM}
-                  position={[0, platformHeightM, 0]}
-                  kit={kit}
-                />
+                {cupsEnabled && (
+                  <BrandedCupsOnTable
+                    count={chairCount}
+                    tableLengthM={tableLengthM}
+                    tableWidthM={tableWidthM}
+                    position={[0, platformHeightM, 0]}
+                    kit={kit}
+                  />
+                )}
                 <TableTopBrandDecals
                   position={[0, platformHeightM, 0]}
                   tableLengthM={tableLengthM}

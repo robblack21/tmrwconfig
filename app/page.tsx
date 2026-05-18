@@ -38,7 +38,7 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
-    windowsEnabled, ceilingEnabled, wallTextureEnabled, windowSegments, tableOrientationDeg, windowSillM, roomCount,
+    windowsEnabled, ceilingEnabled, wallTextureEnabled, cupsEnabled, windowSegments, tableOrientationDeg, windowSillM, roomCount,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
@@ -145,6 +145,13 @@ export default function Page() {
             wizardPrevRef.current = null;
             setView("config");
           }}
+        />
+        <WizardFlourishes
+          cupsEnabled={cupsEnabled}
+          plantCount={plantCount}
+          sofaCount={sofaCount}
+          standingDisplayCount={standingDisplayCount}
+          apply={apply}
         />
       </main>
     );
@@ -925,6 +932,53 @@ function TopBtn({ children, active, onClick }: { children: React.ReactNode; acti
 // Compact accordion: header shows the asset filename + a chevron to expand
 // the sliders. Edits flow through the kit.setPropField intent so the kit's
 // scene.props gets mutated in-place.
+// ── Wizard flourishes panel ─────────────────────────────────────────────────
+// Floating bottom-left card during the wizard view. Quick toggles +
+// counters for the small personalisation touches (branded coffee cups,
+// plants, sofas, freestanding displays). Dispatches directly to the
+// configStore so changes appear in the live preview behind the wizard.
+function WizardFlourishes({
+  cupsEnabled, plantCount, sofaCount, standingDisplayCount, apply,
+}: {
+  cupsEnabled: boolean;
+  plantCount: number;
+  sofaCount: number;
+  standingDisplayCount: number;
+  apply: import("@/lib/store/configStore").ConfigState["apply"];
+}) {
+  return (
+    <div
+      className="ui-overlay panel-glass absolute z-[80] left-4 bottom-4 rounded-[12px] px-3 py-2.5"
+      style={{ width: 240 }}
+    >
+      <div className="t-label uppercase tracking-wider pb-1.5 mb-1.5 border-b border-[color:var(--color-border-soft)]">Flourishes</div>
+      <ToggleRow
+        label="Branded cups"
+        value={cupsEnabled}
+        onToggle={(v) => apply({ type: "merch.setCupsEnabled", value: v })}
+      />
+      <Slider
+        label="Plants"
+        value={plantCount}
+        onChange={(v) => apply({ type: "layout.setPlantCount", value: v })}
+        min={0} max={6} step={1}
+      />
+      <Slider
+        label="Sofas"
+        value={sofaCount}
+        onChange={(v) => apply({ type: "layout.setSofaCount", value: v })}
+        min={0} max={4} step={1}
+      />
+      <Slider
+        label="Displays"
+        value={standingDisplayCount}
+        onChange={(v) => apply({ type: "layout.setStandingDisplayCount", value: v })}
+        min={0} max={4} step={1}
+      />
+    </div>
+  );
+}
+
 function HeroPropEditor({
   prop, index, kitId, onField,
 }: {
