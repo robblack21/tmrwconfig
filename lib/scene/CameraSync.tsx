@@ -6,7 +6,16 @@ import { useConfig } from "@/lib/store/configStore";
 import { useLive } from "@/lib/store/liveStore";
 
 // Minimal duck-type for drei's OrbitControls (avoids three-stdlib dep).
-type OrbitControlsLike = { target: THREE.Vector3; update: () => void };
+type OrbitControlsLike = {
+  target: THREE.Vector3;
+  update: () => void;
+  /** Drei's OrbitControls dispatches "start" + "end" events around any
+   *  drag / zoom / pan. We use these to suppress the yaw breathing
+   *  animation while the user is actively interacting so it can't
+   *  fight or compound their input. */
+  addEventListener?: (event: string, fn: () => void) => void;
+  removeEventListener?: (event: string, fn: () => void) => void;
+};
 
 /** Named camera presets — interior boardroom views { camera pos, look-at
  *  target, fov }. Tuned for the default mid-size room; OrbitControls handles
@@ -64,6 +73,49 @@ export function CameraSync() {
   // Entry runs exactly once — guarded by a ref so dep changes (controls
   // arriving after mount, the store flag flipping) can't re-run it.
   const entryFiredRef = useRef(false);
+  // Yaw breathing — small ±10° back-and-forth on the camera ORBIT around
+  // its target, applied on top of OrbitControls. Pauses while the user is
+  // dragging (drei's controls fire `start`/`end` events) so it can never
+  // compound or fight user input.
+  const interactingRef = useRef(false);
+  // The "anchored" position the breathing oscillation orbits AROUND. This
+  // gets re-captured whenever the user releases (the camera's resting
+  // pose becomes the new anchor for the next breathe cycle).
+  const anchorRef = useRef<{ pos: THREE.Vector3; target: THREE.Vector3 } | null>(null);
+  const lastYawDeltaRef = useRef(0);
+
+  // Wire up the OrbitControls interaction events so we know when to
+  // pause the breath. Re-runs when `controls` arrives after mount.
+  useEffect(() => {
+    const ctrl = controls as unknown as OrbitControlsLike | null;
+    if (!ctrl?.addEventListener || !ctrl.removeEventListener) return;
+    const onStart = () => {
+      interactingRef.current = true;
+      // Wipe any partial offset so the user starts from a clean pose.
+      lastYawDeltaRef.current = 0;
+      anchorRef.current = null;
+    };
+    const onEnd = () => {
+      interactingRef.current = false;
+      // Capture the new anchor lazily — defer to the next useFrame so
+      // any in-flight damping settles first.
+    };
+    ctrl.addEventListener("start", onStart);
+    ctrl.addEventListener("end", onEnd);
+    return () => {
+      ctrl.removeEventListener?.("start", onStart);
+      ctrl.removeEventListener?.("end", onEnd);
+    };
+  }, [controls]);
+
+  // When a preset transition starts, drop any existing anchor so the
+  // breath relocks to wherever the preset lands.
+  useEffect(() => {
+    if (cameraPreset) {
+      anchorRef.current = null;
+      lastYawDeltaRef.current = 0;
+    }
+  }, [cameraPreset]);
 
   // Apply FOV whenever the slider changes.
   useEffect(() => {
@@ -137,6 +189,49 @@ export function CameraSync() {
           ctrl.update();
         }
         animRef.current = null;
+        // Anchor the breath to wherever the preset landed.
+        anchorRef.current = {
+          pos: cam.position.clone(),
+          target: ctrl?.target?.clone() ?? new THREE.Vector3(),
+        };
+        lastYawDeltaRef.current = 0;
+      }
+    } else if (!interactingRef.current) {
+      // Yaw breathing — orbit the camera ±10° around its target with a
+      // slow sine wave (~12s period). Applied as an INCREMENTAL delta
+      // each frame so OrbitControls' own damping / inertia can still
+      // act normally; we only inject the delta-since-last-frame.
+      //
+      // The anchor is captured the first frame after a settle. Without
+      // it, the very first breathe would jump because we'd be comparing
+      // a fresh phase to no prior position.
+      if (!anchorRef.current && ctrl?.target) {
+        anchorRef.current = {
+          pos: cam.position.clone(),
+          target: ctrl.target.clone(),
+        };
+        lastYawDeltaRef.current = 0;
+      }
+      if (anchorRef.current && ctrl?.target) {
+        // 12s period → 2π / 12 rad/s. Amplitude ±10° (0.1745 rad).
+        const omega = (2 * Math.PI) / 12;
+        const amp = (10 * Math.PI) / 180;
+        const phase = (Date.now() % (12 * 1000)) / 1000;
+        const yaw = Math.sin(phase * omega) * amp;
+        const dYaw = yaw - lastYawDeltaRef.current;
+        lastYawDeltaRef.current = yaw;
+        if (Math.abs(dYaw) > 1e-5) {
+          // Rotate the camera around the target's Y axis by dYaw.
+          const t = ctrl.target;
+          const v = cam.position.clone().sub(t);
+          const sin = Math.sin(dYaw);
+          const cos = Math.cos(dYaw);
+          const x =  v.x * cos + v.z * sin;
+          const z = -v.x * sin + v.z * cos;
+          cam.position.set(t.x + x, cam.position.y, t.z + z);
+          cam.lookAt(t);
+          ctrl.update();
+        }
       }
     }
 

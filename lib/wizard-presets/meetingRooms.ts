@@ -15,6 +15,7 @@
 import type { WizardSize, WizardDesignLine, WizardResult, WizardState } from "@/lib/wizard";
 import type { useConfig } from "@/lib/store/configStore";
 import { tmrwBlank } from "@/lib/fixtures/brandKits";
+import { measureImageDims } from "@/lib/util/measureImage";
 
 // ── Size cards ────────────────────────────────────────────────────────────
 // Three meeting-room footprints. Width × depth picked to land inside the
@@ -47,9 +48,21 @@ export const meetingRoomSizes: WizardSize[] = [
     sqm: 40,
     widthM: 8,
     depthM: 5,
-    description: "16 people · all-hands · presentation",
+    description: "12 people · all-hands · presentation",
   },
 ];
+
+// Table dims + chair counts mapped to each size id. Kept as a sibling
+// map (not on WizardSize) so the wizard type stays domain-agnostic.
+//   - tableLengthM × tableWidthM is the boardroom-table footprint.
+//   - chairCount is the conference seating; ChairsAroundTable caps this
+//     down further if the table is too narrow to fit them at the min
+//     0.69m centre-to-centre spacing.
+const meetingRoomTableMeta: Record<string, { tableLengthM: number; tableWidthM: number; chairCount: number }> = {
+  small:  { tableLengthM: 1.8, tableWidthM: 1.0, chairCount: 4 },
+  medium: { tableLengthM: 3.0, tableWidthM: 1.4, chairCount: 8 },
+  large:  { tableLengthM: 5.0, tableWidthM: 1.8, chairCount: 12 },
+};
 
 // ── Design lines ──────────────────────────────────────────────────────────
 // Each line drives a different cluster of scene defaults — wall finish,
@@ -136,7 +149,8 @@ const CAMERA_BY_STEP: Record<number, string> = {
   2: "front",    // Artwork — frames the back-wall video matrix
   3: "side",     // Colours — wall-on-wall view so the recolour reads
   4: "closeup",  // Design line — tight on the table + chairs
-  5: "hero",     // Summary — the brand-room hero shot
+  5: "hero",     // Customisation — wide shot showing cups/plants/sofas/displays
+  6: "hero",     // Summary — the brand-room hero shot
 };
 
 export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: WizardState): void {
@@ -154,8 +168,16 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
 
   // Size — always applied (it's chosen on step 0, default to the first
   // size card). Re-dispatching the same widthM × depthM is a no-op.
+  // Also dispatches table dims + chair count for the size so picking
+  // Boardroom actually grows the table and seats 12 (not just the room).
   if (!prev || prev.size.id !== state.size.id) {
     apply({ type: "footprint.set", widthM: state.size.widthM, depthM: state.size.depthM });
+    const meta = meetingRoomTableMeta[state.size.id];
+    if (meta) {
+      apply({ type: "boardroom.setTableLength", value: meta.tableLengthM });
+      apply({ type: "boardroom.setTableWidth",  value: meta.tableWidthM });
+      apply({ type: "boardroom.setChairCount",  value: meta.chairCount });
+    }
   }
 
   // Colours — re-dispatch when any swatch changes.
@@ -165,9 +187,43 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
     apply({ type: "colourOverride.set", surface: "trim",  value: accent });
   }
 
-  // Logo override.
+  // Extended colours — second row of step 3 (floor/table/chairs). Each
+  // surface flows through its own override so the scene's resolver picks
+  // them up exactly the same as a long-press edit.
+  if (!prev || prev.extendedColours.floor !== state.extendedColours.floor) {
+    apply({ type: "colourOverride.set", surface: "floor", value: state.extendedColours.floor });
+  }
+  if (!prev || prev.extendedColours.table !== state.extendedColours.table) {
+    apply({ type: "colourOverride.set", surface: "table", value: state.extendedColours.table });
+  }
+  if (!prev || prev.extendedColours.chairs !== state.extendedColours.chairs) {
+    apply({ type: "colourOverride.set", surface: "chair", value: state.extendedColours.chairs });
+  }
+
+  // Customisation — cups / plants / sofas / displays. Dispatched only on
+  // change; each maps to an existing config intent the configurator UI
+  // already uses.
+  if (!prev || prev.customisation.cupsEnabled !== state.customisation.cupsEnabled) {
+    apply({ type: "merch.setCupsEnabled", value: state.customisation.cupsEnabled });
+  }
+  if (!prev || prev.customisation.plantCount !== state.customisation.plantCount) {
+    apply({ type: "layout.setPlantCount", value: state.customisation.plantCount });
+  }
+  if (!prev || prev.customisation.sofaCount !== state.customisation.sofaCount) {
+    apply({ type: "layout.setSofaCount", value: state.customisation.sofaCount });
+  }
+  if (!prev || prev.customisation.standingDisplayCount !== state.customisation.standingDisplayCount) {
+    apply({ type: "layout.setStandingDisplayCount", value: state.customisation.standingDisplayCount });
+  }
+
+  // Logo override. Measured asynchronously so the kit's effective viewBox
+  // gets the user's actual aspect (un-squashing the upload). The dispatch
+  // happens once the Image() has decoded — fast for data URLs.
   if (state.logoUrl && (!prev || prev.logoUrl !== state.logoUrl)) {
-    apply({ type: "kit.setLogoOverride", kitId: tmrwBlank.id, dataUrl: state.logoUrl });
+    const url = state.logoUrl;
+    void measureImageDims(url).then(({ width, height }) => {
+      apply({ type: "kit.setLogoOverride", kitId: tmrwBlank.id, dataUrl: url, width, height });
+    });
   } else if (!state.logoUrl && prev?.logoUrl) {
     apply({ type: "kit.clearLogoOverride", kitId: tmrwBlank.id });
   }
@@ -198,21 +254,36 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
 
   // 2. Apply the room footprint. The configurator clamps to the current
   //    tier's bounds, then auto-grows the tier if the wizard requested a
-  //    larger footprint than the tier max.
+  //    larger footprint than the tier max. Also sets the boardroom table
+  //    + chair count to match the picked size (Huddle / Meeting /
+  //    Boardroom) — re-dispatching equal values is a no-op so it's safe.
   apply({ type: "footprint.set", widthM: result.size.widthM, depthM: result.size.depthM });
+  const sizeMeta = meetingRoomTableMeta[result.size.id];
+  if (sizeMeta) {
+    apply({ type: "boardroom.setTableLength", value: sizeMeta.tableLengthM });
+    apply({ type: "boardroom.setTableWidth",  value: sizeMeta.tableWidthM });
+    apply({ type: "boardroom.setChairCount",  value: sizeMeta.chairCount });
+  }
 
-  // 3. Brand colours — drive walls (primary), floor (neutral) and accent.
-  //    The wizard's three swatches are [primary, secondary, accent]; we
-  //    map primary → walls so the brand mark reads as a coloured volume,
-  //    and accent → the trim / sconce highlight.
+  // 3. Brand colours — walls / trim from the user's first-row picks,
+  //    floor / table / chairs from the auto-derived second row (or
+  //    overrides the user made in step 3).
   const [primary, , accent] = result.colours;
   apply({ type: "colourOverride.set", surface: "walls", value: primary });
   apply({ type: "colourOverride.set", surface: "trim",  value: accent });
+  apply({ type: "colourOverride.set", surface: "floor", value: result.extendedColours.floor });
+  apply({ type: "colourOverride.set", surface: "table", value: result.extendedColours.table });
+  apply({ type: "colourOverride.set", surface: "chair", value: result.extendedColours.chairs });
 
   // 4. Logo override — replaces the TMRW mark with the uploaded one. The
   //    store keeps these per-kit so the wizard's pick survives a reload.
+  //    Measure dims so the kit's effective viewBox carries the upload's
+  //    aspect ratio (the logo stays un-squashed across every consumer).
   if (result.logoUrl) {
-    apply({ type: "kit.setLogoOverride", kitId: tmrwBlank.id, dataUrl: result.logoUrl });
+    const url = result.logoUrl;
+    void measureImageDims(url).then(({ width, height }) => {
+      apply({ type: "kit.setLogoOverride", kitId: tmrwBlank.id, dataUrl: url, width, height });
+    });
   }
 
   // 5. Back-wall hero artwork — drops the user's image into the kit's
@@ -231,7 +302,13 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   apply({ type: "layout.setPlantCount", value: patch.plantCount });
   apply({ type: "room.setWallTextureEnabled", value: patch.wallTextureEnabled });
 
-  // 7. Reasonable defaults for everything else the wizard didn't ask
+  // 7. Customisation flourishes (step 5) — cups / plants / sofas / displays.
+  apply({ type: "merch.setCupsEnabled", value: result.customisation.cupsEnabled });
+  apply({ type: "layout.setPlantCount", value: result.customisation.plantCount });
+  apply({ type: "layout.setSofaCount",  value: result.customisation.sofaCount });
+  apply({ type: "layout.setStandingDisplayCount", value: result.customisation.standingDisplayCount });
+
+  // 8. Reasonable defaults for everything else the wizard didn't ask
   //    about — gallery mode, lights on, ceiling closed.
   apply({ type: "room.setCeilingEnabled", value: true });
   apply({ type: "room.setWindowsEnabled", value: true });

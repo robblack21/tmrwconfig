@@ -156,29 +156,50 @@ export function LongPressDetector({ onOpen, onPressProgress }: {
 }
 
 // ── Long-press radial indicator ────────────────────────────────────────────
-// Tiny SVG ring that fills up as the user holds. Drawn at the press
-// location (offset slightly so the user's fingertip / cursor doesn't sit
-// on top of it). Auto-hides when t==0. Pointer-events: none so it can't
-// interfere with the press it's reporting on.
-export function LongPressIndicator({ x, y, t }: { x: number; y: number; t: number }) {
-  if (t <= 0) return null;
+// Tiny SVG ring that fills up as the user holds. Self-ticks on rAF reading
+// from a shared ref — that way LongPressDetector can publish progress 60×/sec
+// without re-rendering its parent (CanvasShell), which used to churn the
+// detector's effect deps and cancel its own timer.
+export type PressProgressRef = { x: number; y: number; t: number };
+
+export function LongPressIndicator({ pressRef }: { pressRef: React.RefObject<PressProgressRef> }) {
+  // Mirror the ref into a state we only update once a frame, after the
+  // detector has had a chance to write. Throttled-rerender = SVG repaints
+  // smoothly but React doesn't reconcile faster than the browser repaints.
+  const [snap, setSnap] = useState<PressProgressRef>({ x: 0, y: 0, t: 0 });
+  useEffect(() => {
+    let rafId = 0;
+    const tick = () => {
+      const cur = pressRef.current;
+      if (cur) {
+        // Only call setSnap when something actually changed — otherwise we'd
+        // be reconciling 60×/sec for no reason.
+        setSnap((prev) => (prev.x === cur.x && prev.y === cur.y && prev.t === cur.t ? prev : { ...cur }));
+      }
+      rafId = window.requestAnimationFrame(tick);
+    };
+    rafId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [pressRef]);
+
+  if (snap.t <= 0) return null;
   const SIZE = 56;
   const STROKE = 3;
   const R = (SIZE - STROKE) / 2;
   const C = 2 * Math.PI * R;
-  const dash = C * t;
+  const dash = C * snap.t;
   return createPortal(
     <div
       style={{
         position: "fixed",
-        left: x - SIZE / 2,
-        top: y - SIZE / 2,
+        left: snap.x - SIZE / 2,
+        top: snap.y - SIZE / 2,
         width: SIZE,
         height: SIZE,
         pointerEvents: "none",
         zIndex: 9999,
         // Subtle fade-in so a brief flick doesn't blink a half-drawn ring.
-        opacity: Math.min(1, t * 3),
+        opacity: Math.min(1, snap.t * 3),
         transition: "opacity 0.08s linear",
       }}
       aria-hidden

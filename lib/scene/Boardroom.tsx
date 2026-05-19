@@ -305,11 +305,18 @@ export function ChairsAroundTable({
     const gap = 0.36;                                  // chair offset from the table edge
     const sideX = tableWidthM / 2 + gap;
     const endZ = tableLengthM / 2 + gap;
+    // Chair spacing constraint. Office chair ≈ 0.55m wide; user asked for
+    // ≥0.25× chair-width gap between neighbours → centre-to-centre min
+    // ≈ 0.55 + 0.55 × 0.25 = 0.69m. If the table side can't fit the
+    // requested chairs at that spacing, we cap the count rather than
+    // packing them in — packed chairs were visibly overlapping.
+    const MIN_CHAIR_SPACING_M = 0.69;
+    const spanZ = Math.max(0.01, tableLengthM - 0.8);  // keep chairs off the corners
+    const sideCapacity = Math.max(1, Math.floor(spanZ / MIN_CHAIR_SPACING_M) + 1);
     const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
     const sideTotal = count - endN;
-    const leftN = Math.ceil(sideTotal / 2);
-    const rightN = sideTotal - leftN;
-    const spanZ = Math.max(0.01, tableLengthM - 0.8);  // keep chairs off the corners
+    const leftN = Math.min(sideCapacity, Math.ceil(sideTotal / 2));
+    const rightN = Math.min(sideCapacity, sideTotal - leftN);
     const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
     // Left side faces +X, right side faces -X, ends face the centre along Z.
     for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
@@ -420,20 +427,25 @@ function BrandedCoffeeCup({
     const radius = Math.min(size.x, size.z) / 2 + 0.002;
     return { node: normalised, decalRadius: radius };
   }, [gltf, cupColor]);
-  // Sized to the actual cup radius — decal width = ~1.5x radius (covers
-  // about a third of the circumference, readable from front).
-  const decalW = decalRadius * 1.5;
-  const decalH = Math.min(decalW / aspect, CUP_HEIGHT_M * 0.45);
-  // Two decals — front and back — so the logo reads from any seat without
-  // becoming a busy orbit of marks around the cup.
+  // Logo wraps cylindrically around the cup body. Two facing arcs (front
+  // + back) at ~140° each give legibility from every seat without
+  // becoming a busy orbit. The previous flat planes foreshortened to
+  // invisibility from side seats — wrapping the texture onto an open
+  // CylinderGeometry segment fixes that.
+  const decalH = Math.min((decalRadius * 1.5) / aspect, CUP_HEIGHT_M * 0.45);
+  const ARC_RAD = (140 * Math.PI) / 180;
   const facings = [0, Math.PI];
   return (
     <group position={position} rotation-y={rotationY}>
       <primitive object={node} />
       {url && facings.map((rotY, i) => (
         <group key={i} rotation-y={rotY}>
-          <mesh position={[0, CUP_HEIGHT_M * 0.55, decalRadius]}>
-            <planeGeometry args={[decalW, decalH]} />
+          {/* Open partial-cylinder segment. CylinderGeometry args:
+              radiusTop, radiusBottom, height, radialSegments, heightSegments,
+              openEnded, thetaStart, thetaLength. thetaStart=-ARC/2 centres
+              the arc on the +Z facing. */}
+          <mesh position={[0, CUP_HEIGHT_M * 0.55, 0]}>
+            <cylinderGeometry args={[decalRadius, decalRadius, decalH, 24, 1, true, -ARC_RAD / 2, ARC_RAD]} />
             <meshStandardMaterial
               map={tex}
               emissiveMap={tex}

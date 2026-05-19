@@ -37,6 +37,24 @@ export type WizardDesignLine = {
   preview?: ReactNode;
 };
 
+/** Auto-derived second line of brand colours — floor / table / chairs.
+ *  Computed from the primary palette whenever the user changes a swatch
+ *  in step 3, but EDITABLE so the user can override individual surfaces. */
+export type WizardExtendedColours = {
+  floor: string;
+  table: string;
+  chairs: string;
+};
+
+/** Customisation choices made in the new step 5 — cups / plants / sofas /
+ *  displays. The host can apply each value to its scene directly. */
+export type WizardCustomisation = {
+  cupsEnabled: boolean;
+  plantCount: number;
+  sofaCount: number;
+  standingDisplayCount: number;
+};
+
 /** Returned to the host's `onComplete` callback. The host wires this into
  *  whatever scene / state it owns. */
 export type WizardResult = {
@@ -48,7 +66,11 @@ export type WizardResult = {
   /** [primary, secondary, accent] — hex strings. Auto-extracted from the
    *  logo and editable in step 4. */
   colours: [string, string, string];
+  /** floor / table / chairs colours derived from `colours` + editable in
+   *  step 4's second row. */
+  extendedColours: WizardExtendedColours;
   designLine: WizardDesignLine;
+  customisation: WizardCustomisation;
 };
 
 /** Optional copy overrides — every field has a sensible default. */
@@ -56,12 +78,13 @@ export type WizardCopy = {
   brandName?: string;
   introTitle?: string;
   introSubtitle?: string;
-  sizeStep?:       { title?: string; subtitle?: string };
-  logoStep?:       { title?: string; subtitle?: string; hint?: string };
-  artworkStep?:    { title?: string; subtitle?: string; hint?: string };
-  coloursStep?:    { title?: string; subtitle?: string; labels?: [string, string, string] };
-  designLineStep?: { title?: string; subtitle?: string };
-  summaryStep?:    { title?: string; subtitle?: string; cta?: string };
+  sizeStep?:           { title?: string; subtitle?: string };
+  logoStep?:           { title?: string; subtitle?: string; hint?: string };
+  artworkStep?:        { title?: string; subtitle?: string; hint?: string };
+  coloursStep?:        { title?: string; subtitle?: string; labels?: [string, string, string] };
+  designLineStep?:     { title?: string; subtitle?: string };
+  customisationStep?:  { title?: string; subtitle?: string };
+  summaryStep?:        { title?: string; subtitle?: string; cta?: string };
 };
 
 /** Live snapshot of in-flight wizard state. Fired by `onState` so the host
@@ -75,6 +98,8 @@ export type WizardState = {
   logoUrl: string | null;
   artworkUrl: string | null;
   colours: [string, string, string];
+  extendedColours: WizardExtendedColours;
+  customisation: WizardCustomisation;
 };
 
 /** Top-level props. Host-defined `sizes` + `designLines` are the only

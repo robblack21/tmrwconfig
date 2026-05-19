@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { Scene } from "./Scene";
 import { useConfig } from "@/lib/store/configStore";
-import { LongPressDetector, LongPressIndicator, LongPressModal } from "./LongPressEditor";
+import { LongPressDetector, LongPressIndicator, LongPressModal, type PressProgressRef } from "./LongPressEditor";
+
+type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss";
 
 export default function CanvasShell() {
   const highDpr = useConfig((s) => s.highDpr);
@@ -15,11 +17,26 @@ export default function CanvasShell() {
   // Long-press surface editor — the detector lives inside the canvas to
   // raycast, but the modal portals to document.body so it can render plain
   // DOM controls (colour input, swatch buttons) overlaid on the canvas.
-  const [editor, setEditor] = useState<{ kind: "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss"; screenX: number; screenY: number } | null>(null);
-  // Live press progress (0..1) — drives the radial hold indicator. State
-  // ticks per requestAnimationFrame while a press is in flight; reset to
-  // {t:0} on release / cancel.
-  const [press, setPress] = useState<{ x: number; y: number; t: number }>({ x: 0, y: 0, t: 0 });
+  const [editor, setEditor] = useState<{ kind: SurfaceKind; screenX: number; screenY: number } | null>(null);
+  // Long-press hold progress lives in a REF, not state. Previously this
+  // was useState + setPress called per rAF tick — that re-rendered the
+  // canvas wrapper 60×/sec which (a) churned the inline `onOpen` /
+  // `onPressProgress` closure identities so LongPressDetector's
+  // `useEffect` cancelled and reinstalled its timer every frame
+  // (breaking long-press entirely), and (b) was wasteful. Ref-based
+  // means LongPressDetector writes the current press, LongPressIndicator
+  // self-ticks on rAF to read it; React only renders when the editor
+  // opens or closes.
+  const pressRef = useRef<PressProgressRef>({ x: 0, y: 0, t: 0 });
+  const onPressProgress = useCallback((x: number, y: number, t: number) => {
+    pressRef.current.x = x;
+    pressRef.current.y = y;
+    pressRef.current.t = t;
+  }, []);
+  const onOpen = useCallback((kind: SurfaceKind, screenX: number, screenY: number) => {
+    pressRef.current.t = 0;
+    setEditor({ kind, screenX, screenY });
+  }, []);
   return (
     <>
       <Canvas
@@ -44,15 +61,9 @@ export default function CanvasShell() {
         style={{ width: "100%", height: "100%" }}
       >
         <Scene />
-        <LongPressDetector
-          onOpen={(kind, screenX, screenY) => {
-            setPress({ x: 0, y: 0, t: 0 });
-            setEditor({ kind, screenX, screenY });
-          }}
-          onPressProgress={(x, y, t) => setPress({ x, y, t })}
-        />
+        <LongPressDetector onOpen={onOpen} onPressProgress={onPressProgress} />
       </Canvas>
-      <LongPressIndicator x={press.x} y={press.y} t={press.t} />
+      <LongPressIndicator pressRef={pressRef} />
       {editor && (
         <LongPressModal
           kind={editor.kind}

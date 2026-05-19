@@ -17,6 +17,7 @@ import { deriveInventory, prettyAssetName } from "@/lib/bom/derive";
 import type { InventoryGroup } from "@/lib/bom/derive";
 import { useConfig, useBrandKit, useTierBounds } from "@/lib/store/configStore";
 import { seedBrandKitList } from "@/lib/fixtures/brandKits";
+import { measureImageDims } from "@/lib/util/measureImage";
 import type { PendantShape, SizeTier } from "@/lib/schemas";
 
 const PENDANT_SHAPES: PendantShape[] = ["rectangle", "squircle", "ring", "hexagon", "triangle", "innerCurve", "wedge"];
@@ -131,9 +132,10 @@ export default function Page() {
           copy={{
             brandName: "home",
             sizeStep:    { title: "Choose a meeting-room size" },
-            logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll extract the colours." },
+            logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll respect its aspect ratio." },
             artworkStep: { title: "Hero artwork", hint: "Image for the back-wall video matrix." },
             coloursStep: { labels: ["Walls", "Trim", "Accent"] },
+            customisationStep: { title: "Customisation" },
             summaryStep: { cta: "Generate room →" },
           }}
           onClose={() => {
@@ -149,13 +151,6 @@ export default function Page() {
             wizardPrevRef.current = null;
             setView("config");
           }}
-        />
-        <WizardFlourishes
-          cupsEnabled={cupsEnabled}
-          plantCount={plantCount}
-          sofaCount={sofaCount}
-          standingDisplayCount={standingDisplayCount}
-          apply={apply}
         />
       </main>
     );
@@ -667,10 +662,14 @@ export default function Page() {
                 const f = e.target.files?.[0];
                 if (!f) return;
                 const r = new FileReader();
-                r.onload = () => {
-                  if (typeof r.result === "string") {
-                    apply({ type: "kit.setLogoOverride", kitId: brandKitId, dataUrl: r.result });
-                  }
+                r.onload = async () => {
+                  if (typeof r.result !== "string") return;
+                  const dataUrl = r.result;
+                  // Measure intrinsic dims so the kit's effective viewBox
+                  // tracks the user's actual logo geometry — uploads stay
+                  // un-squashed across every render site.
+                  const { width, height } = await measureImageDims(dataUrl);
+                  apply({ type: "kit.setLogoOverride", kitId: brandKitId, dataUrl, width, height });
                 };
                 r.readAsDataURL(f);
                 // allow uploading the same file twice in a row
@@ -696,7 +695,7 @@ export default function Page() {
                   capped at sensible product limits. Avoids the "ginormous
                   cinema screen" outcome by never letting the slider push past
                   what fits. The reducer also locks 16:9 on both axes. */}
-              <Slider label="Width"      value={ledWallWidthM}     onChange={(v) => apply({ type: "ledWall.setWidth",      value: v })} min={1.5} max={Math.min(widthM * 0.85, 12)} step={0.25} unit="m" />
+              <Slider label="Width"      value={ledWallWidthM}     onChange={(v) => apply({ type: "ledWall.setWidth",      value: v })} min={1.5} max={Math.min(widthM * 0.95, 20)} step={0.25} unit="m" />
               <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.0} max={Math.max(1.0, wallHeightM - 1.0)} step={0.25} unit="m" />
               <Slider label="Brightness" value={ledWallBrightness} onChange={(v) => apply({ type: "ledWall.setBrightness", value: v })} min={0}   max={2.5} step={0.05} />
               <Slider label="Volume"     value={videoVolume}       onChange={(v) => apply({ type: "video.setVolume", value: v })} min={0} max={100} step={1} />
@@ -936,52 +935,10 @@ function TopBtn({ children, active, onClick }: { children: React.ReactNode; acti
 // Compact accordion: header shows the asset filename + a chevron to expand
 // the sliders. Edits flow through the kit.setPropField intent so the kit's
 // scene.props gets mutated in-place.
-// ── Wizard flourishes panel ─────────────────────────────────────────────────
-// Floating bottom-left card during the wizard view. Quick toggles +
-// counters for the small personalisation touches (branded coffee cups,
-// plants, sofas, freestanding displays). Dispatches directly to the
-// configStore so changes appear in the live preview behind the wizard.
-function WizardFlourishes({
-  cupsEnabled, plantCount, sofaCount, standingDisplayCount, apply,
-}: {
-  cupsEnabled: boolean;
-  plantCount: number;
-  sofaCount: number;
-  standingDisplayCount: number;
-  apply: import("@/lib/store/configStore").ConfigState["apply"];
-}) {
-  return (
-    <div
-      className="ui-overlay panel-glass absolute z-[80] right-4 bottom-4 rounded-[18px] px-3 py-2.5"
-      style={{ width: 240 }}
-    >
-      <div className="t-label uppercase tracking-wider pb-1.5 mb-1.5 border-b border-[color:var(--color-border-soft)]">Flourishes</div>
-      <ToggleRow
-        label="Branded cups"
-        value={cupsEnabled}
-        onToggle={(v) => apply({ type: "merch.setCupsEnabled", value: v })}
-      />
-      <Slider
-        label="Plants"
-        value={plantCount}
-        onChange={(v) => apply({ type: "layout.setPlantCount", value: v })}
-        min={0} max={6} step={1}
-      />
-      <Slider
-        label="Sofas"
-        value={sofaCount}
-        onChange={(v) => apply({ type: "layout.setSofaCount", value: v })}
-        min={0} max={4} step={1}
-      />
-      <Slider
-        label="Displays"
-        value={standingDisplayCount}
-        onChange={(v) => apply({ type: "layout.setStandingDisplayCount", value: v })}
-        min={0} max={4} step={1}
-      />
-    </div>
-  );
-}
+// The Wizard's "Customisation" step (formerly a sidecar Flourishes panel)
+// now owns cups / plants / sofas / displays controls inline with the
+// rest of the wizard flow. The standalone WizardFlourishes component
+// has been removed.
 
 function HeroPropEditor({
   prop, index, kitId, onField,

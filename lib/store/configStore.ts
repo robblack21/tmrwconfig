@@ -102,6 +102,11 @@ export type ConfigState = {
   videoMuted: boolean;
   /** Per-kit logo override (data: URL set by the user via the upload button). */
   logoOverrides: Record<string, string>;
+  /** Intrinsic aspect ratio (width / height) of each per-kit logo override.
+   *  Captured at upload time by measuring the image's natural dimensions so
+   *  every logo render site can respect the user's actual logo geometry
+   *  instead of squashing the upload into the kit's default viewBox. */
+  logoOverrideAspects: Record<string, number>;
   plantCount: number;                // 0..6
   logoGlow: number;                  // 0..1.5  — back-wall sconce intensity
   logoExtrusionM: number;            // 0..0.04 — logo sign thickness
@@ -225,10 +230,11 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tableVariant: "main",
   chairVariant: "studio",
   ledWallEnabled: true,
-  // Default sized to fill the back wall as one big video wall (the
-  // flanking monitors got removed in favour of this single full-span
-  // arrangement). Slider can still scale down for a smaller installation.
-  ledWallWidthM: 11.0,          // tracks ~92% of a 12m room
+  // Default sized cinematically — 1.66× the previous default (was 11m
+  // for a 12m room). The LedWall renderer clamps to `roomWidthM - 0.5m`
+  // so smaller rooms get a narrower wall automatically; for big rooms
+  // (8m+) the user now gets a properly wide spread by default.
+  ledWallWidthM: 18.26,
   ledWallHeightM: 3.5,          // tracks ~70% of a 5m wall
   ledWallBrightness: 1.4,
   // 4x2 matrix by default — the back wall reads as a multi-screen cinema
@@ -259,6 +265,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   videoVolume: 8,
   videoMuted: true,
   logoOverrides: {},
+  logoOverrideAspects: {},
   plantCount: 3,
   logoGlow: 2.1,
   logoExtrusionM: 0.5,
@@ -614,15 +621,28 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "kit.setLogoOverride": {
-        set({ logoOverrides: { ...get().logoOverrides, [intent.kitId]: intent.dataUrl } });
-        // Bump kitRev so consumers re-read the kit's effective logos.
-        set({ kitRev: (get().kitRev ?? 0) + 1 });
+        const aspects = { ...get().logoOverrideAspects };
+        if (intent.width && intent.height && intent.height > 0) {
+          aspects[intent.kitId] = intent.width / intent.height;
+        } else {
+          // No measured dims supplied — drop any stale aspect so we fall
+          // back to the kit default rather than the previous upload's.
+          delete aspects[intent.kitId];
+        }
+        set({
+          logoOverrides: { ...get().logoOverrides, [intent.kitId]: intent.dataUrl },
+          logoOverrideAspects: aspects,
+          // Bump kitRev so consumers re-read the kit's effective logos.
+          kitRev: (get().kitRev ?? 0) + 1,
+        });
         break;
       }
       case "kit.clearLogoOverride": {
         const next = { ...get().logoOverrides };
+        const nextAspects = { ...get().logoOverrideAspects };
         delete next[intent.kitId];
-        set({ logoOverrides: next, kitRev: (get().kitRev ?? 0) + 1 });
+        delete nextAspects[intent.kitId];
+        set({ logoOverrides: next, logoOverrideAspects: nextAspects, kitRev: (get().kitRev ?? 0) + 1 });
         break;
       }
       case "layout.setPlantCount": {
@@ -707,22 +727,35 @@ export function useBrandKit() {
   // (e.g. youtubeId edits) re-render consumers even though the reference is stable.
   useConfig((s) => s.kitRev);
   const override = useConfig((s) => s.logoOverrides[id]);
+  const overrideAspect = useConfig((s) => s.logoOverrideAspects[id]);
   const kit = findKitById(id) ?? seedBrandKitList[0]!;
   // If the user has uploaded a replacement logo for this kit, splice it
-  // into every logo slot. ALSO clear `invertLogo` + `logoChroma` on the
-  // scene — those flags were tuned for the kit's DEFAULT logo (e.g. TMRW
-  // ships a black-on-white mark that needs both flags to read on a dark
-  // wall). Applying them to a user-uploaded logo butchers the colour
-  // (blue → yellow on invert; chroma-keying random pixels out). Brands
-  // are sacred to their owners — leave the upload alone.
+  // into every logo slot. ALSO:
+  //  • Clear `invertLogo` + `logoChroma` — those flags were tuned for the
+  //    kit's DEFAULT logo (e.g. TMRW ships a black-on-white mark that
+  //    needs both to read on a dark wall). Applying them to a user
+  //    upload butchers colour (blue→yellow on invert). Brands are sacred.
+  //  • Replace the viewBox with [0, 0, w, h] from the upload's measured
+  //    intrinsic dimensions so every consumer's aspect math
+  //    (`viewBox[2] / viewBox[3]`) reflects the user's actual logo
+  //    geometry. Without this, a square logo uploaded into TMRW's 2:1
+  //    viewBox renders SQUASHED to half height.
   if (override) {
+    // Build a viewBox that respects the user's aspect. We don't actually
+    // know the upload's pixel dimensions here (the store only kept aspect),
+    // so any [w, h] satisfying w/h === overrideAspect works — pick
+    // [aspect, 1] so the cap-height fraction (which is normalised) still
+    // makes sense relative to the new viewBox.
+    const vb: [number, number, number, number] = overrideAspect
+      ? [0, 0, overrideAspect, 1]
+      : kit.logos.primary.viewBox;
     return {
       ...kit,
       logos: {
-        primary:   { ...kit.logos.primary,   rasterUrl: override },
-        monoLight: { ...kit.logos.monoLight, rasterUrl: override },
-        monoDark:  { ...kit.logos.monoDark,  rasterUrl: override },
-        icon:      { ...kit.logos.icon,      rasterUrl: override },
+        primary:   { ...kit.logos.primary,   rasterUrl: override, viewBox: vb },
+        monoLight: { ...kit.logos.monoLight, rasterUrl: override, viewBox: vb },
+        monoDark:  { ...kit.logos.monoDark,  rasterUrl: override, viewBox: vb },
+        icon:      { ...kit.logos.icon,      rasterUrl: override, viewBox: vb },
       },
       scene: kit.scene
         ? { ...kit.scene, invertLogo: false, logoChroma: undefined }

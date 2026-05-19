@@ -94,7 +94,19 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("video.setVolume"), value: z.number() }),
   z.object({ type: z.literal("video.setMuted"), value: z.boolean() }),
   z.object({ type: z.literal("scene.resetGeometry") }),
-  z.object({ type: z.literal("kit.setLogoOverride"), kitId: z.string(), dataUrl: z.string() }),
+  z.object({
+    type: z.literal("kit.setLogoOverride"),
+    kitId: z.string(),
+    dataUrl: z.string(),
+    /** Intrinsic image dimensions (px). Optional — when provided, the
+     *  kit's `logos.primary.viewBox` is replaced with `[0, 0, width,
+     *  height]` so every consumer reads the correct aspect ratio.
+     *  Without this the upload inherits the kit's default aspect (e.g.
+     *  TMRW's 2:1) and the user's logo renders SQUASHED. Always measure
+     *  before dispatching. */
+    width: z.number().optional(),
+    height: z.number().optional(),
+  }),
   z.object({ type: z.literal("kit.clearLogoOverride"), kitId: z.string() }),
   z.object({ type: z.literal("layout.setPlantCount"), value: z.number().int() }),
   z.object({ type: z.literal("layout.setPlatformHeight"), value: z.number() }),

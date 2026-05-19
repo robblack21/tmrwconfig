@@ -1,8 +1,40 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { extractDominantColours } from "./colour";
-import type { WizardProps, WizardResult, WizardSize, WizardDesignLine } from "./types";
+import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation } from "./types";
+
+// Total steps in the wizard (0..TOTAL_STEPS-1). Bumping this needs
+// matching step blocks in the AnimatePresence body below.
+const TOTAL_STEPS = 7;
+const LAST_STEP = TOTAL_STEPS - 1;
+
+/** Mix two hex colours in sRGB-ish space. t=0 returns a, t=1 returns b. */
+function mixHex(a: string, b: string, t: number): string {
+  const pa = a.replace("#", "");
+  const pb = b.replace("#", "");
+  const ar = parseInt(pa.slice(0, 2), 16), ag = parseInt(pa.slice(2, 4), 16), ab = parseInt(pa.slice(4, 6), 16);
+  const br = parseInt(pb.slice(0, 2), 16), bg = parseInt(pb.slice(2, 4), 16), bb = parseInt(pb.slice(4, 6), 16);
+  const r = Math.round(ar + (br - ar) * t).toString(16).padStart(2, "0");
+  const g = Math.round(ag + (bg - ag) * t).toString(16).padStart(2, "0");
+  const b2 = Math.round(ab + (bb - ab) * t).toString(16).padStart(2, "0");
+  return `#${r}${g}${b2}`;
+}
+
+/** Auto-derive floor / table / chair colours from the user's three brand
+ *  swatches. Mirrors the scene's `tableResolved` / `chairResolved` mixing
+ *  recipes so the wizard preview matches what the configurator actually
+ *  renders. */
+function deriveExtendedColours([primary, carpet, accent]: [string, string, string]): WizardExtendedColours {
+  // Floor reads as the user's "carpet" pick directly — it IS the floor.
+  // Table = brand-tinted dark walnut.
+  // Chairs = a soft mid-tone built from the accent over a dark anchor.
+  return {
+    floor:  carpet,
+    table:  mixHex("#1a1814", primary, 0.3),
+    chairs: mixHex("#222428", accent, 0.55),
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Wizard
@@ -40,17 +72,47 @@ export function Wizard({
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
   const [colours, setColours] = useState<[string, string, string]>(["#1f1f1f", "#e0d6c5", "#d33b2d"]);
+  // Extended colours (floor/table/chairs). Tracked separately from `colours`
+  // so the user can edit individual derived swatches without losing the
+  // auto-derivation. Re-derived whenever the user hasn't touched them.
+  const [extendedColours, setExtendedColours] = useState<WizardExtendedColours>(() => deriveExtendedColours(["#1f1f1f", "#e0d6c5", "#d33b2d"]));
+  const [extendedTouched, setExtendedTouched] = useState<{ floor: boolean; table: boolean; chairs: boolean }>({ floor: false, table: false, chairs: false });
+  // Customisation (cups / plants / sofas / displays) — new step 5.
+  // Defaults mirror the configurator's defaults so a "skip the step" user
+  // gets a sensible room.
+  const [customisation, setCustomisation] = useState<WizardCustomisation>({
+    cupsEnabled: true,
+    plantCount: 2,
+    sofaCount: 0,
+    standingDisplayCount: 0,
+  });
+  // Anthracite dark-mode toggle. Applies only to the wizard chrome —
+  // swaps a small set of CSS vars on the wizard's own root element so
+  // text + surfaces darken without touching the host's global theme.
+  const [darkMode, setDarkMode] = useState(false);
   const [extracting, setExtracting] = useState(false);
 
   const size = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
   const designLine = designLines.find((d) => d.id === designLineId) ?? designLines[0]!;
 
+  // Whenever the user edits the primary swatches, re-derive any extended
+  // swatches they HAVEN'T manually touched. Keeps the second-line palette
+  // tracking the first-line unless the user has explicitly overridden.
+  useEffect(() => {
+    const derived = deriveExtendedColours(colours);
+    setExtendedColours((prev) => ({
+      floor:  extendedTouched.floor  ? prev.floor  : derived.floor,
+      table:  extendedTouched.table  ? prev.table  : derived.table,
+      chairs: extendedTouched.chairs ? prev.chairs : derived.chairs,
+    }));
+  }, [colours, extendedTouched]);
+
   // Live state pulse — fires whenever any selection changes so the host
   // can build a scene in lock-step with the user's progress.
   useEffect(() => {
     if (!onState) return;
-    onState({ step, size, designLine, logoUrl, artworkUrl, colours });
-  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours]);
+    onState({ step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation });
+  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -70,7 +132,7 @@ export function Wizard({
     return () => { cancelled = true; };
   }, [logoUrl]);
 
-  const next = () => setStep((s) => Math.min(s + 1, 5));
+  const next = () => setStep((s) => Math.min(s + 1, LAST_STEP));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
   const onLogoFile = useCallback((file: File) => {
@@ -85,7 +147,7 @@ export function Wizard({
   }, []);
 
   const submit = () => {
-    const result: WizardResult = { size, logoUrl, artworkUrl, colours, designLine };
+    const result: WizardResult = { size, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation };
     onComplete(result);
   };
 
@@ -107,6 +169,21 @@ export function Wizard({
     : panelMode
       ? "absolute top-0 right-0 bottom-0 overflow-y-auto"
       : "absolute inset-0 overflow-y-auto";
+  // Anthracite dark-mode CSS-var overrides — scoped to the wizard root via
+  // inline style so the host's globals aren't touched. Toggled by the
+  // header button below.
+  const darkVars = darkMode
+    ? {
+        // Anthracite ~ #1a1c20 with slightly cooler surface
+        "--color-bg":            "#16181c" as const,
+        "--color-surface":       "#202329" as const,
+        "--color-surface-sub":   "#1a1c22" as const,
+        "--color-text":          "#e8eaf0" as const,
+        "--color-text-soft":     "#a4a8b3" as const,
+        "--color-border-soft":   "#2a2d35" as const,
+      }
+    : {};
+
   return (
     <div
       className={outerClass}
@@ -120,6 +197,7 @@ export function Wizard({
         background: overlayMode
           ? `linear-gradient(to bottom, color-mix(in srgb, var(--color-bg) 92%, transparent), color-mix(in srgb, var(--color-bg) 82%, transparent))`
           : `radial-gradient(ellipse at top, color-mix(in srgb, ${accent} 8%, var(--color-bg)) 0%, var(--color-bg) 60%)`,
+        color: "var(--color-text)",
         backdropFilter: overlayMode ? "blur(18px) saturate(140%)" : undefined,
         WebkitBackdropFilter: overlayMode ? "blur(18px) saturate(140%)" : undefined,
         // Squircle: rounded edges + drop shadow with a soft outer glow.
@@ -132,30 +210,56 @@ export function Wizard({
             : undefined,
         border: squircleMode ? "1px solid var(--color-border-soft)" : undefined,
         borderLeft: panelMode ? "1px solid var(--color-border-soft)" : undefined,
-      }}
+        ...darkVars,
+      } as React.CSSProperties}
     >
       <div className={squircleMode ? "px-6 py-7" : panelMode ? "px-5 py-7" : "max-w-[1100px] mx-auto px-8 py-10"}>
-        {/* Header — close + progress dots */}
-        <div className="flex items-center justify-between mb-8">
+        {/* Header — close · dark-mode toggle · progress dots */}
+        <div className="flex items-center justify-between mb-8 gap-2">
           <button
             onClick={onClose}
-            className="hover:opacity-100 opacity-70 flex items-center gap-1.5 text-[0.72rem] uppercase tracking-wider"
+            className="hover:opacity-100 opacity-70 flex items-center gap-1.5 text-[0.72rem] uppercase tracking-wider flex-shrink-0"
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6L8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             {copy.brandName ? `Back to ${copy.brandName}` : "Back"}
           </button>
-          <div className="flex items-center gap-1.5">
-            {Array.from({ length: 5 }, (_, i) => (
+          <div className="flex items-center gap-1 flex-shrink min-w-0">
+            {Array.from({ length: TOTAL_STEPS }, (_, i) => (
               <span
                 key={i}
                 className="block h-1.5 rounded-full transition-all"
                 style={{
-                  width: i === step ? "32px" : "10px",
+                  width: i === step ? "24px" : "8px",
                   background: i <= step ? accent : "var(--color-border-soft)",
                 }}
               />
             ))}
           </div>
+          {/* Anthracite dark-mode toggle — swaps a small set of CSS vars on
+              this wizard root so the chrome darkens without touching the
+              host's globals. Doesn't affect the 3D scene behind it. */}
+          <button
+            onClick={() => setDarkMode((v) => !v)}
+            title={darkMode ? "Switch to light" : "Switch to dark"}
+            aria-label={darkMode ? "Switch to light" : "Switch to dark"}
+            className="flex-shrink-0 h-7 w-7 rounded-full grid place-items-center hover:opacity-100 opacity-70 transition-opacity"
+            style={{ background: "color-mix(in srgb, var(--color-text) 6%, transparent)" }}
+          >
+            {darkMode ? (
+              // Sun icon — currently dark, tap for light
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <circle cx="6.5" cy="6.5" r="2.4" stroke="currentColor" strokeWidth="1.4" />
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
+                  <line key={deg} x1="6.5" y1="0.8" x2="6.5" y2="2.3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" transform={`rotate(${deg} 6.5 6.5)`} />
+                ))}
+              </svg>
+            ) : (
+              // Moon icon — currently light, tap for dark
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+                <path d="M10 7.5A4.5 4.5 0 0 1 5.5 3a4.5 4.5 0 1 0 5 4.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
         </div>
 
         <AnimatePresence mode="wait">
@@ -168,11 +272,14 @@ export function Wizard({
           >
             {step === 0 && (
               <StepHeader
-                eyebrow="Step 1 of 5"
+                eyebrow={`Step 1 of ${TOTAL_STEPS}`}
                 title={copy.sizeStep?.title ?? "Choose your size"}
                 subtitle={copy.sizeStep?.subtitle ?? "You can change everything later from the configurator."}
               >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
+                {/* Vertical stack in the squircle layout — fits the 420px
+                    column cleanly. Each card reads as a row with label /
+                    sqm / dimensions on a single line. */}
+                <div className="flex flex-col gap-3 mt-6">
                   {sizes.map((s) => (
                     <SizeCard key={s.id} size={s} active={sizeId === s.id} onClick={() => setSizeId(s.id)} accent={accent} />
                   ))}
@@ -182,7 +289,7 @@ export function Wizard({
 
             {step === 1 && (
               <StepHeader
-                eyebrow="Step 2 of 5"
+                eyebrow={`Step 2 of ${TOTAL_STEPS}`}
                 title={copy.logoStep?.title ?? "Upload your logo"}
                 subtitle={copy.logoStep?.subtitle ?? "We'll splice it in wherever your brand mark appears. Drag a PNG / SVG / JPG here."}
               >
@@ -192,7 +299,7 @@ export function Wizard({
 
             {step === 2 && (
               <StepHeader
-                eyebrow="Step 3 of 5"
+                eyebrow={`Step 3 of ${TOTAL_STEPS}`}
                 title={copy.artworkStep?.title ?? "Upload a hero artwork"}
                 subtitle={copy.artworkStep?.subtitle ?? "We'll feature this as the back-wall graphic. Skip if you'd rather use a solid colour."}
               >
@@ -202,13 +309,13 @@ export function Wizard({
 
             {step === 3 && (
               <StepHeader
-                eyebrow="Step 4 of 5"
+                eyebrow={`Step 4 of ${TOTAL_STEPS}`}
                 title={copy.coloursStep?.title ?? "Brand colours"}
                 subtitle={extracting
                   ? "Reading your logo…"
-                  : (copy.coloursStep?.subtitle ?? "Auto-picked from your logo. Each one drives a different surface.")}
+                  : (copy.coloursStep?.subtitle ?? "Auto-picked from your logo. The second row is auto-derived for floor/table/chairs — edit any one to customise.")}
               >
-                <div className="grid grid-cols-3 gap-5 mt-8">
+                <div className="grid grid-cols-3 gap-3 mt-6">
                   {([0, 1, 2] as const).map((i) => (
                     <ColourCard
                       key={i}
@@ -218,16 +325,34 @@ export function Wizard({
                     />
                   ))}
                 </div>
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Surfaces</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <ColourCard
+                    label="Floor"
+                    value={extendedColours.floor}
+                    onChange={(v) => { setExtendedColours((c) => ({ ...c, floor: v })); setExtendedTouched((t) => ({ ...t, floor: true })); }}
+                  />
+                  <ColourCard
+                    label="Table"
+                    value={extendedColours.table}
+                    onChange={(v) => { setExtendedColours((c) => ({ ...c, table: v })); setExtendedTouched((t) => ({ ...t, table: true })); }}
+                  />
+                  <ColourCard
+                    label="Chairs"
+                    value={extendedColours.chairs}
+                    onChange={(v) => { setExtendedColours((c) => ({ ...c, chairs: v })); setExtendedTouched((t) => ({ ...t, chairs: true })); }}
+                  />
+                </div>
               </StepHeader>
             )}
 
             {step === 4 && (
               <StepHeader
-                eyebrow="Step 5 of 5"
+                eyebrow={`Step 5 of ${TOTAL_STEPS}`}
                 title={copy.designLineStep?.title ?? "Choose your design line"}
                 subtitle={copy.designLineStep?.subtitle ?? "Pick the structural language. You can swap it later from the configurator."}
               >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
+                <div className="flex flex-col gap-3 mt-6">
                   {designLines.map((d) => (
                     <DesignLineCard key={d.id} line={d} active={designLineId === d.id} onClick={() => setDesignLineId(d.id)} accent={accent} />
                   ))}
@@ -236,6 +361,20 @@ export function Wizard({
             )}
 
             {step === 5 && (
+              <StepHeader
+                eyebrow={`Step 6 of ${TOTAL_STEPS}`}
+                title={copy.customisationStep?.title ?? "Customisation"}
+                subtitle={copy.customisationStep?.subtitle ?? "Optional flourishes. The room works without them — these are the personality dials."}
+              >
+                <CustomisationStep
+                  value={customisation}
+                  onChange={(patch) => setCustomisation((v) => ({ ...v, ...patch }))}
+                  accent={accent}
+                />
+              </StepHeader>
+            )}
+
+            {step === 6 && (
               <StepHeader
                 eyebrow="All set"
                 title={copy.summaryStep?.title ?? "Ready to build"}
@@ -264,7 +403,7 @@ export function Wizard({
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6L8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             Back
           </button>
-          {step < 5 ? (
+          {step < LAST_STEP ? (
             <button
               onClick={next}
               className="px-6 h-10 rounded-[8px] text-[0.78rem] uppercase tracking-wider"
@@ -305,26 +444,30 @@ function StepHeader({
 // ── Step 1: Size card ──────────────────────────────────────────────────
 
 function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; active: boolean; onClick: () => void; accent: string }) {
+  // Row layout — label / description on the left, sqm + dimensions
+  // anchored right. Reads cleanly in the narrow squircle column.
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="text-left p-6 rounded-[20px] backdrop-blur-md transition-all"
+      className="text-left rounded-[16px] backdrop-blur-md transition-all flex items-center gap-4 px-4 py-3.5"
       style={{
         background: active ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
         border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
         boxShadow: active
-          ? `0 18px 40px -16px color-mix(in srgb, ${accent} 50%, transparent)`
-          : "0 10px 24px -16px rgba(0,0,0,0.15)",
+          ? `0 14px 30px -16px color-mix(in srgb, ${accent} 50%, transparent)`
+          : "0 6px 16px -12px rgba(0,0,0,0.12)",
       }}
     >
-      <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mb-1">{s.id} · {s.sqm} m²</div>
-      <div className="text-[1.6rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.label}</div>
-      <div className="text-[0.78rem] opacity-70 mb-2">{s.description}</div>
-      <div className="text-[0.7rem] opacity-55" style={{ fontVariantNumeric: "tabular-nums" }}>
-        {s.widthM.toFixed(1)} × {s.depthM.toFixed(1)} m
+      <div className="min-w-0 flex-1">
+        <div className="text-[1.05rem] tracking-tight" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.label}</div>
+        <div className="text-[0.7rem] opacity-65 mt-0.5 truncate">{s.description}</div>
+      </div>
+      <div className="text-right flex-shrink-0" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <div className="text-[0.92rem]" style={{ color: active ? accent : "currentColor", fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.sqm} m²</div>
+        <div className="text-[0.65rem] opacity-55 mt-0.5">{s.widthM.toFixed(1)} × {s.depthM.toFixed(1)} m</div>
       </div>
     </motion.button>
   );
@@ -387,62 +530,31 @@ function ColourCard({ label, value, onChange }: { label: string; value: string; 
 // ── Step 5: Design line card ───────────────────────────────────────────
 
 function DesignLineCard({ line, active, onClick, accent }: { line: WizardDesignLine; active: boolean; onClick: () => void; accent: string }) {
+  // Row layout (matches SizeCard) — the generic SVG icons used to live
+  // here but didn't match warm/studio/minimal so they were removed. Hosts
+  // can still ship a bespoke preview via `designLine.preview`.
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ y: -4 }}
+      whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="text-left p-6 rounded-[20px] backdrop-blur-md transition-all"
+      className="text-left rounded-[16px] backdrop-blur-md transition-all flex items-start gap-3 px-4 py-3.5"
       style={{
         background: active ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
         border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
         boxShadow: active
-          ? `0 18px 40px -16px color-mix(in srgb, ${accent} 50%, transparent)`
-          : "0 10px 24px -16px rgba(0,0,0,0.15)",
+          ? `0 14px 30px -16px color-mix(in srgb, ${accent} 50%, transparent)`
+          : "0 6px 16px -12px rgba(0,0,0,0.12)",
       }}
     >
-      {line.preview ?? <DefaultPreview id={line.id} active={active} accent={accent} />}
-      <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mt-4 mb-1">{line.tagline}</div>
-      <div className="text-[1.4rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{line.label}</div>
-      <div className="text-[0.78rem] opacity-70">{line.description}</div>
+      {line.preview && <div className="flex-shrink-0">{line.preview}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="text-[0.62rem] uppercase tracking-wider opacity-55">{line.tagline}</div>
+        <div className="text-[1.05rem] tracking-tight mt-0.5" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{line.label}</div>
+        <div className="text-[0.72rem] opacity-65 mt-0.5">{line.description}</div>
+      </div>
     </motion.button>
-  );
-}
-
-function DefaultPreview({ id, active, accent }: { id: string; active: boolean; accent: string }) {
-  // A small hash-based decoration so unknown design-line ids still render
-  // something visually distinct. The host can pass a real preview ReactNode
-  // via `designLine.preview` if it wants bespoke artwork.
-  const stroke = active ? accent : "currentColor";
-  const seed = Array.from(id).reduce((a, c) => a + c.charCodeAt(0), 0);
-  const variant = seed % 3;
-  return (
-    <div className="aspect-[16/10] rounded-[12px] grid place-items-center" style={{ background: "color-mix(in srgb, var(--color-text) 5%, transparent)" }}>
-      <svg width="120" height="75" viewBox="0 0 120 75" fill="none" style={{ opacity: active ? 1 : 0.55 }}>
-        {variant === 0 && (
-          <>
-            <rect x="6" y="10" width="16" height="50" rx="2" stroke={stroke} strokeWidth="1.6" />
-            <rect x="28" y="10" width="16" height="50" rx="2" stroke={stroke} strokeWidth="1.6" />
-            <rect x="76" y="10" width="16" height="50" rx="2" stroke={stroke} strokeWidth="1.6" />
-            <rect x="98" y="10" width="16" height="50" rx="2" stroke={stroke} strokeWidth="1.6" />
-          </>
-        )}
-        {variant === 1 && Array.from({ length: 4 }, (_, c) =>
-          Array.from({ length: 3 }, (_, r) => (
-            <rect key={`${c}-${r}`} x={10 + c * 25} y={6 + r * 20} width="22" height="17" rx="1" stroke={stroke} strokeWidth="1.4" />
-          )),
-        )}
-        {variant === 2 && (
-          <>
-            <line x1="10" y1="2" x2="110" y2="2" stroke={stroke} strokeWidth="1.4" />
-            <rect x="12"  y="14" width="20" height="44" rx="1" stroke={stroke} strokeWidth="1.4" />
-            <rect x="50"  y="14" width="20" height="44" rx="1" stroke={stroke} strokeWidth="1.4" />
-            <rect x="88"  y="14" width="20" height="44" rx="1" stroke={stroke} strokeWidth="1.4" />
-          </>
-        )}
-      </svg>
-    </div>
   );
 }
 
@@ -483,6 +595,106 @@ function SummaryCard({
           <img src={artworkUrl} alt="back-wall hero" className="w-full aspect-[16/6] object-cover rounded-[14px]" />
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Customisation step (cups · plants · sofas · displays) ──────────────
+//
+// Lifted out of the floating WizardFlourishes side panel and into a
+// proper wizard step. Lets the user dial in the room's personality
+// flourishes inline with the rest of the flow.
+
+function CustomisationStep({
+  value, onChange, accent,
+}: {
+  value: WizardCustomisation;
+  onChange: (patch: Partial<WizardCustomisation>) => void;
+  accent: string;
+}) {
+  return (
+    <div className="mt-6 flex flex-col gap-5">
+      {/* Cups toggle — switch styled to match the rest of the wizard. */}
+      <div className="flex items-center justify-between rounded-[14px] p-4" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
+        <div>
+          <div className="text-[0.92rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>Branded coffee cups</div>
+          <div className="text-[0.72rem] opacity-65 mt-0.5">A cup in front of each chair, logo wrapped around the body.</div>
+        </div>
+        <button
+          onClick={() => onChange({ cupsEnabled: !value.cupsEnabled })}
+          aria-label={`Toggle branded cups ${value.cupsEnabled ? "off" : "on"}`}
+          className="h-6 w-11 rounded-full relative transition-colors"
+          style={{ background: value.cupsEnabled ? accent : "color-mix(in srgb, var(--color-text) 14%, transparent)" }}
+        >
+          <span
+            className="absolute top-[2px] h-5 w-5 rounded-full transition-transform"
+            style={{ left: 2, transform: value.cupsEnabled ? "translateX(20px)" : "translateX(0)", background: "#fff" }}
+          />
+        </button>
+      </div>
+
+      {/* Three counters — plants / sofas / displays. */}
+      <CounterRow
+        label="Plants"
+        hint="Foliage in the corners — biophilic warmth."
+        value={value.plantCount}
+        min={0} max={6}
+        onChange={(v) => onChange({ plantCount: v })}
+        accent={accent}
+      />
+      <CounterRow
+        label="Breakout sofas"
+        hint="Two-seat lounges along the front wall."
+        value={value.sofaCount}
+        min={0} max={4}
+        onChange={(v) => onChange({ sofaCount: v })}
+        accent={accent}
+      />
+      <CounterRow
+        label="Standing displays"
+        hint="Brand screens on stands around the room."
+        value={value.standingDisplayCount}
+        min={0} max={4}
+        onChange={(v) => onChange({ standingDisplayCount: v })}
+        accent={accent}
+      />
+    </div>
+  );
+}
+
+function CounterRow({
+  label, hint, value, min, max, onChange, accent,
+}: {
+  label: string; hint: string;
+  value: number; min: number; max: number;
+  onChange: (v: number) => void;
+  accent: string;
+}) {
+  const dec = () => onChange(Math.max(min, value - 1));
+  const inc = () => onChange(Math.min(max, value + 1));
+  return (
+    <div className="flex items-center justify-between rounded-[14px] p-4" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
+      <div className="min-w-0 mr-4">
+        <div className="text-[0.92rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{label}</div>
+        <div className="text-[0.72rem] opacity-65 mt-0.5 truncate">{hint}</div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={dec}
+          disabled={value <= min}
+          className="h-7 w-7 rounded-full grid place-items-center text-[0.95rem] disabled:opacity-30 transition-opacity"
+          style={{ background: "color-mix(in srgb, var(--color-text) 8%, transparent)" }}
+          aria-label={`Decrease ${label}`}
+        >−</button>
+        <span className="t-num text-[0.95rem] w-6 text-center tabular-nums" style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600' }}>{value}</span>
+        <button
+          onClick={inc}
+          disabled={value >= max}
+          className="h-7 w-7 rounded-full grid place-items-center text-[0.95rem] disabled:opacity-30 transition-opacity"
+          style={{ background: "color-mix(in srgb, var(--color-text) 8%, transparent)" }}
+          aria-label={`Increase ${label}`}
+        >+</button>
+      </div>
     </div>
   );
 }

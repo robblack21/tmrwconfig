@@ -624,13 +624,25 @@ export function Scene() {
 
 // ── Camera room clamp ──────────────────────────────────────────────────────
 // Per-frame: if the user orbits the camera past any wall, pull it back to
-// just inside the room. Stops the "camera clipping through the front wall"
-// issue without removing the ability to orbit. Soft clamp via lerp so it
-// doesn't feel like the camera is jammed against an invisible cage —
-// reaches the target in a few frames once you stop dragging.
+// just inside the room. The previous implementation lerped at 0.35 every
+// frame — that's strong enough to feel like the camera is rubber-banding
+// back as the user drags, fighting OrbitControls' inertial damping. Now
+// we apply only a TINY 0.06 lerp, which gathers correction over a few
+// frames once the user stops dragging instead of yanking visibly during
+// the drag itself. The clamp also stays out of the way for 1.2s after a
+// preset transition (`gotoPreset`) so the cinematic move can park the
+// camera wherever it wants without us immediately fighting it.
 function CameraRoomClamp({ widthM, depthM, wallHeightM, platformHeightM }: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
   const { camera } = useThree();
+  const cameraPreset = useConfig((s) => s.cameraPreset);
+  const cooldownRef = useRef<number>(0);
+  // Reset the cooldown whenever a preset fires so the cinematic move
+  // can fly through wall space without the clamp dragging it back.
+  useEffect(() => {
+    if (cameraPreset) cooldownRef.current = Date.now() + 1200;
+  }, [cameraPreset]);
   useFrame(() => {
+    if (Date.now() < cooldownRef.current) return;
     // Keep an 0.4m wall buffer so the camera never sits flush with the
     // glass / panelling. Vertical buffers are looser because the polar-
     // angle limit already protects us from flying through the ceiling.
@@ -649,10 +661,9 @@ function CameraRoomClamp({ widthM, depthM, wallHeightM, platformHeightM }: { wid
     if (ny < yMin)  ny = yMin;
     if (ny > yMax)  ny = yMax;
     if (nx !== camera.position.x || nz !== camera.position.z || ny !== camera.position.y) {
-      // Soft pull-in — fast enough to look responsive, slow enough that a
-      // brief pass through the wall (during a flicky drag) doesn't feel
-      // like the camera magneted into a corner.
-      camera.position.lerp(new THREE.Vector3(nx, ny, nz), 0.35);
+      // 0.06 = drift in over ~20 frames after the user stops dragging.
+      // Much weaker than before so it doesn't visibly fight the user.
+      camera.position.lerp(new THREE.Vector3(nx, ny, nz), 0.06);
     }
   });
   return null;
