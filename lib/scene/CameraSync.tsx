@@ -25,19 +25,22 @@ type OrbitControlsLike = {
 // can't immediately punch through. The per-frame clamp in `Scene.tsx`
 // (OrbitControls maxDistance + room-bounds correction) handles wider
 // rooms / aggressive user dragging.
+// Default FOV is 60° (was 30-42 across presets). The user wanted a wider,
+// more "in-the-room" feel — 60° reads as a natural human-eye perspective
+// rather than the telephoto crop of the previous presets.
 export const CAMERA_PRESETS: Record<string, { pos: [number, number, number]; target: [number, number, number]; fov: number }> = {
   // Inside the room — 3/4 view from a front corner, across the table.
-  hero:    { pos: [3.6, 2.0, 2.4],  target: [-0.4, 0.9, -0.6], fov: 42 },
+  hero:    { pos: [3.6, 2.0, 2.4],  target: [-0.4, 0.9, -0.6], fov: 60 },
   // From just inside the door, looking down the table at the back / video wall.
-  front:   { pos: [0, 1.85, 2.4],   target: [0, 1.3, -3.0],    fov: 50 },
+  front:   { pos: [0, 1.85, 2.4],   target: [0, 1.3, -3.0],    fov: 60 },
   // Along one side wall, looking across to the windowed wall opposite.
-  side:    { pos: [4.2, 1.8, 0],    target: [-4.2, 1.1, 0],    fov: 50 },
+  side:    { pos: [4.2, 1.8, 0],    target: [-4.2, 1.1, 0],    fov: 60 },
   // High interior angle — reads the table + chair formation from above.
-  top:     { pos: [0.01, 3.4, 2.8], target: [0, 0.7, -0.6],    fov: 52 },
+  top:     { pos: [0.01, 3.4, 2.8], target: [0, 0.7, -0.6],    fov: 64 },
   // Low, wide shot down the length of the room.
-  pendant: { pos: [0, 1.2, 2.2],    target: [0, 1.6, -2.8],    fov: 56 },
+  pendant: { pos: [0, 1.2, 2.2],    target: [0, 1.6, -2.8],    fov: 64 },
   // Tight on the head of the table + nearest chairs.
-  closeup: { pos: [1.6, 1.3, 1.9],  target: [0, 0.78, 0],      fov: 42 },
+  closeup: { pos: [1.6, 1.3, 1.9],  target: [0, 0.78, 0],      fov: 54 },
 };
 
 /** First-load "entry" view — camera pulls in from 2.5× further away with

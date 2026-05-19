@@ -206,10 +206,9 @@ export default function Page() {
           </button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={asset(chromeTheme === "day" ? "/logos/tmrwwhite.jpg" : "/logos/tmrwblack.jpg")}
+            src={asset(chromeTheme === "day" ? "/logos/tmrwwhite.png" : "/logos/tmrwblack.png")}
             alt="TMRW Foundation"
             className="h-9 w-auto object-contain"
-            style={{ mixBlendMode: chromeTheme === "day" ? "multiply" : "screen" }}
           />
           <span className="t-label tracking-wider uppercase mt-[1px]">configurator</span>
           <span

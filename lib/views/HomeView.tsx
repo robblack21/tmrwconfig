@@ -43,10 +43,12 @@ export function HomeView({ onChoose, chromeTheme = "day", onToggleChrome }: {
       <div className="max-w-[1200px] mx-auto px-8 py-12">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={asset(chromeTheme === "day" ? "/logos/tmrwwhite.jpg" : "/logos/tmrwblack.jpg")}
+          src={asset(chromeTheme === "day" ? "/logos/tmrwwhite.png" : "/logos/tmrwblack.png")}
           alt="TMRW Foundation"
           className="h-40 w-auto -ml-2 mb-2"
-          style={{ mixBlendMode: chromeTheme === "day" ? "multiply" : "screen" }}
+          /* Backgrounds were stripped at the asset stage — PNGs ship
+             with transparency, so the mixBlendMode trick used to hide
+             the baked-white JPG ground is no longer needed. */
         />
         <h1 className="text-[2.2rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>
           Boardroom configurator
@@ -68,26 +70,70 @@ export function HomeView({ onChoose, chromeTheme = "day", onToggleChrome }: {
 }
 
 function CreateNewTile({ onClick }: { onClick: () => void }) {
+  // Primary CTA — visually distinct from the brand tiles. Accent-coloured
+  // fill, white text, pulsing glow ring + a "Start" pill in the corner
+  // so the eye lands here first on the home view.
   return (
     <motion.button
       onClick={onClick}
-      whileHover={{ y: -3, scale: 1.02 }}
+      whileHover={{ y: -4, scale: 1.03 }}
       whileTap={{ scale: 0.98 }}
       transition={{ type: "spring", stiffness: 360, damping: 28 }}
-      className="aspect-[4/5] rounded-[36px] neumorph-raised relative overflow-hidden group"
-      style={{ border: "2px dashed color-mix(in srgb, var(--color-accent) 60%, transparent)" }}
+      className="aspect-[4/5] rounded-[36px] relative overflow-hidden group"
+      style={{
+        background: "linear-gradient(135deg, var(--color-accent) 0%, color-mix(in srgb, var(--color-accent) 78%, #000) 100%)",
+        color: "#fff",
+        // Persistent outer glow as a soft halo + an inner brand-edge.
+        boxShadow:
+          "0 22px 60px -22px color-mix(in srgb, var(--color-accent) 70%, transparent), " +
+          "0 6px 22px -10px color-mix(in srgb, var(--color-accent) 55%, transparent), " +
+          "inset 0 1px 0 rgba(255,255,255,0.18)",
+      }}
     >
+      {/* Animated pulsing glow ring — sits behind the tile content but
+          radiates outward. Pure transform/opacity so it can't tank perf. */}
+      <motion.div
+        aria-hidden
+        className="absolute -inset-1 rounded-[40px] pointer-events-none"
+        animate={{ opacity: [0.45, 0.85, 0.45], scale: [1, 1.03, 1] }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          background: "radial-gradient(ellipse at center, color-mix(in srgb, var(--color-accent) 40%, transparent) 0%, transparent 70%)",
+          filter: "blur(8px)",
+        }}
+      />
+      {/* "Start" pill — anchored top-right, reads as a clear CTA badge. */}
+      <div
+        className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[0.6rem] uppercase tracking-wider"
+        style={{
+          background: "rgba(255,255,255,0.18)",
+          color: "#fff",
+          backdropFilter: "blur(6px)",
+          fontVariationSettings: '"wdth" 100, "wght" 600',
+        }}
+      >
+        Start
+      </div>
       <div className="absolute inset-0 grid place-items-center">
         <div className="text-center px-6">
-          <div className="w-14 h-14 mx-auto rounded-full mb-3 grid place-items-center" style={{ background: "var(--color-accent)" }}>
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-              <path d="M11 4v14M4 11h14" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+          <motion.div
+            className="w-16 h-16 mx-auto rounded-full mb-4 grid place-items-center"
+            style={{
+              background: "rgba(255,255,255,0.16)",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 14px -6px rgba(0,0,0,0.3)",
+              backdropFilter: "blur(4px)",
+            }}
+            animate={{ y: [0, -2, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M12 4v16M4 12h16" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
             </svg>
-          </div>
-          <div className="t-row" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>
+          </motion.div>
+          <div className="text-[1.05rem] mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 700' }}>
             Create new brand
           </div>
-          <div className="t-label mt-1">
+          <div className="text-[0.7rem] opacity-85">
             From a blank TMRW room
           </div>
         </div>

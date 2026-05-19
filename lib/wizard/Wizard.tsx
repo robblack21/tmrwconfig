@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { extractDominantColours, harmonise, type HarmonyRule } from "./colour";
 import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation } from "./types";
@@ -78,6 +78,15 @@ export function Wizard({
   const accent = `var(${accentVar})`;
   const [step, setStep] = useState(0);
   const [sizeId, setSizeId] = useState<string>(initialSizeId ?? sizes[0]!.id);
+  // Step 1 fine-tune sliders — width × depth × wall-height. Default to the
+  // picked size card's dims, then track user edits. A "touched" flag per
+  // axis stops the preset re-applying its size when the user has dialled
+  // in their own number. Resets to preset values whenever the user picks
+  // a different size card.
+  const [dimsTouched, setDimsTouched] = useState<{ w: boolean; d: boolean; h: boolean }>({ w: false, d: false, h: false });
+  const [widthM,  setWidthM]   = useState<number>(sizes[0]!.widthM);
+  const [depthM,  setDepthM]   = useState<number>(sizes[0]!.depthM);
+  const [heightM, setHeightM]  = useState<number>(2.8);
   const [designLineId, setDesignLineId] = useState<string>(initialDesignLineId ?? designLines[0]!.id);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
@@ -105,7 +114,24 @@ export function Wizard({
   const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
 
-  const size = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
+  const sizeBase = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
+  // Effective `size` honours any user edits to the W/D sliders. We
+  // splice the touched dims over the preset's; sqm/label/description
+  // stay from the card so the chrome still reads as that preset.
+  const size: WizardSize = {
+    ...sizeBase,
+    widthM: dimsTouched.w ? widthM : sizeBase.widthM,
+    depthM: dimsTouched.d ? depthM : sizeBase.depthM,
+  };
+
+  // Whenever the user picks a NEW size card, reset the touched flags so
+  // its preset dims flow in. Subsequent slider edits flip the touched
+  // flag and stick.
+  useEffect(() => {
+    setWidthM(sizeBase.widthM);
+    setDepthM(sizeBase.depthM);
+    setDimsTouched({ w: false, d: false, h: false });
+  }, [sizeBase.id, sizeBase.widthM, sizeBase.depthM]);
   const designLine = designLines.find((d) => d.id === designLineId) ?? designLines[0]!;
 
   // Whenever the user edits the primary swatches, re-derive any extended
@@ -124,8 +150,8 @@ export function Wizard({
   // can build a scene in lock-step with the user's progress.
   useEffect(() => {
     if (!onState) return;
-    onState({ step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId });
-  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId]);
+    onState({ step, size, wallHeightM: heightM, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId });
+  }, [onState, step, size, heightM, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -160,7 +186,7 @@ export function Wizard({
   }, []);
 
   const submit = () => {
-    const result: WizardResult = { size, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation, environmentId };
+    const result: WizardResult = { size, wallHeightM: heightM, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation, environmentId };
     onComplete(result);
   };
 
@@ -325,6 +351,27 @@ export function Wizard({
                     </motion.div>
                   ))}
                 </motion.div>
+                {/* Fine-tune dims — width × depth × wall-height. Edits
+                    here flow through to footprint.set / setWallHeight
+                    via the host's onState handler. */}
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Fine-tune</div>
+                <div className="flex flex-col gap-3">
+                  <WizardSlider
+                    label="Width"  value={size.widthM} min={2.5} max={12} step={0.5} unit="m"
+                    onChange={(v) => { setWidthM(v); setDimsTouched((t) => ({ ...t, w: true })); }}
+                    accent={accent}
+                  />
+                  <WizardSlider
+                    label="Depth"  value={size.depthM} min={2.5} max={12} step={0.5} unit="m"
+                    onChange={(v) => { setDepthM(v); setDimsTouched((t) => ({ ...t, d: true })); }}
+                    accent={accent}
+                  />
+                  <WizardSlider
+                    label="Height" value={heightM} min={2.4} max={5.5} step={0.1} unit="m"
+                    onChange={(v) => { setHeightM(v); setDimsTouched((t) => ({ ...t, h: true })); }}
+                    accent={accent}
+                  />
+                </div>
               </StepHeader>
             )}
 
@@ -740,6 +787,46 @@ function EnvironmentCard({ env, active, onClick, accent }: {
 // Lifted out of the floating WizardFlourishes side panel and into a
 // proper wizard step. Lets the user dial in the room's personality
 // flourishes inline with the rest of the flow.
+
+// ── Wizard slider — small inline slider for step 1's W/D/H fine-tune. ───
+// Kept inline (not lib/ui/Slider) so the wizard module stays portable
+// across host projects without dragging in the configurator's UI kit.
+function WizardSlider({
+  label, value, min, max, step, unit, accent, onChange,
+}: {
+  label: string; value: number; min: number; max: number; step: number;
+  unit?: string; accent: string; onChange: (v: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const pct = ((value - min) / Math.max(1e-6, max - min)) * 100;
+  const snap = (n: number) => Math.round(n / step) * step;
+  const handle = (clientX: number) => {
+    const r = trackRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const t = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    onChange(Math.min(max, Math.max(min, snap(min + t * (max - min)))));
+  };
+  return (
+    <div className="flex items-center gap-3">
+      <span className="t-label w-[58px] flex-shrink-0 opacity-70">{label}</span>
+      <div
+        ref={trackRef}
+        onPointerDown={(e) => { (e.target as HTMLElement).setPointerCapture(e.pointerId); setDragging(true); handle(e.clientX); }}
+        onPointerMove={(e) => { if (dragging) handle(e.clientX); }}
+        onPointerUp={(e) => { (e.target as HTMLElement).releasePointerCapture(e.pointerId); setDragging(false); }}
+        className="relative flex-1 h-6 cursor-pointer"
+      >
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1.5 rounded-full" style={{ background: "color-mix(in srgb, var(--color-text) 14%, transparent)" }} />
+        <div className="absolute top-1/2 -translate-y-1/2 h-1.5 rounded-full" style={{ left: 0, width: `${pct}%`, background: accent }} />
+        <div className="absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md" style={{ left: `calc(${pct}% - 8px)`, background: accent }} />
+      </div>
+      <span className="text-[0.72rem] w-[58px] text-right tabular-nums opacity-70">
+        {value.toFixed(step < 1 ? 1 : 0)}{unit ?? ""}
+      </span>
+    </div>
+  );
+}
 
 function CustomisationStep({
   value, onChange, accent,

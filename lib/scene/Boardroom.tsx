@@ -438,12 +438,13 @@ function BrandedCoffeeCup({
     return { node: normalised, decalRadius: radius };
   }, [gltf, cupColor]);
   // Logo wraps cylindrically around the cup body. Two facing arcs (front
-  // + back) at ~140° each give legibility from every seat without
-  // becoming a busy orbit. The previous flat planes foreshortened to
-  // invisibility from side seats — wrapping the texture onto an open
-  // CylinderGeometry segment fixes that.
-  const decalH = Math.min((decalRadius * 1.5) / aspect, CUP_HEIGHT_M * 0.45);
-  const ARC_RAD = (140 * Math.PI) / 180;
+  // + back) at ~120° each give legibility from every seat without
+  // looking like a sticker the size of the cup. Previous values made
+  // the logo dominate the body — shrunk to a max 28% of cup height and
+  // moved up to sit mid-body (70% of cup height) so it reads as a
+  // proper brand decal rather than a wrap.
+  const decalH = Math.min((decalRadius * 0.9) / aspect, CUP_HEIGHT_M * 0.28);
+  const ARC_RAD = (120 * Math.PI) / 180;
   const facings = [0, Math.PI];
   return (
     <group position={position} rotation-y={rotationY}>
@@ -454,13 +455,13 @@ function BrandedCoffeeCup({
               radiusTop, radiusBottom, height, radialSegments, heightSegments,
               openEnded, thetaStart, thetaLength. thetaStart=-ARC/2 centres
               the arc on the +Z facing. */}
-          <mesh position={[0, CUP_HEIGHT_M * 0.55, 0]}>
-            <cylinderGeometry args={[decalRadius, decalRadius, decalH, 24, 1, true, -ARC_RAD / 2, ARC_RAD]} />
+          <mesh position={[0, CUP_HEIGHT_M * 0.70, 0]}>
+            <cylinderGeometry args={[decalRadius, decalRadius, decalH, 32, 1, true, -ARC_RAD / 2, ARC_RAD]} />
             <meshStandardMaterial
               map={tex}
               emissiveMap={tex}
               emissive={new THREE.Color("#ffffff")}
-              emissiveIntensity={0.35}
+              emissiveIntensity={0.3}
               color="#ffffff"
               transparent
               toneMapped={false}

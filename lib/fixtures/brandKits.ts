@@ -62,7 +62,7 @@ const apple: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "squircle", alternates: ["squircle", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "u3SIKAmPXY4", wallColor: "#F5F5F7", floorColor: "#E8E8EA", wallMotif: "grid", cupColor: "#F2F2F4" },
+  scene: { youtubeId: "u3SIKAmPXY4", wallColor: "#F5F5F7", floorColor: "#E8E8EA", tableColor: "#3A3A3C", chairColor: "#A8A8AC", wallMotif: "grid", cupColor: "#F2F2F4" },
 };
 
 // ── BMW ──────────────────────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ const bmw: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L", floorColor: "#9DB2C6", wallMotif: "stripes.vertical", cupColor: "#0066B1" },
+  scene: { youtubeId: "YUOPoGO2gRI", defaultTier: "L", floorColor: "#9DB2C6", tableColor: "#1E2A3C", chairColor: "#4A6F9F", wallMotif: "stripes.vertical", cupColor: "#0066B1" },
 };
 
 // ── Disney ───────────────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ const disney: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "b-DUYQg_-AQ", floorColor: "#9FA8D4", wallMotif: "stars", cupColor: "#F0C808" },
+  scene: { youtubeId: "b-DUYQg_-AQ", floorColor: "#9FA8D4", tableColor: "#1E2D5C", chairColor: "#6B8EC9", wallMotif: "stars", cupColor: "#F0C808" },
 };
 
 // ── Ferrari ──────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ const ferrari: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L", floorColor: "#C4B0AA", wallMotif: "stripes.diagonal", cupColor: "#D40000" },
+  scene: { youtubeId: "quKzXz2XW5Q", defaultTier: "L", floorColor: "#C4B0AA", tableColor: "#3D2817", chairColor: "#A33500", wallMotif: "stripes.diagonal", cupColor: "#D40000" },
 };
 
 // ── Google ───────────────────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ const mercedes: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L", floorColor: "#C2C7CC", wallMotif: "stars", cupColor: "#1A1A1A" },
+  scene: { youtubeId: "HLy2IXCrpYw", defaultTier: "L", floorColor: "#C2C7CC", tableColor: "#101010", chairColor: "#5A6065", wallMotif: "stars", cupColor: "#1A1A1A" },
 };
 
 // ── Samsung ──────────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ const samsung: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "2gYqEi8-am4", floorColor: "#A4ACCB", wallMotif: "hex", cupColor: "#1428A0" },
+  scene: { youtubeId: "2gYqEi8-am4", floorColor: "#A4ACCB", tableColor: "#1F2953", chairColor: "#6F7FC6", wallMotif: "hex", cupColor: "#1428A0" },
 };
 
 // ── Netflix ──────────────────────────────────────────────────────────────────
@@ -239,7 +239,7 @@ const netflix: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralDark"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "PssKpzB0Ah0", wallColor: "#141414", floorColor: "#1C1C1C", wallMotif: "stripes.vertical", cupColor: "#E50914" },
+  scene: { youtubeId: "PssKpzB0Ah0", wallColor: "#141414", floorColor: "#1C1C1C", tableColor: "#1A1A1A", chairColor: "#8C3E3E", wallMotif: "stripes.vertical", cupColor: "#E50914" },
 };
 
 // ── Nike ─────────────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ const nike: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "wedge", alternates: ["wedge", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "_ZxqcqMB0ew", wallColor: "#161616", floorColor: "#1F1F1F", wallMotif: "swoosh", cupColor: "#FA5400" },
+  scene: { youtubeId: "_ZxqcqMB0ew", wallColor: "#161616", floorColor: "#1F1F1F", tableColor: "#1A1A1A", chairColor: "#B07C42", wallMotif: "swoosh", cupColor: "#FA5400" },
 };
 
 // ── Nvidia ───────────────────────────────────────────────────────────────────
@@ -281,7 +281,7 @@ const nvidia: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "hexagon", alternates: ["hexagon", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900", floorColor: "#B4C29C", wallMotif: "circuit", cupColor: "#76B900" },
+  scene: { youtubeId: "z978rGwiW6E", wallColor: "#10140C", windowTrimColor: "#76B900", floorColor: "#B4C29C", tableColor: "#141810", chairColor: "#7D9F54", wallMotif: "circuit", cupColor: "#76B900" },
 };
 
 // ── Rolex ────────────────────────────────────────────────────────────────────
@@ -305,7 +305,7 @@ const rolex: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "ring", alternates: ["ring", "squircle"], outerFaceTreatment: "etched", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26", floorColor: "#A6BCAD", wallMotif: "crown", cupColor: "#C8A45C" },
+  scene: { youtubeId: "WjXITcko2No", wallColor: "#0E3A26", floorColor: "#A6BCAD", tableColor: "#1A1410", chairColor: "#8B7C5C", wallMotif: "crown", cupColor: "#C8A45C" },
 };
 
 // ── Tesla ────────────────────────────────────────────────────────────────────
@@ -325,7 +325,7 @@ const tesla: BrandKit = {
   rules: RULES,
   intents: backWallIntent("neutralLight"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "wedge"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "Txt3Wodav1o", wallColor: "#F4F4F4", floorColor: "#E4E4E4", defaultTier: "L", wallMotif: "stripes.horizontal", cupColor: "#E31937" },
+  scene: { youtubeId: "Txt3Wodav1o", wallColor: "#F4F4F4", floorColor: "#E4E4E4", tableColor: "#3C3C3C", chairColor: "#7A7E84", defaultTier: "L", wallMotif: "stripes.horizontal", cupColor: "#E31937" },
 };
 
 // ── The TMRW Foundation ──────────────────────────────────────────────────────
@@ -339,11 +339,10 @@ const tmrw: BrandKit = {
   // with the near-black walls and the saturated brand-blue accent.
   palette: { primary: "#0A0A0A", secondary: "#D7D2C6", accent: "#3D7EFF", neutralLight: "#F4F2ED", neutralDark: "#000000" },
   derivation: "monochrome",
-  // TODO(asset-team): tmrwwhite.jpg is a JPG with baked-white background.
-  // Replace with a transparent PNG (or SVG) of the TMRW mark so the chair-
-  // back / table-top decals don't need a chroma-key (which leaves soft
-  // halos at small sizes).
-  logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
+  // Transparent PNG — the previous JPG with baked-white background is
+  // gone. No chroma-key + no invertLogo flag needed on this kit's scene
+  // any more (see scene field below — both removed).
+  logos: logoSet("/logos/tmrwwhite.png", [0, 0, 660, 360]),
   typography: fonts("Inter", "Inter"),
   motifs: [],
   phrases: [
@@ -353,7 +352,7 @@ const tmrw: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "hexagon", alternates: ["hexagon", "ring", "rectangle"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "8yKBpthWRI4", wallColor: "#141414", floorColor: "#1C1C1C", logoChroma: "white", invertLogo: true, wallMotif: "triangles", cupColor: "#3D7EFF" },
+  scene: { youtubeId: "8yKBpthWRI4", wallColor: "#141414", floorColor: "#1C1C1C", tableColor: "#1A1A1A", chairColor: "#9E9892", wallMotif: "triangles", cupColor: "#3D7EFF" },
 };
 
 // ── Blank template ───────────────────────────────────────────────────────────
@@ -364,7 +363,7 @@ export const tmrwBlank: BrandKit = {
   name: "New room",
   palette: { primary: "#22252B", secondary: "#FFFFFF", accent: "#3D7EFF", neutralLight: "#F5F5F5", neutralDark: "#0F1115" },
   derivation: "complementary",
-  logos: logoSet("/logos/tmrwwhite.jpg", [0, 0, 660, 360]),
+  logos: logoSet("/logos/tmrwwhite.png", [0, 0, 660, 360]),
   typography: fonts("Inter", "Inter"),
   motifs: [],
   phrases: [
@@ -374,7 +373,7 @@ export const tmrwBlank: BrandKit = {
   rules: RULES,
   intents: backWallIntent("primary"),
   pendant: { preferredShape: "rectangle", alternates: ["rectangle", "squircle", "ring"], outerFaceTreatment: "led", innerFaceTreatment: "downlight" },
-  scene: { youtubeId: "8yKBpthWRI4", logoChroma: "white", invertLogo: true, floorColor: "#C9C7C0" },
+  scene: { youtubeId: "8yKBpthWRI4", floorColor: "#C9C7C0" },
 };
 
 // In-app brand picker grid — order is the homepage / dock order.

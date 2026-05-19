@@ -224,7 +224,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   ceilingEnabled: true,
   wallTextureEnabled: true,
   cupsEnabled: true,
-  windowSegments: 4,
+  windowSegments: 5,
   tableOrientationDeg: 90,
   windowSillM: 0.95,
   roomCount: 1,
@@ -773,7 +773,14 @@ export function useBrandKit() {
         : undefined,
     };
   }
-  return kit;
+  // Even when no override is present, clone the kit each `kitRev` tick.
+  // Intents like `kit.setWallGraphic` MUTATE the kit object in-place
+  // (kit.scene.wallGraphic = url) and bump kitRev — but the kit object
+  // identity never changes, so React's reference-equality checks treat
+  // it as the same value and consumers don't re-render. Cloning here
+  // gives every consumer a fresh ref each kitRev so wall artwork
+  // uploads, motif changes, YouTube-id edits etc. all repaint live.
+  return { ...kit, logos: { ...kit.logos }, scene: kit.scene ? { ...kit.scene } : undefined };
 }
 
 export function useTierBounds() {

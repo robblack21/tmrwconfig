@@ -59,6 +59,8 @@ export type WizardCustomisation = {
  *  whatever scene / state it owns. */
 export type WizardResult = {
   size: WizardSize;
+  /** Wall height in metres — fine-tuned via the slider in step 1. */
+  wallHeightM: number;
   /** data: URL of the uploaded logo, or null if the user skipped. */
   logoUrl: string | null;
   /** data: URL of the uploaded hero artwork, or null if skipped. */
@@ -97,6 +99,10 @@ export type WizardCopy = {
 export type WizardState = {
   step: number;
   size: WizardSize;
+  /** Wall height in metres — fine-tuned via the slider in step 1. The
+   *  picked size card doesn't carry this (sizes are square-metres-driven)
+   *  so the wizard tracks it alongside. */
+  wallHeightM: number;
   designLine: WizardDesignLine;
   logoUrl: string | null;
   artworkUrl: string | null;

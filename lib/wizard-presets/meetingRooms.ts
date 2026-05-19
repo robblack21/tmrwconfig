@@ -58,10 +58,15 @@ export const meetingRoomSizes: WizardSize[] = [
 //   - chairCount is the conference seating; ChairsAroundTable caps this
 //     down further if the table is too narrow to fit them at the min
 //     0.69m centre-to-centre spacing.
-const meetingRoomTableMeta: Record<string, { tableLengthM: number; tableWidthM: number; chairCount: number }> = {
-  small:  { tableLengthM: 1.8, tableWidthM: 1.0, chairCount: 4 },
-  medium: { tableLengthM: 3.0, tableWidthM: 1.4, chairCount: 8 },
-  large:  { tableLengthM: 5.0, tableWidthM: 1.8, chairCount: 12 },
+const meetingRoomTableMeta: Record<string, { tableLengthM: number; tableWidthM: number; chairCount: number; tier: "S" | "M" | "L" }> = {
+  // Tier bounds in lib/schemas clamp footprint.set per current tier, so
+  // we must dispatch a matching tier BEFORE the footprint.set or the
+  // Boardroom's 8m width gets silently clamped to whatever the M tier max
+  // is (~6m). The tier is set first; the explicit widthM/depthM dispatch
+  // then lands cleanly within the tier's range.
+  small:  { tableLengthM: 1.8, tableWidthM: 1.0, chairCount: 4,  tier: "S" },
+  medium: { tableLengthM: 3.0, tableWidthM: 1.4, chairCount: 8,  tier: "M" },
+  large:  { tableLengthM: 5.0, tableWidthM: 1.8, chairCount: 12, tier: "L" },
 };
 
 // ── Design lines ──────────────────────────────────────────────────────────
@@ -183,24 +188,45 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   }
 
   // Size — always applied (it's chosen on step 0, default to the first
-  // size card). Re-dispatching the same widthM × depthM is a no-op.
-  // Also dispatches table dims + chair count for the size so picking
-  // Boardroom actually grows the table and seats 12 (not just the room).
+  // size card). Tier MUST be dispatched first because footprint.set
+  // clamps to the current tier's bounds; the Boardroom's 8m width was
+  // silently chopped to ~6m by the M tier's clamp. After tier, the
+  // explicit width/depth lands within range.
   if (!prev || prev.size.id !== state.size.id) {
-    apply({ type: "footprint.set", widthM: state.size.widthM, depthM: state.size.depthM });
     const meta = meetingRoomTableMeta[state.size.id];
+    if (meta) {
+      apply({ type: "footprint.setTier", tier: meta.tier });
+    }
     if (meta) {
       apply({ type: "boardroom.setTableLength", value: meta.tableLengthM });
       apply({ type: "boardroom.setTableWidth",  value: meta.tableWidthM });
       apply({ type: "boardroom.setChairCount",  value: meta.chairCount });
     }
   }
+  // Effective W/D — honours fine-tune slider edits in step 1.
+  if (!prev || prev.size.widthM !== state.size.widthM || prev.size.depthM !== state.size.depthM) {
+    apply({ type: "footprint.set", widthM: state.size.widthM, depthM: state.size.depthM });
+  }
+  // Wall height fine-tune slider.
+  if (!prev || prev.wallHeightM !== state.wallHeightM) {
+    apply({ type: "layout.setWallHeight", value: state.wallHeightM });
+  }
 
-  // Colours — re-dispatch when any swatch changes.
+  // Colours — re-dispatch when any swatch changes. All THREE swatches
+  // flow to surface overrides now (was just walls + trim, so picking a
+  // new harmony rule visibly changed the wizard UI but the middle
+  // "carpet" swatch never landed on the floor). The wizard's
+  // deriveExtendedColours useEffect also re-derives floor/table/chairs
+  // from the new primary trio whenever colours[] changes.
   if (!prev || prev.colours.some((c, i) => c !== state.colours[i])) {
-    const [primary, , accent] = state.colours;
-    apply({ type: "colourOverride.set", surface: "walls", value: primary });
-    apply({ type: "colourOverride.set", surface: "trim",  value: accent });
+    const [primary, carpet, accent] = state.colours;
+    apply({ type: "colourOverride.set", surface: "walls",   value: primary });
+    apply({ type: "colourOverride.set", surface: "trim",    value: accent });
+    // Secondary (carpet) drives the soft secondary surfaces — pendant
+    // body + sofa upholstery — that aren't covered by the extended-
+    // colours dispatch below.
+    apply({ type: "colourOverride.set", surface: "pendant", value: carpet });
+    apply({ type: "colourOverride.set", surface: "sofa",    value: carpet });
   }
 
   // Extended colours — second row of step 3 (floor/table/chairs). Each
@@ -282,13 +308,17 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   //    inheriting any seeded brand's hero props.
   apply({ type: "brandKit.apply", kitId: tmrwBlank.id });
 
-  // 2. Apply the room footprint. The configurator clamps to the current
-  //    tier's bounds, then auto-grows the tier if the wizard requested a
-  //    larger footprint than the tier max. Also sets the boardroom table
-  //    + chair count to match the picked size (Huddle / Meeting /
-  //    Boardroom) — re-dispatching equal values is a no-op so it's safe.
-  apply({ type: "footprint.set", widthM: result.size.widthM, depthM: result.size.depthM });
+  // 2. Apply tier first, then the room footprint. footprint.set clamps to
+  //    the current tier's bounds — without an explicit tier dispatch
+  //    first, the Boardroom (8m wide) gets silently clamped to ~6m by
+  //    the M tier. Tier also re-anchors the size sliders so the user
+  //    can dial bigger from the configurator.
   const sizeMeta = meetingRoomTableMeta[result.size.id];
+  if (sizeMeta) {
+    apply({ type: "footprint.setTier", tier: sizeMeta.tier });
+  }
+  apply({ type: "footprint.set", widthM: result.size.widthM, depthM: result.size.depthM });
+  apply({ type: "layout.setWallHeight", value: result.wallHeightM });
   if (sizeMeta) {
     apply({ type: "boardroom.setTableLength", value: sizeMeta.tableLengthM });
     apply({ type: "boardroom.setTableWidth",  value: sizeMeta.tableWidthM });
