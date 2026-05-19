@@ -128,7 +128,7 @@ export default function Page() {
           sizes={meetingRoomSizes}
           designLines={meetingRoomDesignLines}
           ratePerSqm={1800}
-          layout="panel"
+          layout="squircle"
           copy={{
             brandName: "home",
             sizeStep:    { title: "Choose a meeting-room size" },
@@ -953,7 +953,7 @@ function WizardFlourishes({
 }) {
   return (
     <div
-      className="ui-overlay panel-glass absolute z-[80] left-4 bottom-4 rounded-[12px] px-3 py-2.5"
+      className="ui-overlay panel-glass absolute z-[80] right-4 bottom-4 rounded-[18px] px-3 py-2.5"
       style={{ width: 240 }}
     >
       <div className="t-label uppercase tracking-wider pb-1.5 mb-1.5 border-b border-[color:var(--color-border-soft)]">Flourishes</div>

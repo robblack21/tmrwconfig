@@ -98,25 +98,50 @@ export function Wizard({
 
   const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent"];
 
-  // Panel mode docks the wizard to the right side as a translucent overlay
-  // so the host can render a live 3D preview behind it. Full mode keeps
-  // the original page-takeover gradient.
+  // Three layouts:
+  // • "full":     page-takeover with a radial-gradient brand wash
+  // • "panel":    a 440px-wide column docked to the right (legacy)
+  // • "squircle": a floating left-side overlay with a soft squircle silhouette
+  //               (border-radius 32px), used when the host wants a less
+  //               imposing collector that lets the live 3D preview breathe
   const panelMode = layout === "panel";
+  const squircleMode = layout === "squircle";
+  const overlayMode = panelMode || squircleMode;
+  // Outer container className. Squircle floats inset from the left edge so
+  // the 3D scene gets the right-hand 60-70% of the canvas to play with.
+  const outerClass = squircleMode
+    ? "absolute top-4 left-4 bottom-4 overflow-y-auto scroll-pretty"
+    : panelMode
+      ? "absolute top-0 right-0 bottom-0 overflow-y-auto"
+      : "absolute inset-0 overflow-y-auto";
   return (
     <div
-      className={panelMode ? "absolute top-0 right-0 bottom-0 overflow-y-auto" : "absolute inset-0 overflow-y-auto"}
+      className={outerClass}
       style={{
         zIndex: 70,
-        width: panelMode ? "min(440px, 100vw)" : undefined,
-        background: panelMode
-          ? `linear-gradient(to bottom, color-mix(in srgb, var(--color-bg) 88%, transparent), color-mix(in srgb, var(--color-bg) 78%, transparent))`
+        width: squircleMode
+          ? "min(420px, calc(100vw - 32px))"
+          : panelMode
+            ? "min(440px, 100vw)"
+            : undefined,
+        background: overlayMode
+          ? `linear-gradient(to bottom, color-mix(in srgb, var(--color-bg) 92%, transparent), color-mix(in srgb, var(--color-bg) 82%, transparent))`
           : `radial-gradient(ellipse at top, color-mix(in srgb, ${accent} 8%, var(--color-bg)) 0%, var(--color-bg) 60%)`,
-        backdropFilter: panelMode ? "blur(14px)" : undefined,
-        boxShadow: panelMode ? "-12px 0 32px -16px rgba(0,0,0,0.28)" : undefined,
+        backdropFilter: overlayMode ? "blur(18px) saturate(140%)" : undefined,
+        WebkitBackdropFilter: overlayMode ? "blur(18px) saturate(140%)" : undefined,
+        // Squircle: rounded edges + drop shadow with a soft outer glow.
+        // Panel: hard right-edge dock with a left-cast shadow + 1px border.
+        borderRadius: squircleMode ? 32 : undefined,
+        boxShadow: squircleMode
+          ? "0 24px 56px -20px rgba(0,0,0,0.34), 0 4px 14px -6px rgba(0,0,0,0.18)"
+          : panelMode
+            ? "-12px 0 32px -16px rgba(0,0,0,0.28)"
+            : undefined,
+        border: squircleMode ? "1px solid var(--color-border-soft)" : undefined,
         borderLeft: panelMode ? "1px solid var(--color-border-soft)" : undefined,
       }}
     >
-      <div className={panelMode ? "px-5 py-7" : "max-w-[1100px] mx-auto px-8 py-10"}>
+      <div className={squircleMode ? "px-6 py-7" : panelMode ? "px-5 py-7" : "max-w-[1100px] mx-auto px-8 py-10"}>
         {/* Header — close + progress dots */}
         <div className="flex items-center justify-between mb-8">
           <button

@@ -188,10 +188,16 @@ export const BrandKit = z.object({
        *  Lets the merch table-setting carry its own brand colour without
        *  affecting the wall / floor neutrals. */
       cupColor: HexColor.optional(),
-      /** Boardroom table tint. Defaults to palette.neutralDark so the
-       *  table reads as a contrasting anchor against brand-coloured chairs;
+      /** Boardroom table tint. Defaults to a brand-tinted dark walnut
+       *  (mix of #1a1814 base + palette.primary at 30%) so the table
+       *  reads as a contrasting anchor against brand-coloured chairs;
        *  override per-kit (e.g. light maple-wood for Louis Vuitton). */
       tableColor: HexColor.optional(),
+      /** Chair upholstery tint. Defaults to palette.neutralDark blended
+       *  with palette.secondary so colourful brands (Ferrari yellow,
+       *  Nike orange) get a recognisably-toned but seat-appropriate
+       *  fabric instead of a circus-bright cushion. */
+      chairColor: HexColor.optional(),
       /** Exhibition graphics — printed artwork applied to the back wall
        *  panel and / or to freestanding display stands around the room.
        *  Surface defaults to "wall"; the configurator picks placement

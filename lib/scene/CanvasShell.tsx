@@ -36,7 +36,7 @@ export default function CanvasShell() {
             (state.gl as unknown as { transmissionResolutionScale: number }).transmissionResolutionScale = 1.0;
           }
         }}
-        camera={{ position: [10.5, 4.2, 13.5], fov: 30, near: 0.1, far: 200 }}
+        camera={{ position: [10.5, 4.2, 13.5], fov: 30, near: 0.05, far: 200 }}
         style={{ width: "100%", height: "100%" }}
       >
         <Scene />

@@ -295,9 +295,14 @@ export function ChairsAroundTable({
   const slots = useMemo(() => {
     const out: { pos: [number, number, number]; rot: number }[] = [];
     if (count <= 0) return out;
-    // Tightened from 0.42m → 0.18m so the chairs read as a real boardroom
-    // gathering, not socially-distanced. Knees just clear of the table edge.
-    const gap = 0.18;                                  // chair offset from the table edge
+    // Gap between the chair PIVOT (centre of seat) and the table edge.
+    // The chair model's seat extends ~0.30m forward of the pivot. With
+    // gap = 0.18m the seat front overlapped the table by ~12cm — chairs
+    // visually encroached on the table top. With gap = 0.36m the seat
+    // front sits ~6cm clear of the table edge: knees go under the table
+    // (natural seating posture), seat surface stays on the chair side
+    // of the edge, no visual overlap.
+    const gap = 0.36;                                  // chair offset from the table edge
     const sideX = tableWidthM / 2 + gap;
     const endZ = tableLengthM / 2 + gap;
     const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
@@ -331,9 +336,9 @@ export function ChairsAroundTable({
 const CUP_HEIGHT_M = 0.105;            // matches the GLB's normalised height
 const CUP_RADIUS_M = 0.04;             // for the logo decal placement
 // Tucked inboard of the table edge — cup is in front of the diner like a
-// place setting. With chairs pulled in tight (0.18m gap), 0.32m of cup
-// inset means the cup sits in the diner's natural reach zone.
-const CUP_INSET_M = 0.32;
+// place setting. With chairs at 0.36m gap, 0.40m inset puts the cup in
+// the diner's natural reach zone (just past where their hands rest).
+const CUP_INSET_M = 0.40;
 const CUP_GLB_URL = asset("/glb/props/coffeecup.glb");
 useGLTF.preload(CUP_GLB_URL);
 
@@ -362,14 +367,13 @@ export function BrandedCupsOnTable({
     return out;
   }, [count, tableLengthM, tableWidthM]);
 
-  // Drop the cup an extra 0.04m below "table top + 0.001" so the GLB's
-  // SAUCER footprint sinks INTO the table and the cup BODY reads as
-  // sitting directly on the surface (user reported floating, which is
-  // the saucer-on-table illusion making the cup BODY look 4-5cm above
-  // the wood — a no-saucer place setting reads better at conference
-  // angles). The cup's internal bbox bottom is the SAUCER edge.
+  // Sit cups on the table surface with a 1mm float to avoid z-fighting.
+  // We used to sink the parent 4cm to hide the saucer (treating it as a
+  // floating-cup optical illusion); turns out that buried the cup BODY
+  // in the table top for most viewing angles. Saucer-on-table reads
+  // correctly as a place setting at conference distance.
   return (
-    <group position={[position[0], position[1] + TABLE_HEIGHT_M - 0.04, position[2]]}>
+    <group position={[position[0], position[1] + TABLE_HEIGHT_M + 0.001, position[2]]}>
       {slots.map((s, i) => (
         <BrandedCoffeeCup key={i} position={s.pos} rotationY={s.rot} kit={kit} />
       ))}

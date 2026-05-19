@@ -92,10 +92,14 @@ export type WizardProps = {
   /** Optional CSS-variable name for the accent colour. Default
    *  "--color-accent" — set by the host's stylesheet. */
   accentVar?: string;
-  /** Render the wizard as a docked side-panel overlay instead of a
-   *  full-screen card grid. Use when the host has a live 3D preview
-   *  behind the wizard. */
-  layout?: "full" | "panel";
+  /** Render the wizard as an overlay instead of a full-screen card grid.
+   *  Use when the host has a live 3D preview behind the wizard.
+   *    • "full"     — page-takeover gradient (no preview behind)
+   *    • "panel"    — right-side 440px column with a hard edge
+   *    • "squircle" — floating soft-cornered card docked to the left,
+   *                   inset 16px from the screen edges so the 3D scene
+   *                   gets the right 60-70% of the canvas to breathe */
+  layout?: "full" | "panel" | "squircle";
   /** Close button — host typically routes back to its home view. */
   onClose: () => void;
   /** Called when the user clicks "Build my stand". */

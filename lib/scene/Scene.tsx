@@ -21,6 +21,15 @@ import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
 import type { BrandKit } from "@/lib/schemas";
 
+/** Mix two hex colours in sRGB space. `t=0` returns `a`, `t=1` returns `b`.
+ *  Used by the brand-kit resolver to keep table/chair/floor tints reading
+ *  as upholstery / wood / stone instead of saturated brand swatches. */
+function mixHex(a: string, b: string, t: number): string {
+  const ca = new THREE.Color(a);
+  const cb = new THREE.Color(b);
+  return ca.lerp(cb, t).getStyle();
+}
+
 // Six exterior HDRIs — each ~25 MB at 4K. Picked to give the room a sense
 // of "where is this building?" so the Environment-mode skybox actually
 // reads as somewhere specific.
@@ -123,7 +132,7 @@ export function Scene() {
 
   // Resolve surface colours: user override > kit scene override > kit palette default
   const wallColor    = colourOverrides.walls   ?? kit.scene?.wallColor   ?? kit.palette.primary;
-  const floorColor   = colourOverrides.floor   ?? kit.scene?.floorColor  ?? (isDark ? "#2c2f3b" : "#dde0e6");
+  const floorColor   = colourOverrides.floor   ?? kit.scene?.floorColor  ?? mixHex(kit.palette.neutralLight, kit.palette.primary, 0.25);
   const trimColor    = colourOverrides.trim    ?? kit.palette.accent;
   const pendantColor = colourOverrides.pendant ?? kit.palette.primary;
   const trussColor   = colourOverrides.truss   ?? "#15171c";
@@ -131,6 +140,16 @@ export function Scene() {
   const counterColor    = colourOverrides.counter ?? kit.palette.accent;
   const vitrineColor    = colourOverrides.vitrine ?? kit.palette.accent;
   const monitorColor    = colourOverrides.monitor ?? kit.palette.primary;
+  // Brand-tinted table colour. Almost every kit's `neutralDark` is near-
+  // black, so falling back to it made every table look identical. Mix the
+  // brand primary 30% into a dark walnut base — gives Tesla a red-toned
+  // table, BMW a navy-toned table, Rolex a deep-green-toned table, all
+  // still reading as "dark boardroom surface".
+  const tableResolved = colourOverrides.table ?? kit.scene?.tableColor ?? mixHex("#1a1814", kit.palette.primary, 0.3);
+  // Brand-tinted chair upholstery. `secondary` is often too saturated for
+  // chair fabric (Ferrari yellow, Nike orange) so mix it 60% into the kit's
+  // own neutralDark — keeps brand recognition without circus-chair vibes.
+  const chairResolved = colourOverrides.chair ?? kit.scene?.chairColor ?? mixHex(kit.palette.neutralDark, kit.palette.secondary, 0.55);
 
   // Extruded brand signage that flanks the front door on the room's exterior.
   const logoInvert = !!kit.scene?.invertLogo;
@@ -443,7 +462,7 @@ export function Scene() {
                   lengthM={tableLengthM}
                   widthM={tableWidthM}
                   position={[0, platformHeightM, 0]}
-                  tintHex={colourOverrides.table ?? kit.scene?.tableColor ?? kit.palette.neutralDark}
+                  tintHex={tableResolved}
                 />
                 <ChairsAroundTable
                   count={chairCount}
@@ -451,7 +470,7 @@ export function Scene() {
                   tableWidthM={tableWidthM}
                   chairVariant={chairVariant}
                   position={[0, platformHeightM, 0]}
-                  tintHex={colourOverrides.chair ?? kit.palette.secondary}
+                  tintHex={chairResolved}
                   kit={kit}
                 />
                 {cupsEnabled && (
@@ -588,14 +607,55 @@ export function Scene() {
         rotateSpeed={1.4}
         panSpeed={1.0}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
-        minDistance={2}
-        maxDistance={80}
+        minDistance={1.5}
+        // Cap orbit radius so the camera can't dolly far enough back to
+        // clip through the front wall. Room diagonal sets the upper
+        // bound: half the diagonal plus a 1.5m breathing buffer keeps
+        // the camera comfortably inside even at the widest rooms.
+        maxDistance={Math.hypot(clusterWidthM, depthM) * 0.5 + 1.5}
         maxPolarAngle={Math.PI / 2 - 0.04}
       />
+      <CameraRoomClamp widthM={clusterWidthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
       <Flycam speed={2} />
       <PerfMonitor />
     </>
   );
+}
+
+// ── Camera room clamp ──────────────────────────────────────────────────────
+// Per-frame: if the user orbits the camera past any wall, pull it back to
+// just inside the room. Stops the "camera clipping through the front wall"
+// issue without removing the ability to orbit. Soft clamp via lerp so it
+// doesn't feel like the camera is jammed against an invisible cage —
+// reaches the target in a few frames once you stop dragging.
+function CameraRoomClamp({ widthM, depthM, wallHeightM, platformHeightM }: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
+  const { camera } = useThree();
+  useFrame(() => {
+    // Keep an 0.4m wall buffer so the camera never sits flush with the
+    // glass / panelling. Vertical buffers are looser because the polar-
+    // angle limit already protects us from flying through the ceiling.
+    const margin = 0.4;
+    const xLim = widthM / 2 - margin;
+    const zLim = depthM / 2 - margin;
+    const yMin = platformHeightM + 0.4;
+    const yMax = platformHeightM + wallHeightM - 0.2;
+    let nx = camera.position.x;
+    let nz = camera.position.z;
+    let ny = camera.position.y;
+    if (nx >  xLim) nx =  xLim;
+    if (nx < -xLim) nx = -xLim;
+    if (nz >  zLim) nz =  zLim;
+    if (nz < -zLim) nz = -zLim;
+    if (ny < yMin)  ny = yMin;
+    if (ny > yMax)  ny = yMax;
+    if (nx !== camera.position.x || nz !== camera.position.z || ny !== camera.position.y) {
+      // Soft pull-in — fast enough to look responsive, slow enough that a
+      // brief pass through the wall (during a flicky drag) doesn't feel
+      // like the camera magneted into a corner.
+      camera.position.lerp(new THREE.Vector3(nx, ny, nz), 0.35);
+    }
+  });
+  return null;
 }
 
 // ── Lighting ────────────────────────────────────────────────────────────────
@@ -740,14 +800,17 @@ function PlatformBlock({ widthM, depthM, platformHeightM, sideColor, floorStyle,
       t.needsUpdate = true;
     });
   }, [map, normalMap, aoMap, widthM, depthM]);
-  // SUBTLE parquet brand tint: the top-surface multiply colour washes the
-  // PBR diffuse map by ~30% toward the brand floor colour, so a Rolex room
-  // reads as warm-green-wood-grain instead of plain oak. The sides keep
-  // the full brand colour for stronger fascia signalling.
+  // Parquet brand tint: the top-surface multiply colour washes the PBR
+  // diffuse map by ~65% toward the brand floor colour, so the floor reads
+  // as brand-toned wood instead of generic oak. The previous 35% wash
+  // (lerp 0.65 toward white) muted the brand so heavily that every kit
+  // looked the same on the floor — Rolex's deep green, Ferrari's red,
+  // Tesla's smoke-grey all rendered as identical-looking oak. The sides
+  // keep the full brand colour for stronger fascia signalling.
   const parquetTint = useMemo(() => {
     const base = new THREE.Color(sideColor);
     const white = new THREE.Color("#ffffff");
-    return base.clone().lerp(white, 0.65).getStyle();
+    return base.clone().lerp(white, 0.35).getStyle();
   }, [sideColor]);
   // Circular room → a cylindrical plinth so the floor matches the cylindrical
   // wall ring instead of leaving uncarpeted slivers at the corners.
