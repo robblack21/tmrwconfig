@@ -114,10 +114,7 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("kit.setWallMotif"), kitId: z.string(), motif: z.string() }),
   /** Per-kit wall-graphic URL override via UI. */
   z.object({ type: z.literal("kit.setWallGraphic"), kitId: z.string(), url: z.string().nullable() }),
-  z.object({ type: z.literal("bom.setLineRate"), lineId: z.string(), rate: z.number() }),
-  z.object({ type: z.literal("bom.resetRates"), }),
 
   z.object({ type: z.literal("scene.save"), name: z.string() }),
-  z.object({ type: z.literal("scene.exportPdf"), scope: z.enum(["internal", "invoice"]) }),
 ]);
 export type Intent = z.infer<typeof Intent>;

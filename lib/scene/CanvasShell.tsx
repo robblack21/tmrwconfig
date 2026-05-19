@@ -4,7 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { Scene } from "./Scene";
 import { useConfig } from "@/lib/store/configStore";
-import { LongPressDetector, LongPressModal } from "./LongPressEditor";
+import { LongPressDetector, LongPressIndicator, LongPressModal } from "./LongPressEditor";
 
 export default function CanvasShell() {
   const highDpr = useConfig((s) => s.highDpr);
@@ -16,6 +16,10 @@ export default function CanvasShell() {
   // raycast, but the modal portals to document.body so it can render plain
   // DOM controls (colour input, swatch buttons) overlaid on the canvas.
   const [editor, setEditor] = useState<{ kind: "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss"; screenX: number; screenY: number } | null>(null);
+  // Live press progress (0..1) — drives the radial hold indicator. State
+  // ticks per requestAnimationFrame while a press is in flight; reset to
+  // {t:0} on release / cancel.
+  const [press, setPress] = useState<{ x: number; y: number; t: number }>({ x: 0, y: 0, t: 0 });
   return (
     <>
       <Canvas
@@ -40,8 +44,15 @@ export default function CanvasShell() {
         style={{ width: "100%", height: "100%" }}
       >
         <Scene />
-        <LongPressDetector onOpen={(kind, screenX, screenY) => setEditor({ kind, screenX, screenY })} />
+        <LongPressDetector
+          onOpen={(kind, screenX, screenY) => {
+            setPress({ x: 0, y: 0, t: 0 });
+            setEditor({ kind, screenX, screenY });
+          }}
+          onPressProgress={(x, y, t) => setPress({ x, y, t })}
+        />
       </Canvas>
+      <LongPressIndicator x={press.x} y={press.y} t={press.t} />
       {editor && (
         <LongPressModal
           kind={editor.kind}

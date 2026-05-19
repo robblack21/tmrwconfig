@@ -20,7 +20,6 @@ import type { WizardProps, WizardResult, WizardSize, WizardDesignLine } from "./
 export function Wizard({
   sizes,
   designLines,
-  ratePerSqm = 450,
   initialSizeId,
   initialDesignLineId,
   copy = {},
@@ -89,12 +88,6 @@ export function Wizard({
     const result: WizardResult = { size, logoUrl, artworkUrl, colours, designLine };
     onComplete(result);
   };
-
-  // Indicative price band — host should accept it's a hint, not a quote.
-  const lowMult  = 0.85;
-  const highMult = 1.32;
-  const totalLow  = Math.round(ratePerSqm * lowMult  * size.sqm);
-  const totalHigh = Math.round(ratePerSqm * highMult * size.sqm);
 
   const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent"];
 
@@ -177,11 +170,11 @@ export function Wizard({
               <StepHeader
                 eyebrow="Step 1 of 5"
                 title={copy.sizeStep?.title ?? "Choose your size"}
-                subtitle={copy.sizeStep?.subtitle ?? `Indicative pricing at €${ratePerSqm} / m² baseline. You can change everything later.`}
+                subtitle={copy.sizeStep?.subtitle ?? "You can change everything later from the configurator."}
               >
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-8">
                   {sizes.map((s) => (
-                    <SizeCard key={s.id} size={s} active={sizeId === s.id} onClick={() => setSizeId(s.id)} rate={ratePerSqm} accent={accent} />
+                    <SizeCard key={s.id} size={s} active={sizeId === s.id} onClick={() => setSizeId(s.id)} accent={accent} />
                   ))}
                 </div>
               </StepHeader>
@@ -254,8 +247,6 @@ export function Wizard({
                   logoUrl={logoUrl}
                   artworkUrl={artworkUrl}
                   colours={colours}
-                  totalLow={totalLow}
-                  totalHigh={totalHigh}
                   accent={accent}
                 />
               </StepHeader>
@@ -313,9 +304,7 @@ function StepHeader({
 
 // ── Step 1: Size card ──────────────────────────────────────────────────
 
-function SizeCard({ size: s, active, onClick, rate, accent }: { size: WizardSize; active: boolean; onClick: () => void; rate: number; accent: string }) {
-  const low = Math.round(rate * 0.85 * s.sqm);
-  const high = Math.round(rate * 1.32 * s.sqm);
+function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; active: boolean; onClick: () => void; accent: string }) {
   return (
     <motion.button
       onClick={onClick}
@@ -333,10 +322,9 @@ function SizeCard({ size: s, active, onClick, rate, accent }: { size: WizardSize
     >
       <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mb-1">{s.id} · {s.sqm} m²</div>
       <div className="text-[1.6rem] tracking-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.label}</div>
-      <div className="text-[0.78rem] opacity-70 mb-4">{s.description}</div>
-      <div className="text-[0.95rem] flex items-baseline gap-1" style={{ fontVariantNumeric: "tabular-nums" }}>
-        <span style={{ color: accent }}>€{(low / 1000).toFixed(1)}k</span>
-        <span className="text-[0.72rem] opacity-50">– €{(high / 1000).toFixed(1)}k</span>
+      <div className="text-[0.78rem] opacity-70 mb-2">{s.description}</div>
+      <div className="text-[0.7rem] opacity-55" style={{ fontVariantNumeric: "tabular-nums" }}>
+        {s.widthM.toFixed(1)} × {s.depthM.toFixed(1)} m
       </div>
     </motion.button>
   );
@@ -461,16 +449,16 @@ function DefaultPreview({ id, active, accent }: { id: string; active: boolean; a
 // ── Summary card ───────────────────────────────────────────────────────
 
 function SummaryCard({
-  size, designLine, logoUrl, artworkUrl, colours, totalLow, totalHigh, accent,
-}: { size: WizardSize; designLine: WizardDesignLine; logoUrl: string | null; artworkUrl: string | null; colours: [string, string, string]; totalLow: number; totalHigh: number; accent: string }) {
+  size, designLine, logoUrl, artworkUrl, colours, accent,
+}: { size: WizardSize; designLine: WizardDesignLine; logoUrl: string | null; artworkUrl: string | null; colours: [string, string, string]; accent: string }) {
   return (
     <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
       <div className="p-6 rounded-[20px] backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
-        <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mb-1">Stand</div>
+        <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mb-1">Room</div>
         <div className="text-[1.4rem] mb-4" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{size.label} · {size.sqm} m² · {designLine.label}</div>
-        <div className="text-[0.72rem] opacity-70 mb-1">Indicative budget</div>
-        <div className="text-[1.6rem] tracking-tight" style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600' }}>
-          €{(totalLow / 1000).toFixed(1)}k – €{(totalHigh / 1000).toFixed(1)}k
+        <div className="text-[0.72rem] opacity-70 mb-1">Dimensions</div>
+        <div className="text-[1.4rem] tracking-tight" style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600', fontVariantNumeric: "tabular-nums" }}>
+          {size.widthM.toFixed(1)} × {size.depthM.toFixed(1)} m
         </div>
       </div>
       <div className="p-6 rounded-[20px] backdrop-blur-md flex items-center gap-4" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>

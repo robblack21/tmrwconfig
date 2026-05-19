@@ -127,7 +127,6 @@ export default function Page() {
         <Wizard
           sizes={meetingRoomSizes}
           designLines={meetingRoomDesignLines}
-          ratePerSqm={1800}
           layout="squircle"
           copy={{
             brandName: "home",
@@ -281,7 +280,7 @@ export default function Page() {
           >
             {hallVisible ? "Warehouse" : "Environment"}
           </NavBtn>
-          <span className="t-label text-[0.55rem] uppercase tracking-wider opacity-60 select-none" title="The two switches to the right control render cost. The configurator also auto-degrades them when frame-rate dips.">
+          <span className="t-label text-[0.55rem] uppercase tracking-wider opacity-60 select-none" title="The two switches to the right control GPU load. The configurator also auto-degrades them when frame-rate dips.">
             Performance toggles ▸
           </span>
           <NavBtn onClick={() => apply({ type: "scene.setRenderMode", value: renderMode === "viz" ? "edit" : "viz" })} title="Edit disables lights + post for snappier slider work; Viz is the default look">
@@ -768,7 +767,7 @@ export default function Page() {
       </Card>
 
       {/* Inventory panel — bottom right. A plain list of what's in the room
-          plus each item's addressable subnodes. No costs. */}
+          plus each item's addressable subnodes. */}
       <Card
         className="ui-overlay absolute right-3 bottom-3 flex flex-col panel-glass transition-transform"
         radius="md"

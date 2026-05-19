@@ -119,8 +119,6 @@ export type ConfigState = {
 
   // Manual colour overrides per surface — null = use kit default
   colourOverrides: Partial<Record<"walls" | "floor" | "trim" | "pendant" | "truss" | "sofa" | "counter" | "vitrine" | "monitor" | "table" | "chair" | "ceiling", string | null>>;
-  // Per-line BOM rate overrides (lineId → unit-rate in EUR)
-  bomRateOverrides: Record<string, number>;
   // brand
   brandKitId: string;
   /** Revision counter bumped when an active brand kit's mutable fields (e.g. youtubeId) change in-memory. */
@@ -274,7 +272,6 @@ export const useConfig = create<ConfigState>((set, get) => ({
   cameraPresetOverrides: {},
   cameraActivePreset: "hero",
   colourOverrides: {},
-  bomRateOverrides: {},
   brandKitId: seedBrandKitList[0]!.id,
   kitRev: 0,
   maximiseReuse: false,
@@ -686,14 +683,6 @@ export const useConfig = create<ConfigState>((set, get) => ({
         set({ colourOverrides: { ...s.colourOverrides, [intent.surface]: intent.value } });
         break;
       }
-      case "bom.setLineRate": {
-        set({ bomRateOverrides: { ...s.bomRateOverrides, [intent.lineId]: intent.rate } });
-        break;
-      }
-      case "bom.resetRates": {
-        set({ bomRateOverrides: {} });
-        break;
-      }
       // Stubbed for now — wired when scene/save are implemented.
       case "wall.profile.set":
       case "wall.infill.set":
@@ -702,7 +691,6 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "brandKit.apply":      // unreachable; handled above but ts-narrows
       case "camera.gotoShot":
       case "scene.save":
-      case "scene.exportPdf":
       case "layout.setFloor":
         break;
     }
@@ -721,7 +709,12 @@ export function useBrandKit() {
   const override = useConfig((s) => s.logoOverrides[id]);
   const kit = findKitById(id) ?? seedBrandKitList[0]!;
   // If the user has uploaded a replacement logo for this kit, splice it
-  // into every logo slot. Cheap shallow clone — kit is small.
+  // into every logo slot. ALSO clear `invertLogo` + `logoChroma` on the
+  // scene — those flags were tuned for the kit's DEFAULT logo (e.g. TMRW
+  // ships a black-on-white mark that needs both flags to read on a dark
+  // wall). Applying them to a user-uploaded logo butchers the colour
+  // (blue → yellow on invert; chroma-keying random pixels out). Brands
+  // are sacred to their owners — leave the upload alone.
   if (override) {
     return {
       ...kit,
@@ -731,6 +724,9 @@ export function useBrandKit() {
         monoDark:  { ...kit.logos.monoDark,  rasterUrl: override },
         icon:      { ...kit.logos.icon,      rasterUrl: override },
       },
+      scene: kit.scene
+        ? { ...kit.scene, invertLogo: false, logoChroma: undefined }
+        : undefined,
     };
   }
   return kit;

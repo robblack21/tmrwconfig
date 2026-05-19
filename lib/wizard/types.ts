@@ -9,11 +9,11 @@
 import type { ReactNode } from "react";
 
 /** One size option offered in step 1. The cards render label / sqm / dims
- *  / description, and the wizard computes a € range from `ratePerSqm`. */
+ *  / description. */
 export type WizardSize = {
   id: string;
   label: string;
-  /** Floor area in m². Used for the indicative price band. */
+  /** Floor area in m². Shown on the card for context. */
   sqm: number;
   /** Width on the +X axis, in metres. Surfaced verbatim in `WizardResult` so
    *  the host can apply it to its scene. */
@@ -82,9 +82,6 @@ export type WizardState = {
 export type WizardProps = {
   sizes: WizardSize[];
   designLines: WizardDesignLine[];
-  /** Indicative €/m² used for the price band on the size cards + summary.
-   *  Default 450 (matches Stuttgart-Messe baseline). */
-  ratePerSqm?: number;
   /** Initial selections by id. Default first item of each list. */
   initialSizeId?: string;
   initialDesignLineId?: string;

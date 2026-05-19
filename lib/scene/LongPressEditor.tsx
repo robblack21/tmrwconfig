@@ -28,13 +28,19 @@ const KIND_LABEL: Record<SurfaceKind, string> = {
 };
 
 /** Inside the canvas: detects long-press, raycasts to find a meshed surface
- *  with `userData.kind`, and reports it back via the `onOpen` callback. */
-export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, screenX: number, screenY: number) => void }) {
+ *  with `userData.kind`, and reports it back via the `onOpen` callback.
+ *  Optionally calls `onPressProgress(x, y, t)` continuously during the hold
+ *  (t goes 0→1 over LONG_PRESS_MS) so a sibling can render a radial ring. */
+export function LongPressDetector({ onOpen, onPressProgress }: {
+  onOpen: (kind: SurfaceKind, screenX: number, screenY: number) => void;
+  onPressProgress?: (x: number, y: number, t: number) => void;
+}) {
   const { camera, scene, gl } = useThree();
   const downTimeRef = useRef(0);
   const downPosRef = useRef<[number, number] | null>(null);
   const draggingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -44,6 +50,25 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      if (rafRef.current != null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      onPressProgress?.(0, 0, 0);
+    };
+
+    // Each frame while a press is in flight: compute elapsed fraction and
+    // ping the consumer. Stops automatically when the press is cancelled
+    // (cancelTimer clears the rAF).
+    const startProgressLoop = (clientX: number, clientY: number) => {
+      const startedAt = Date.now();
+      const tick = () => {
+        if (!downPosRef.current || draggingRef.current) return;
+        const t = Math.min(1, (Date.now() - startedAt) / LONG_PRESS_MS);
+        onPressProgress?.(clientX, clientY, t);
+        if (t < 1) rafRef.current = window.requestAnimationFrame(tick);
+      };
+      rafRef.current = window.requestAnimationFrame(tick);
     };
 
     const doRaycast = (clientX: number, clientY: number): boolean => {
@@ -83,6 +108,12 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
       downPosRef.current = [e.clientX, e.clientY];
       draggingRef.current = false;
       cancelTimer();
+      // Only start the visible radial ring when the click landed on the
+      // canvas — clicks on overlay panels won't produce a successful
+      // raycast and shouldn't show the hold indicator either.
+      const rect = canvas.getBoundingClientRect();
+      const inCanvas = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+      if (inCanvas) startProgressLoop(e.clientX, e.clientY);
       timerRef.current = window.setTimeout(() => {
         if (draggingRef.current || !downPosRef.current) return;
         doRaycast(downPosRef.current[0], downPosRef.current[1]);
@@ -122,6 +153,62 @@ export function LongPressDetector({ onOpen }: { onOpen: (kind: SurfaceKind, scre
   }, [camera, scene, gl, onOpen]);
 
   return null;
+}
+
+// ── Long-press radial indicator ────────────────────────────────────────────
+// Tiny SVG ring that fills up as the user holds. Drawn at the press
+// location (offset slightly so the user's fingertip / cursor doesn't sit
+// on top of it). Auto-hides when t==0. Pointer-events: none so it can't
+// interfere with the press it's reporting on.
+export function LongPressIndicator({ x, y, t }: { x: number; y: number; t: number }) {
+  if (t <= 0) return null;
+  const SIZE = 56;
+  const STROKE = 3;
+  const R = (SIZE - STROKE) / 2;
+  const C = 2 * Math.PI * R;
+  const dash = C * t;
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        left: x - SIZE / 2,
+        top: y - SIZE / 2,
+        width: SIZE,
+        height: SIZE,
+        pointerEvents: "none",
+        zIndex: 9999,
+        // Subtle fade-in so a brief flick doesn't blink a half-drawn ring.
+        opacity: Math.min(1, t * 3),
+        transition: "opacity 0.08s linear",
+      }}
+      aria-hidden
+    >
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+        {/* Background track */}
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="rgba(20,22,28,0.32)"
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth={STROKE * 0.6}
+        />
+        {/* Progress arc — starts at 12 o'clock, sweeps clockwise */}
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={R}
+          fill="none"
+          stroke="var(--color-accent, #3d7eff)"
+          strokeWidth={STROKE}
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${C - dash}`}
+          transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+        />
+      </svg>
+    </div>,
+    document.body,
+  );
 }
 
 const MOTIFS = [
@@ -348,14 +435,58 @@ function FalTextureSection({ kitId }: { kitId: string }) {
               apply({ type: "kit.setWallGraphic", kitId, url: result.url });
               setStatus("done");
             }}
-            className={"mt-1.5 w-full t-label text-[0.65rem] py-1.5 rounded-[5px] transition-all " + ((!prompt.trim() || status === "loading") ? "neumorph-inset opacity-50" : "neumorph-raised text-[color:var(--color-accent)] hover:opacity-90")}
+            className={"mt-1.5 w-full t-label text-[0.65rem] py-1.5 rounded-[5px] transition-all flex items-center justify-center gap-1.5 " + ((!prompt.trim() || status === "loading") ? "neumorph-inset opacity-70" : "neumorph-raised text-[color:var(--color-accent)] hover:opacity-90")}
           >
-            {status === "loading" ? "Generating…" : status === "done" ? "Applied ✓" : "Generate"}
+            {status === "loading" && <RadialSpinner size={12} />}
+            <span>{status === "loading" ? "Generating…" : status === "done" ? "Applied ✓" : "Generate"}</span>
           </button>
           {err && <div className="t-label text-[0.55rem] mt-1 opacity-70 leading-snug" style={{ color: "var(--color-accent)" }}>{err}</div>}
         </>
       )}
     </div>
+  );
+}
+
+// Indeterminate circular spinner. CSS keyframes are inline so we don't
+// have to touch globals.css for a one-shot animation.
+function RadialSpinner({ size = 14 }: { size?: number }) {
+  const stroke = Math.max(1.6, size / 8);
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        animation: "longpress-spin 0.9s linear infinite",
+      }}
+      aria-hidden
+    >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeOpacity={0.22}
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${c * 0.28} ${c * 0.72}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <style>{`@keyframes longpress-spin { to { transform: rotate(360deg); } }`}</style>
+    </span>
   );
 }
 
