@@ -389,12 +389,17 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "boardroom.setTableLength": {
         const next = clamp(intent.value, 2.0, 8.0);
         const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM, s.tableOrientationDeg);
-        // Auto-adjust chairs: ~1 chair per 0.75m along each side, plus head
-        // + foot chairs once the table is long enough. User can still
-        // override via the Chairs slider — but the default tracks the
-        // table size so it always reads as a filled boardroom.
-        const chairsPerSide = Math.max(1, Math.round(next / 0.75));
-        const endChairs = next >= 3.6 ? 2 : 0;
+        // Auto-adjust chairs to track table length. Stride = 0.95m per
+        // chair slot — slightly wider than the 0.85m visible-spacing cap
+        // in ChairsAroundTable so the stored count matches what actually
+        // renders (no "phantom chairs" being capped out at render time).
+        // `spanZ` = tableLength − 0.8 (corner inset); side fits
+        //   floor(spanZ / 0.95) + 1 chairs at the visible stride. Head +
+        //   foot chairs added once the table is long enough to look
+        //   balanced (~3.4m+).
+        const spanZ = Math.max(0.01, next - 0.8);
+        const chairsPerSide = Math.max(1, Math.floor(spanZ / 0.95) + 1);
+        const endChairs = next >= 3.4 ? 2 : 0;
         const idealChairs = chairsPerSide * 2 + endChairs;
         const nextChairs = Math.min(16, idealChairs);
         set({ tableLengthM: next, chairCount: nextChairs, ...fit });

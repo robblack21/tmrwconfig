@@ -305,12 +305,14 @@ export function ChairsAroundTable({
     const gap = 0.36;                                  // chair offset from the table edge
     const sideX = tableWidthM / 2 + gap;
     const endZ = tableLengthM / 2 + gap;
-    // Chair spacing constraint. Office chair ≈ 0.55m wide; user asked for
-    // ≥0.25× chair-width gap between neighbours → centre-to-centre min
-    // ≈ 0.55 + 0.55 × 0.25 = 0.69m. If the table side can't fit the
-    // requested chairs at that spacing, we cap the count rather than
-    // packing them in — packed chairs were visibly overlapping.
-    const MIN_CHAIR_SPACING_M = 0.69;
+    // Chair spacing constraint. Different chair variants render at
+    // different widths (studio ~0.55m, executive ~0.65m, presenter
+    // ~0.70m). Using 0.85m centre-to-centre min gives every variant at
+    // least 0.15m of edge clearance — comfortably above the user's
+    // 0.25× chair-width minimum gap. If the table side can't fit the
+    // requested chairs at that spacing, we CAP the count (auto-thin)
+    // rather than pack them in. Was packing visibly overlapping.
+    const MIN_CHAIR_SPACING_M = 0.85;
     const spanZ = Math.max(0.01, tableLengthM - 0.8);  // keep chairs off the corners
     const sideCapacity = Math.max(1, Math.floor(spanZ / MIN_CHAIR_SPACING_M) + 1);
     const endN = count >= 4 ? Math.min(2, count) : 0;  // head + foot once there's room
