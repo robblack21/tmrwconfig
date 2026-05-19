@@ -114,11 +114,16 @@ export default function Page() {
 
   if (view === "wizard") {
     return (
-      <main className="relative h-screen w-screen overflow-hidden bg-[color:var(--color-bg)]">
+      <main className="relative h-screen w-screen overflow-hidden bg-[color:var(--color-bg)]" style={{ isolation: "isolate" }}>
         {/* Live 3D preview behind the wizard — every selection in the
             wizard panel pulses through onState → applyWizardState, so
-            the room visibly builds itself as the user progresses. */}
-        <SceneCanvas />
+            the room visibly builds itself as the user progresses.
+            MUST be wrapped in .scene-canvas-wrap so R3F's internal
+            stacking context is forced to z-index: 0 — otherwise the
+            canvas floats above the wizard panel after hydration. */}
+        <div className="scene-canvas-wrap">
+          <SceneCanvas />
+        </div>
         <Wizard
           sizes={meetingRoomSizes}
           designLines={meetingRoomDesignLines}
