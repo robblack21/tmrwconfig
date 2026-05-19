@@ -1,20 +1,64 @@
 "use client";
-import { useMemo } from "react";
-import { useTexture } from "@react-three/drei";
+import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
+import { asset } from "@/lib/assetPath";
+
+// Always-valid 2×2 transparent placeholder so callers never get null.
+let wallPlaceholder: THREE.Texture | null = null;
+function getWallPlaceholder(): THREE.Texture {
+  if (wallPlaceholder) return wallPlaceholder;
+  if (typeof document === "undefined") {
+    wallPlaceholder = new THREE.Texture();
+    return wallPlaceholder;
+  }
+  const c = document.createElement("canvas");
+  c.width = 2; c.height = 2;
+  wallPlaceholder = new THREE.CanvasTexture(c);
+  wallPlaceholder.colorSpace = THREE.SRGBColorSpace;
+  return wallPlaceholder;
+}
 
 /**
- * Loads a brand-specific full-bleed image as the back-wall texture.
- * Returned texture is colour-space corrected; UVs default to the whole plane.
+ * Loads a brand-specific full-bleed image as a back-wall / display texture.
+ *
+ * Manual `Image()` + `CanvasTexture` loader instead of drei's `useTexture`
+ * Suspense pipe. The cache layer in `useTexture` was returning stale
+ * handles for data: URLs (wizard artwork uploads) and `/public/...` paths
+ * on the deployed basePath, so the wall texture would set in the store
+ * but never repaint.
+ *
+ * Always returns a valid `THREE.Texture` — a 2×2 transparent placeholder
+ * while the real image is decoding — so callers don't need null-checks.
  */
-export function useWallGraphic(url: string) {
-  const tex = useTexture(url);
-  return useMemo(() => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
-    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    return tex;
-  }, [tex]);
+export function useWallGraphic(url: string): THREE.Texture {
+  const [tex, setTex] = useState<THREE.Texture>(() => getWallPlaceholder());
+  useEffect(() => {
+    if (!url) { setTex(getWallPlaceholder()); return; }
+    let cancelled = false;
+    const resolved = url.startsWith("data:") || /^https?:/i.test(url) ? url : asset(url);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      const t = new THREE.CanvasTexture(img as unknown as HTMLCanvasElement);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 8;
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      t.minFilter = THREE.LinearMipmapLinearFilter;
+      t.magFilter = THREE.LinearFilter;
+      t.needsUpdate = true;
+      setTex(t);
+    };
+    img.onerror = (e) => {
+      if (cancelled) return;
+      // eslint-disable-next-line no-console
+      console.warn(`[useWallGraphic] failed to load ${resolved}`, e);
+      setTex(getWallPlaceholder());
+    };
+    img.src = resolved;
+    return () => { cancelled = true; };
+  }, [url]);
+  return tex;
 }
 
 /**
