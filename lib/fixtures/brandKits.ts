@@ -536,18 +536,32 @@ function buildHeroProps(slug: string, specs: HeroSpec[]) {
       ...(s.rotationZ != null ? { rotationZ: s.rotationZ } : {}),
     });
   });
+  // Floor items SPLIT left + right too: first half on the back-LEFT, second
+  // half on the back-RIGHT. Previously every car piled up in the back-left
+  // corner; now a kit with two cars (e.g. a coupe + an SUV) reads as a
+  // proper pair flanking the table rather than two overlapping models.
+  // `placeOnFloor` in renderProp clamps each prop to a safe spot if the room
+  // is too small for the requested position.
   floorItems.forEach((s, i) => {
-    // Back-LEFT corner of the room, pushed well clear of the central
-    // table + chairs. Previously z=-1.0 placed cars alongside the table's
-    // mid-length; now z=-3.2 puts them in the back of the room next to
-    // the rear wall. auditHeroVsWalls (in renderProp) clamps in if the
-    // room is too small.
-    const defaultPos: [number, number, number] = [-3.6, 0, -3.2 - i * 0.6];
+    const halfN = Math.ceil(floorItems.length / 2);
+    const isLeft = i < halfN;
+    const localIdx = isLeft ? i : i - halfN;
+    const side = isLeft ? -1 : 1;
+    // Floor heroes sit further back than plinth items (cars need more room
+    // than display-stand props), with each subsequent car nudged outward and
+    // forward so a coupe + a wagon stack legibly.
+    const defaultPos: [number, number, number] = [
+      side * 3.4 + side * localIdx * 0.4,
+      0,
+      -3.0 + localIdx * 0.5,
+    ];
     props.push({
       kind: "heroAsset",
       url: asset(`/glb/brand-hero/${slug}/${s.file}`),
       position: applyFloat(defaultPos, s),
-      rotationY: s.rotationY ?? -Math.PI / 5,
+      // Each car angled inward to point its front toward the table — the
+      // headlight side reads as the brand statement to anyone at the table.
+      rotationY: s.rotationY ?? (isLeft ? -Math.PI / 5 : Math.PI / 5),
       heightM: s.heightM,
       ...(s.meshFilter ? { meshFilter: s.meshFilter } : {}),
       ...(s.rotationX != null ? { rotationX: s.rotationX } : {}),

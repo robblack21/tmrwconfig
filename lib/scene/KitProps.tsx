@@ -3,7 +3,7 @@ import { Suspense, useMemo } from "react";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import type { BrandKit } from "@/lib/schemas";
-import { auditHeroAssetClearance, auditHeroVsWalls, clampProportionate } from "./placementAudit";
+import { auditHeroAssetClearance, clampProportionate, placeOnFloor, type RoomShape } from "./placementAudit";
 
 // ── Per-kit hero-asset manifest ──────────────────────────────────────────────
 // Each brand "room" can show a handful of brand-hero GLBs (the models in
@@ -38,7 +38,21 @@ export type KitProp = {
   meshFilter?: string;
 };
 
-export type BoothDims = { widthM: number; depthM: number; wallHeightM: number; trussTopM: number; platformHeightM: number };
+export type BoothDims = {
+  widthM: number;
+  depthM: number;
+  wallHeightM: number;
+  trussTopM: number;
+  platformHeightM: number;
+  /** Room shape — defaults to "rectangle" if omitted. Threaded through so
+   *  `placeOnFloor` can apply radial clamping in circular pavilions. */
+  shape?: RoomShape;
+  /** Boardroom table dims (lengthM = along Z, widthM = across X). Default
+   *  0 so callers that don't have a table — yet — won't gate hero placement
+   *  on phantom geometry. */
+  tableLengthM?: number;
+  tableWidthM?: number;
+};
 
 export function KitProps({ kit, booth }: { kit: BrandKit; booth: BoothDims }) {
   const props = (kit.scene?.props as KitProp[] | undefined) ?? [];
@@ -62,22 +76,33 @@ function renderProp(p: KitProp, booth: BoothDims, key: number) {
   // shorter room dimension. Keeps cars car-sized and watches watch-sized
   // regardless of the heightM the manifest requests.
   const heightM = clampProportionate(p.heightM, booth.widthM, booth.depthM, { maxFraction: 0.35 });
-  // Wall-clearance clamp — pull the prop in from the walls so it doesn't
-  // occlude the wall geometry. Half-extent ≈ heightM so this is conservative
-  // (most heroes are tall+thin or roughly cubic).
-  const half = heightM * 0.55;
-  const fitted = auditHeroVsWalls({
+  // Footprint half-extent for placement. Half ≈ heightM × 0.55 is
+  // conservative — most hero GLBs are tall+thin or roughly cubic. Cars
+  // are a special case (wide+long+low), so we cap the radius at 1.0m so
+  // sedans don't suddenly trigger huge insets in tight rooms.
+  const half = Math.min(1.0, Math.max(0.25, heightM * 0.55));
+  // Plinth-mounted props don't need to clear the table footprint — they're
+  // displays on stands, generally placed against walls. Floor-mounted heroes
+  // (cars, sculptures) DO need to clear the table or they'll collide.
+  const onPlinth = (p.plinthHeightM ?? 0) > 0;
+  const placed = placeOnFloor({
     label: p.url.split("/").pop() ?? "heroAsset",
-    x: p.position[0], z: p.position[2],
-    halfW: half, halfD: half,
-    roomWidthM: booth.widthM, roomDepthM: booth.depthM,
-    clearance: 0.15,
+    x: p.position[0],
+    z: p.position[2],
+    radius: half,
+    shape: booth.shape ?? "rectangle",
+    widthM: booth.widthM,
+    depthM: booth.depthM,
+    tableLengthM: onPlinth ? 0 : (booth.tableLengthM ?? 0),
+    tableWidthM:  onPlinth ? 0 : (booth.tableWidthM  ?? 0),
+    tableClearanceM: 0.8,        // hero floor heroes get a wide buffer
+    wallClearanceM: 0.15,        // hero assets like a bit more breathing room
   });
   return (
     <HeroAsset
       key={key}
       url={p.url}
-      position={[fitted.suggestedX, floorY, fitted.suggestedZ]}
+      position={[placed.x, floorY, placed.z]}
       rotationY={p.rotationY ?? 0}
       rotationX={p.rotationX ?? 0}
       rotationZ={p.rotationZ ?? 0}

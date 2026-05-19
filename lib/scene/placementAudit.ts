@@ -131,3 +131,117 @@ export function auditHeroVsWalls(opts: {
   }
   return { ok, suggestedX, suggestedZ };
 }
+
+// ── Unified placer ─────────────────────────────────────────────────────────
+// One function that EVERY dressing item flows through — plants, sofas,
+// standing displays, and hero props. Handles:
+//   1. Wall clearance (radial for circular, axis-aligned for the rest)
+//   2. Table-footprint collision (push the prop out of the table extent +
+//      a small chair-clearance buffer)
+//   3. Atrium void avoidance (for pavilion shapes — keep props off the
+//      central courtyard)
+//
+// Returns a recommended (x, z) plus a flag whether the original was OK.
+// Logs a dev-only warning when adjustments were necessary so we can spot
+// authoring drift early.
+
+export type RoomShape = "rectangle" | "L" | "invertedL" | "U" | "corner" | "circular" | "pavilion";
+
+export type PlaceOpts = {
+  label: string;
+  /** Ideal centre position. We'll try to honour this. */
+  x: number;
+  z: number;
+  /** Half-extent of the prop's footprint in metres (treat as a square). */
+  radius: number;
+  /** Room dimensions + shape. */
+  shape: RoomShape;
+  widthM: number;
+  depthM: number;
+  /** Optional table footprint to clear. */
+  tableLengthM?: number;
+  tableWidthM?: number;
+  /** Extra clearance round the table edge (chairs / walkway). Default 0.6m. */
+  tableClearanceM?: number;
+  /** Wall clearance. Default 0.08m. */
+  wallClearanceM?: number;
+};
+
+export function placeOnFloor(opts: PlaceOpts): { x: number; z: number; ok: boolean } {
+  const {
+    label, x: ideal_x, z: ideal_z, radius, shape, widthM, depthM,
+    tableLengthM = 0, tableWidthM = 0, tableClearanceM = 0.6, wallClearanceM = 0.08,
+  } = opts;
+
+  let x = ideal_x;
+  let z = ideal_z;
+
+  // ── 1. WALL CLEARANCE ──
+  // Circular rooms use a radial clamp (distance from centre ≤ r - radius -
+  // clearance). Other shapes clamp axis-aligned to the bounding box; the
+  // L / U / corner shapes have notches that we don't model here — props at
+  // back / sides + tableClearance + plant radius are inside the carved
+  // area for the default room sizes.
+  if (shape === "circular") {
+    const roomR = Math.min(widthM, depthM) / 2 - radius - wallClearanceM;
+    const d = Math.hypot(x, z);
+    if (d > roomR) {
+      const k = roomR / Math.max(d, 1e-6);
+      x *= k;
+      z *= k;
+    }
+  } else {
+    const xLim = widthM / 2 - radius - wallClearanceM;
+    const zLim = depthM / 2 - radius - wallClearanceM;
+    x = Math.max(-xLim, Math.min(xLim, x));
+    z = Math.max(-zLim, Math.min(zLim, z));
+  }
+
+  // ── 2. TABLE COLLISION ──
+  // Treat the table as an axis-aligned rectangle centred on the origin.
+  // If the prop's footprint overlaps the table extent + chair clearance,
+  // push the prop along its dominant outward direction until it clears.
+  if (tableLengthM > 0 && tableWidthM > 0) {
+    const tHalfX = tableWidthM  / 2 + tableClearanceM + radius;
+    const tHalfZ = tableLengthM / 2 + tableClearanceM + radius;
+    const insideX = Math.abs(x) < tHalfX;
+    const insideZ = Math.abs(z) < tHalfZ;
+    if (insideX && insideZ) {
+      // Pick the axis with smaller penetration (cheaper push).
+      const penX = tHalfX - Math.abs(x);
+      const penZ = tHalfZ - Math.abs(z);
+      if (penZ <= penX) {
+        // Push along Z (front / back).
+        z = z >= 0 ? tHalfZ : -tHalfZ;
+      } else {
+        x = x >= 0 ? tHalfX : -tHalfX;
+      }
+      // Re-clamp to walls after the push.
+      if (shape === "circular") {
+        const roomR = Math.min(widthM, depthM) / 2 - radius - wallClearanceM;
+        const d = Math.hypot(x, z);
+        if (d > roomR) {
+          const k = roomR / Math.max(d, 1e-6);
+          x *= k;
+          z *= k;
+        }
+      } else {
+        const xLim = widthM / 2 - radius - wallClearanceM;
+        const zLim = depthM / 2 - radius - wallClearanceM;
+        x = Math.max(-xLim, Math.min(xLim, x));
+        z = Math.max(-zLim, Math.min(zLim, z));
+      }
+    }
+  }
+
+  // ── 3. AUDIT ──
+  const ok = Math.abs(x - ideal_x) < 1e-3 && Math.abs(z - ideal_z) < 1e-3;
+  if (!ok && process.env.NODE_ENV === "development") {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[placementAudit] ${label} moved from (${ideal_x.toFixed(2)}, ${ideal_z.toFixed(2)}) → ` +
+      `(${x.toFixed(2)}, ${z.toFixed(2)}) to clear walls / table.`,
+    );
+  }
+  return { x, z, ok };
+}

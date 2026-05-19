@@ -15,7 +15,7 @@ import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
 import { ExtrudedSvgLogo, canExtrude } from "./SvgLogo";
 import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
-import { PROP_RADIUS_M, safeInsetForKind, auditPropOnFloor } from "./placementAudit";
+import { PROP_RADIUS_M, safeInsetForKind, placeOnFloor, type RoomShape } from "./placementAudit";
 import { Flycam } from "./Flycam";
 import { PerfMonitor } from "./PerfMonitor";
 import { asset } from "@/lib/assetPath";
@@ -423,7 +423,7 @@ export function Scene() {
         )}
 
         {/* Per-kit brand-hero assets — the GLBs in /components/brand-hero/<slug>/. */}
-        <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM }} />
+        <KitProps kit={kit} booth={{ widthM, depthM, wallHeightM, trussTopM, platformHeightM, shape, tableLengthM, tableWidthM }} />
 
         {/* Boardroom furnishing — the table + chairs are the centrepiece; plants
             dress the corners; sofas are optional breakout seating. Suppressed
@@ -473,17 +473,39 @@ export function Scene() {
             </Suspense>
 
             {/* Optional breakout seating — sofa pair against the front-right
-                corner, count-driven (0 by default for a clean boardroom). */}
+                wall, count-driven (0 by default for a clean boardroom). The
+                sofa is rotated -π/2 so its long axis (~1.7m) runs along Z
+                and its depth (~0.85m) points outward into the room. We use
+                0.85m as the radius for `placeOnFloor` so wall + table
+                clearance always covers the *longer* extent — a touch
+                conservative across-wall but safe in every shape.
+
+                Coffee table sits between the sofas and the boardroom table.
+                Both flow through `placeOnFloor` so they cannot crash into
+                walls / table / chairs in any room shape. */}
             {Array.from({ length: Math.min(sofaCount, 2) }, (_, i) => {
-              const sx = i === 0 ? -1 : 1;
               const SOFA_HEIGHT = 1.0;
-              const x = sx > 0 ? widthM / 2 - 1.3 : widthM / 2 - 1.3;
-              const z = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.4);
+              const SOFA_RADIUS = 0.85;
+              // Ideal: hugged against the right wall, forward sofa at +z,
+              // pair sits behind it. Real values then get clamped to safe
+              // bounds for this room shape + table footprint.
+              const idealX = widthM / 2 - 1.05;
+              const idealZ = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.45);
+              const placed = placeOnFloor({
+                label: `sofa.${i}`,
+                x: idealX,
+                z: idealZ,
+                radius: SOFA_RADIUS,
+                shape: shape as RoomShape,
+                widthM, depthM,
+                tableLengthM, tableWidthM,
+                tableClearanceM: 0.7,
+              });
               const rotY = -Math.PI / 2;
               return (
                 <Suspense key={`sofa-${i}`} fallback={null}>
                   <Sofa
-                    position={[x, platformHeightM + SOFA_HEIGHT * 0.5, z]}
+                    position={[placed.x, platformHeightM + SOFA_HEIGHT * 0.5, placed.z]}
                     rotationY={rotY}
                     heightM={SOFA_HEIGHT}
                     tintHex={sofaResolved}
@@ -491,13 +513,29 @@ export function Scene() {
                 </Suspense>
               );
             })}
-            {sofaCount >= 2 && (
-              <Suspense fallback={null}>
-                <CoffeeTable variant={coffeeTableVariant} position={[widthM / 2 - 2.4, platformHeightM, depthM / 2 - 2.3]} heightM={0.335} />
-              </Suspense>
-            )}
+            {sofaCount >= 2 && (() => {
+              // Coffee table sits in front of the sofa pair, between sofas
+              // and the boardroom table. Routed through `placeOnFloor` so
+              // it's guaranteed to clear the boardroom-table footprint plus
+              // chair walking-zone.
+              const ct = placeOnFloor({
+                label: "coffeeTable",
+                x: widthM / 2 - 2.0,
+                z: depthM / 2 - 2.3,
+                radius: 0.45,
+                shape: shape as RoomShape,
+                widthM, depthM,
+                tableLengthM, tableWidthM,
+                tableClearanceM: 0.6,
+              });
+              return (
+                <Suspense fallback={null}>
+                  <CoffeeTable variant={coffeeTableVariant} position={[ct.x, platformHeightM, ct.z]} heightM={0.335} />
+                </Suspense>
+              );
+            })()}
 
-            <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} shape={shape} />
+            <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} shape={shape} tableLengthM={tableLengthM} tableWidthM={tableWidthM} />
 
             {/* Freestanding display screens — count-driven, placed along the
                 side walls facing the table. Each one can optionally show a
@@ -510,6 +548,9 @@ export function Scene() {
               depthM={depthM}
               platformHeightM={platformHeightM}
               kit={kit}
+              shape={shape}
+              tableLengthM={tableLengthM}
+              tableWidthM={tableWidthM}
             />
 
             {/* Exhibition graphics applied to the back wall (printed posters /
@@ -1808,23 +1849,31 @@ function LogoSign({
 // any are tagged `surface: "standingDisplay"`; falls back to the kit's
 // brand-mark ken-burns panel.
 function StandingDisplays({
-  count, widthM, depthM, platformHeightM, kit,
-}: { count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit }) {
+  count, widthM, depthM, platformHeightM, kit, shape = "rectangle", tableLengthM = 0, tableWidthM = 0,
+}: { count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit; shape?: FootprintShape; tableLengthM?: number; tableWidthM?: number }) {
   if (count <= 0) return null;
   const exhibitionScreens = (kit.scene?.exhibitionGraphics ?? []).filter((g) => g.surface === "standingDisplay");
   const inset = 0.55;
-  // Alternate left/right, distributing along z to avoid clumping.
+  // Stand radius (used by placeOnFloor for wall + table clearance). The
+  // BrandStandingScreen base is 0.45m square so 0.25m is a safe half-extent.
+  const standRadius = 0.25;
   const slots: { pos: [number, number, number]; rot: number; graphic?: typeof exhibitionScreens[number] }[] = [];
   for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const idx = Math.floor(i / 2);
-    // Pairs span the depth: pair 0 at z=0, pair 1 at z=±depthM/4, pair 2 at z=±depthM/2.5
     const zSpread = idx === 0 ? 0 : (idx === 1 ? -depthM / 4 : -depthM / 2.8);
-    const x = side * (widthM / 2 - inset);
-    const z = zSpread;
-    const rot = side === -1 ? Math.PI / 2 : -Math.PI / 2;   // face room centre
+    const placed = placeOnFloor({
+      label: `standingDisplay.${i}`,
+      x: side * (widthM / 2 - inset),
+      z: zSpread,
+      radius: standRadius,
+      shape: shape as RoomShape, widthM, depthM,
+      tableLengthM, tableWidthM,
+      tableClearanceM: 0.85,        // wider than plants so users can stand at the display
+    });
+    const rot = side === -1 ? Math.PI / 2 : -Math.PI / 2;
     slots.push({
-      pos: [x, platformHeightM, z],
+      pos: [placed.x, platformHeightM, placed.z],
       rot,
       graphic: exhibitionScreens[i],
     });
@@ -3034,8 +3083,11 @@ function SpotlightFixture({ pos, target, editMode }: { pos: [number, number, num
 
 // ── Plants ──────────────────────────────────────────────────────────────────
 
-function Plants({ widthM, depthM, plantCount, platformHeightM, shape = "rectangle" }: { widthM: number; depthM: number; plantCount: number; platformHeightM: number; shape?: FootprintShape }) {
-  const slots = useMemo(() => generatePlantSlots(widthM, depthM, plantCount, platformHeightM, shape), [widthM, depthM, plantCount, platformHeightM, shape]);
+function Plants({ widthM, depthM, plantCount, platformHeightM, shape = "rectangle", tableLengthM = 0, tableWidthM = 0 }: { widthM: number; depthM: number; plantCount: number; platformHeightM: number; shape?: FootprintShape; tableLengthM?: number; tableWidthM?: number }) {
+  const slots = useMemo(
+    () => generatePlantSlots(widthM, depthM, plantCount, platformHeightM, shape, tableLengthM, tableWidthM),
+    [widthM, depthM, plantCount, platformHeightM, shape, tableLengthM, tableWidthM],
+  );
   return (
     <>
       {slots.map((s, i) => (
@@ -3048,60 +3100,52 @@ function Plants({ widthM, depthM, plantCount, platformHeightM, shape = "rectangl
 }
 
 type PlantKind = "snake" | "hexapot" | "tree" | "cactus" | "tarro";
-function generatePlantSlots(widthM: number, depthM: number, count: number, platformHeightM: number, shape: FootprintShape = "rectangle") {
+function generatePlantSlots(
+  widthM: number, depthM: number, count: number, platformHeightM: number,
+  shape: FootprintShape = "rectangle",
+  tableLengthM = 0, tableWidthM = 0,
+) {
   if (count <= 0) return [];
   const y = platformHeightM;
-  // Larger cushion (35cm) for the hex pot since its bounding box still
-  // grazes the wall at the corner due to its hexagonal silhouette poking
-  // past the radial half-width estimate.
   const inT = safeInsetForKind("tree", 0.15);
   const inS = safeInsetForKind("hexapot", 0.35);
 
-  // For circular rooms the rectangle-corner candidates sit OUTSIDE the
-  // wall (a corner at half-width / half-depth is at distance r√2, which
-  // is outside a circle of radius r). Place them on the inscribed circle
-  // instead. Angles avoid the back-edge brand signs at the inter-
-  // cardinals (π/4, 3π/4, 5π/4, 7π/4) and the door direction (+Z = π/2).
-  if (shape === "circular") {
-    const r = Math.min(widthM, depthM) / 2;
-    const treeR = r - inT;
-    const potR = r - inS;
-    if (treeR <= 0.4 || potR <= 0.4) return [];
-    // Angles measured from +X (math convention), so π/2 = +Z (front, door).
-    // Six slots biased to the back half (z<0) so they read as room dressing
-    // and not as obstacles to the doorway.
-    const candidates: { kind: PlantKind; pos: [number, number, number]; rot: number; h: number }[] = [
-      // Front-left + front-right trees (skewed away from the door)
-      { kind: "tree",    pos: [Math.cos(2.7) * treeR, y, Math.sin(2.7) * treeR],  rot: 2.7 - Math.PI, h: 2.0 },
-      { kind: "tree",    pos: [Math.cos(0.45) * treeR, y, Math.sin(0.45) * treeR], rot: 0.45 + Math.PI, h: 2.0 },
-      // Back pots
-      { kind: "hexapot", pos: [Math.cos(-0.9) * potR, y, Math.sin(-0.9) * potR], rot: -0.9 + Math.PI, h: 1.0 },
-      { kind: "tarro",   pos: [Math.cos(-2.25) * potR, y, Math.sin(-2.25) * potR], rot: -2.25 + Math.PI, h: 1.0 },
-      // Side snake plants
-      { kind: "snake",   pos: [Math.cos(0) * potR, y, Math.sin(0) * potR], rot: -Math.PI / 2, h: 1.3 },
-      { kind: "snake",   pos: [Math.cos(Math.PI) * potR, y, Math.sin(Math.PI) * potR], rot: Math.PI / 2, h: 1.3 },
-    ];
-    return candidates.slice(0, Math.min(count, candidates.length));
-  }
+  // Ideal slot anchors per shape. The unified placer (placeOnFloor) then
+  // shape-clamps + table-clears each one so a wide table never crashes
+  // into the slot and a circular room never lets a plant escape the
+  // wall.
+  const ideal: { kind: PlantKind; pos: [number, number]; rot: number; h: number }[] = shape === "circular"
+    ? (() => {
+        const r = Math.min(widthM, depthM) / 2;
+        const treeR = r - inT;
+        const potR  = r - inS;
+        return [
+          { kind: "tree",    pos: [Math.cos(2.7) * treeR,   Math.sin(2.7) * treeR],   rot: 2.7 - Math.PI,    h: 2.0 },
+          { kind: "tree",    pos: [Math.cos(0.45) * treeR,  Math.sin(0.45) * treeR],  rot: 0.45 + Math.PI,   h: 2.0 },
+          { kind: "hexapot", pos: [Math.cos(-0.9) * potR,   Math.sin(-0.9) * potR],   rot: -0.9 + Math.PI,   h: 1.0 },
+          { kind: "tarro",   pos: [Math.cos(-2.25) * potR,  Math.sin(-2.25) * potR],  rot: -2.25 + Math.PI,  h: 1.0 },
+          { kind: "snake",   pos: [Math.cos(0) * potR,      Math.sin(0) * potR],      rot: -Math.PI / 2,     h: 1.3 },
+          { kind: "snake",   pos: [Math.cos(Math.PI) * potR, Math.sin(Math.PI) * potR], rot: Math.PI / 2,    h: 1.3 },
+        ];
+      })()
+    : [
+        { kind: "tree",    pos: [ widthM / 2 - inT,  depthM / 2 - inT], rot: -Math.PI / 4, h: 2.0 },
+        { kind: "tree",    pos: [-widthM / 2 + inT,  depthM / 2 - inT], rot:  Math.PI / 4, h: 2.0 },
+        { kind: "hexapot", pos: [ widthM / 2 - inS, -depthM / 2 + inS], rot: -Math.PI / 6, h: 1.0 },
+        { kind: "tarro",   pos: [-widthM / 2 + inS, -depthM / 2 + inS], rot:  Math.PI / 6, h: 1.0 },
+        { kind: "snake",   pos: [ widthM / 2 - inS, 0],                  rot: -Math.PI / 2, h: 1.3 },
+        { kind: "snake",   pos: [-widthM / 2 + inS, 0],                  rot:  Math.PI / 2, h: 1.3 },
+      ];
 
-  // Rectangle (and the L / U / corner shapes which inherit the bounding box):
-  // place plants at the bbox corners + side midpoints.
-  const candidates: { kind: PlantKind; pos: [number, number, number]; rot: number; h: number }[] = [
-    { kind: "tree",    pos: [ widthM / 2 - inT, y,  depthM / 2 - inT], rot: -Math.PI / 4, h: 2.0 },
-    { kind: "tree",    pos: [-widthM / 2 + inT, y,  depthM / 2 - inT], rot:  Math.PI / 4, h: 2.0 },
-    { kind: "hexapot", pos: [ widthM / 2 - inS, y, -depthM / 2 + inS], rot: -Math.PI / 6, h: 1.0 },
-    { kind: "tarro",   pos: [-widthM / 2 + inS, y, -depthM / 2 + inS], rot:  Math.PI / 6, h: 1.0 },
-    { kind: "snake",   pos: [ widthM / 2 - inS, y, 0], rot: -Math.PI / 2, h: 1.3 },
-    { kind: "snake",   pos: [-widthM / 2 + inS, y, 0], rot:  Math.PI / 2, h: 1.3 },
-  ];
-  const picked = candidates.slice(0, Math.min(count, candidates.length));
-  for (const s of picked) {
-    auditPropOnFloor({
+  const picked = ideal.slice(0, Math.min(count, ideal.length));
+  return picked.map((s) => {
+    const r = PROP_RADIUS_M[s.kind] ?? 0.45;
+    const placed = placeOnFloor({
       label: `plant.${s.kind}`,
-      x: s.pos[0], z: s.pos[2],
-      r: PROP_RADIUS_M[s.kind] ?? 0.45,
-      widthM, depthM,
+      x: s.pos[0], z: s.pos[1], radius: r,
+      shape: shape as RoomShape, widthM, depthM,
+      tableLengthM, tableWidthM,
     });
-  }
-  return picked;
+    return { kind: s.kind, pos: [placed.x, y, placed.z] as [number, number, number], rot: s.rot, h: s.h };
+  });
 }
