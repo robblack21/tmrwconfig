@@ -19,6 +19,16 @@ export const FAL_PROXY_URL: string | undefined =
     ? process.env.NEXT_PUBLIC_FAL_PROXY_URL || undefined
     : undefined;
 
+// Optional shared-secret token. If the worker is deployed with CLIENT_TOKEN
+// set, the static site must echo the same value via this var. The token
+// lives in the JS bundle (we have no choice — static site), so this is a
+// friction layer, not real auth. See workers/fal-proxy/worker.js for the
+// full security model.
+export const FAL_PROXY_TOKEN: string | undefined =
+  typeof process !== "undefined"
+    ? process.env.NEXT_PUBLIC_FAL_PROXY_TOKEN || undefined
+    : undefined;
+
 export function isFalConfigured(): boolean {
   return !!FAL_PROXY_URL;
 }
@@ -46,7 +56,10 @@ export async function generateTexture(
   try {
     const r = await fetch(FAL_PROXY_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(FAL_PROXY_TOKEN ? { Authorization: `Bearer ${FAL_PROXY_TOKEN}` } : {}),
+      },
       body: JSON.stringify({ model, prompt, ...rest }),
       signal,
     });

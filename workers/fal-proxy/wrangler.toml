@@ -1,3 +1,17 @@
 name = "fal-proxy"
 main = "worker.js"
 compatibility_date = "2024-11-01"
+
+# ── Public vars (non-secret) ──
+# Comma-separated origin allow-list. If omitted, the worker falls back to
+# DEFAULT_ALLOWED_ORIGINS in worker.js (gh-pages prod + localhost dev). Set
+# this if you ship to a different origin (custom domain, preview deploys,
+# Vercel preview URLs, etc).
+#
+# [vars]
+# ALLOWED_ORIGINS = "https://your-site.com,http://localhost:3000"
+
+# ── Secrets (set via `wrangler secret put NAME`) ──
+# FAL_KEY        — your fal.ai API key (REQUIRED)
+# CLIENT_TOKEN   — shared bearer token the static site must send (optional,
+#                  but strongly recommended for any public deploy)
