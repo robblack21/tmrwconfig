@@ -12,7 +12,7 @@ import { asset } from "@/lib/assetPath";
 import { SceneLoadingOverlay } from "@/lib/scene/SceneReveal";
 import { HomeView } from "@/lib/views/HomeView";
 import { Wizard, type WizardState } from "@/lib/wizard";
-import { meetingRoomSizes, meetingRoomDesignLines, applyWizardResult, applyWizardState } from "@/lib/wizard-presets/meetingRooms";
+import { meetingRoomSizes, meetingRoomDesignLines, meetingRoomEnvironments, applyWizardResult, applyWizardState } from "@/lib/wizard-presets/meetingRooms";
 import { deriveInventory, prettyAssetName } from "@/lib/bom/derive";
 import type { InventoryGroup } from "@/lib/bom/derive";
 import { useConfig, useBrandKit, useTierBounds } from "@/lib/store/configStore";
@@ -102,10 +102,15 @@ export default function Page() {
             // the logo + colours + design line and dispatches them all
             // before transitioning into the configurator.
             if (kitId === "brand.new") {
+              // Wizard view gets the cinematic ±10° yaw breath around the
+              // orbit; main editor (config view) stays static so users
+              // can frame their work without the camera moving.
+              apply({ type: "camera.setYawBreathEnabled", value: true });
               setView("wizard");
               return;
             }
             apply({ type: "brandKit.apply", kitId });
+            apply({ type: "camera.setYawBreathEnabled", value: false });
             setView("config");
           }}
         />
@@ -128,6 +133,7 @@ export default function Page() {
         <Wizard
           sizes={meetingRoomSizes}
           designLines={meetingRoomDesignLines}
+          environments={meetingRoomEnvironments}
           layout="squircle"
           copy={{
             brandName: "home",
@@ -135,11 +141,16 @@ export default function Page() {
             logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll respect its aspect ratio." },
             artworkStep: { title: "Hero artwork", hint: "Image for the back-wall video matrix." },
             coloursStep: { labels: ["Walls", "Trim", "Accent"] },
+            environmentStep: { title: "Environment", subtitle: "Pick what's outside the windows. Disables the warehouse hall." },
             customisationStep: { title: "Customisation" },
             summaryStep: { cta: "Generate room →" },
           }}
           onClose={() => {
             wizardPrevRef.current = null;
+            // Wizard owns the cinematic camera breath — turn it off when
+            // the user backs out so the main editor (and home view) stay
+            // static.
+            apply({ type: "camera.setYawBreathEnabled", value: false });
             setView("home");
           }}
           onState={(state) => {
@@ -149,6 +160,8 @@ export default function Page() {
           onComplete={(result) => {
             applyWizardResult(apply, result);
             wizardPrevRef.current = null;
+            // Same — disengage breath as we hand off to the configurator.
+            apply({ type: "camera.setYawBreathEnabled", value: false });
             setView("config");
           }}
         />

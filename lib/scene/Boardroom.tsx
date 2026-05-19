@@ -361,8 +361,16 @@ export function BrandedCupsOnTable({
   const slots = useMemo(() => {
     const out: { pos: [number, number, number]; rot: number }[] = [];
     if (count <= 0) return out;
-    const sideX = tableWidthM / 2 - CUP_INSET_M;
-    const endZ = tableLengthM / 2 - CUP_INSET_M;
+    // Clamp the inset on narrow / short tables so cups never fall off
+    // the edge. CUP_INSET is the ideal "place setting" inset; for narrow
+    // ovals (1.0m wide) it would put cups outside the half-width. Min
+    // inset is the cup radius + 5cm safety so the cup body always sits
+    // fully on the table.
+    const minInset = CUP_RADIUS_M + 0.05;
+    const insetX = Math.max(minInset, Math.min(CUP_INSET_M, tableWidthM / 2 - minInset));
+    const insetZ = Math.max(minInset, Math.min(CUP_INSET_M, tableLengthM / 2 - minInset));
+    const sideX = tableWidthM / 2 - insetX;
+    const endZ  = tableLengthM / 2 - insetZ;
     const endN = count >= 4 ? Math.min(2, count) : 0;
     const sideTotal = count - endN;
     const leftN = Math.ceil(sideTotal / 2);

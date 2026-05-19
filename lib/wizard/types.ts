@@ -71,6 +71,8 @@ export type WizardResult = {
   extendedColours: WizardExtendedColours;
   designLine: WizardDesignLine;
   customisation: WizardCustomisation;
+  /** HDRI id chosen in the Environment step (or null for the host's default). */
+  environmentId: string | null;
 };
 
 /** Optional copy overrides — every field has a sensible default. */
@@ -83,6 +85,7 @@ export type WizardCopy = {
   artworkStep?:        { title?: string; subtitle?: string; hint?: string };
   coloursStep?:        { title?: string; subtitle?: string; labels?: [string, string, string] };
   designLineStep?:     { title?: string; subtitle?: string };
+  environmentStep?:    { title?: string; subtitle?: string };
   customisationStep?:  { title?: string; subtitle?: string };
   summaryStep?:        { title?: string; subtitle?: string; cta?: string };
 };
@@ -100,6 +103,17 @@ export type WizardState = {
   colours: [string, string, string];
   extendedColours: WizardExtendedColours;
   customisation: WizardCustomisation;
+  environmentId: string | null;
+};
+
+/** One HDRI environment option offered in the new Environment step. */
+export type WizardEnvironment = {
+  id: string;
+  label: string;
+  /** A representative colour pair for the procedural gradient thumbnail.
+   *  No HDR processing happens at runtime; the wizard renders a small
+   *  swatch using these two hexes so the user can recognise the mood. */
+  thumb: [string, string];
 };
 
 /** Top-level props. Host-defined `sizes` + `designLines` are the only
@@ -107,6 +121,9 @@ export type WizardState = {
 export type WizardProps = {
   sizes: WizardSize[];
   designLines: WizardDesignLine[];
+  /** HDRI environment options for the new Environment step. Optional —
+   *  the wizard skips the step if this is empty / undefined. */
+  environments?: WizardEnvironment[];
   /** Initial selections by id. Default first item of each list. */
   initialSizeId?: string;
   initialDesignLineId?: string;

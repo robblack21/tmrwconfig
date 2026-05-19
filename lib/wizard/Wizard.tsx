@@ -1,12 +1,21 @@
 "use client";
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { extractDominantColours } from "./colour";
+import { extractDominantColours, harmonise, type HarmonyRule } from "./colour";
 import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation } from "./types";
+
+const HARMONY_RULES: { id: HarmonyRule; label: string; description: string }[] = [
+  { id: "complementary",      label: "Complementary",      description: "Brand + its opposite for high contrast" },
+  { id: "triadic",            label: "Triadic",            description: "Three evenly-spaced hues — balanced and bold" },
+  { id: "splitComplementary", label: "Split-complementary", description: "Complement softened by 30° — friendlier than full opposites" },
+  { id: "analogous",          label: "Analogous",          description: "Adjacent hues — calm, harmonious" },
+];
 
 // Total steps in the wizard (0..TOTAL_STEPS-1). Bumping this needs
 // matching step blocks in the AnimatePresence body below.
-const TOTAL_STEPS = 7;
+//   0: Size · 1: Logo · 2: Artwork · 3: Brand colours · 4: Design line
+//   5: Environment · 6: Customisation · 7: Summary
+const TOTAL_STEPS = 8;
 const LAST_STEP = TOTAL_STEPS - 1;
 
 /** Mix two hex colours in sRGB-ish space. t=0 returns a, t=1 returns b. */
@@ -52,6 +61,7 @@ function deriveExtendedColours([primary, carpet, accent]: [string, string, strin
 export function Wizard({
   sizes,
   designLines,
+  environments = [],
   initialSizeId,
   initialDesignLineId,
   copy = {},
@@ -90,6 +100,9 @@ export function Wizard({
   // swaps a small set of CSS vars on the wizard's own root element so
   // text + surfaces darken without touching the host's global theme.
   const [darkMode, setDarkMode] = useState(false);
+  // HDRI environment id picked in step 5. Null = keep the host's
+  // current default (warehouse interior).
+  const [environmentId, setEnvironmentId] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
 
   const size = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
@@ -111,8 +124,8 @@ export function Wizard({
   // can build a scene in lock-step with the user's progress.
   useEffect(() => {
     if (!onState) return;
-    onState({ step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation });
-  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation]);
+    onState({ step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId });
+  }, [onState, step, size, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -147,11 +160,21 @@ export function Wizard({
   }, []);
 
   const submit = () => {
-    const result: WizardResult = { size, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation };
+    const result: WizardResult = { size, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation, environmentId };
     onComplete(result);
   };
 
   const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent"];
+
+  // Active harmony rule for the swatch trio. When the user picks a rule
+  // we DERIVE secondary + accent from primary; subsequently editing the
+  // primary swatch keeps the rule active and re-derives the rest.
+  // Editing secondary / accent directly drops the rule (manual mode).
+  const [harmony, setHarmony] = useState<HarmonyRule | null>(null);
+  const applyHarmony = (rule: HarmonyRule) => {
+    setHarmony(rule);
+    setColours(harmonise(colours[0], rule));
+  };
 
   // Three layouts:
   // • "full":     page-takeover with a radial-gradient brand wash
@@ -225,13 +248,14 @@ export function Wizard({
           </button>
           <div className="flex items-center gap-1 flex-shrink min-w-0">
             {Array.from({ length: TOTAL_STEPS }, (_, i) => (
-              <span
+              <motion.span
                 key={i}
-                className="block h-1.5 rounded-full transition-all"
-                style={{
-                  width: i === step ? "24px" : "8px",
-                  background: i <= step ? accent : "var(--color-border-soft)",
+                className="block h-1.5 rounded-full"
+                animate={{
+                  width: i === step ? 24 : 8,
+                  backgroundColor: i <= step ? accent : "var(--color-border-soft)",
                 }}
+                transition={{ type: "spring", stiffness: 280, damping: 28, mass: 0.6 }}
               />
             ))}
           </div>
@@ -265,10 +289,10 @@ export function Wizard({
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -18 }}
-            transition={{ type: "spring", stiffness: 280, damping: 30 }}
+            initial={{ opacity: 0, y: 14, filter: "blur(6px)" }}
+            animate={{ opacity: 1, y: 0,  filter: "blur(0px)" }}
+            exit={{    opacity: 0, y: -10, filter: "blur(4px)" }}
+            transition={{ type: "spring", stiffness: 180, damping: 26, mass: 0.8 }}
           >
             {step === 0 && (
               <StepHeader
@@ -278,12 +302,29 @@ export function Wizard({
               >
                 {/* Vertical stack in the squircle layout — fits the 420px
                     column cleanly. Each card reads as a row with label /
-                    sqm / dimensions on a single line. */}
-                <div className="flex flex-col gap-3 mt-6">
+                    sqm / dimensions on a single line. Staggered reveal so
+                    the cards cascade in rather than popping together. */}
+                <motion.div
+                  className="flex flex-col gap-3 mt-6"
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    hidden:  { opacity: 1 },
+                    visible: { opacity: 1, transition: { staggerChildren: 0.06, delayChildren: 0.08 } },
+                  }}
+                >
                   {sizes.map((s) => (
-                    <SizeCard key={s.id} size={s} active={sizeId === s.id} onClick={() => setSizeId(s.id)} accent={accent} />
+                    <motion.div
+                      key={s.id}
+                      variants={{
+                        hidden:  { opacity: 0, y: 10 },
+                        visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 240, damping: 22 } },
+                      }}
+                    >
+                      <SizeCard size={s} active={sizeId === s.id} onClick={() => setSizeId(s.id)} accent={accent} />
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
               </StepHeader>
             )}
 
@@ -321,8 +362,39 @@ export function Wizard({
                       key={i}
                       label={labels[i]!}
                       value={colours[i]}
-                      onChange={(v) => setColours((c) => { const n = [...c] as [string, string, string]; n[i] = v; return n; })}
+                      onChange={(v) => setColours((c) => {
+                        const n = [...c] as [string, string, string];
+                        n[i] = v;
+                        // If user edits primary, re-derive the trio
+                        // from the active harmony rule. Editing
+                        // secondary/accent drops the rule (manual mode).
+                        if (i === 0 && harmony) return harmonise(v, harmony);
+                        if (i !== 0) setHarmony(null);
+                        return n;
+                      })}
                     />
+                  ))}
+                </div>
+                {/* Colour-harmony rule picker. Switching schemes re-derives
+                    secondary + accent from the current primary so the
+                    user can audition the four classical relationships
+                    without re-uploading. */}
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Harmony</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {HARMONY_RULES.map((h) => (
+                    <button
+                      key={h.id}
+                      onClick={() => applyHarmony(h.id)}
+                      title={h.description}
+                      className="text-left rounded-[10px] px-2.5 py-2 transition-all"
+                      style={{
+                        background: harmony === h.id ? `color-mix(in srgb, ${accent} 16%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+                        border: harmony === h.id ? `1.5px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
+                      }}
+                    >
+                      <div className="text-[0.7rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: harmony === h.id ? accent : "currentColor" }}>{h.label}</div>
+                      <div className="text-[0.6rem] opacity-60 mt-0.5 leading-snug">{h.description}</div>
+                    </button>
                   ))}
                 </div>
                 <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Surfaces</div>
@@ -363,6 +435,26 @@ export function Wizard({
             {step === 5 && (
               <StepHeader
                 eyebrow={`Step 6 of ${TOTAL_STEPS}`}
+                title={copy.environmentStep?.title ?? "Environment"}
+                subtitle={copy.environmentStep?.subtitle ?? "Pick a setting outside the room. Disables the warehouse hall behind the windows."}
+              >
+                <div className="grid grid-cols-2 gap-3 mt-6">
+                  {environments.map((env) => (
+                    <EnvironmentCard
+                      key={env.id}
+                      env={env}
+                      active={environmentId === env.id}
+                      onClick={() => setEnvironmentId(env.id === environmentId ? null : env.id)}
+                      accent={accent}
+                    />
+                  ))}
+                </div>
+              </StepHeader>
+            )}
+
+            {step === 6 && (
+              <StepHeader
+                eyebrow={`Step 7 of ${TOTAL_STEPS}`}
                 title={copy.customisationStep?.title ?? "Customisation"}
                 subtitle={copy.customisationStep?.subtitle ?? "Optional flourishes. The room works without them — these are the personality dials."}
               >
@@ -374,7 +466,7 @@ export function Wizard({
               </StepHeader>
             )}
 
-            {step === 6 && (
+            {step === 7 && (
               <StepHeader
                 eyebrow="All set"
                 title={copy.summaryStep?.title ?? "Ready to build"}
@@ -596,6 +688,50 @@ function SummaryCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Environment card (HDRI picker, step 5) ─────────────────────────────
+//
+// Square tile with a procedural gradient swatch standing in for a baked
+// thumbnail. The HDR sources are 24-26MB each so we keep the preview
+// cheap; the mood colours come from `env.thumb` (set per-environment in
+// the host's preset list).
+
+function EnvironmentCard({ env, active, onClick, accent }: {
+  env: { id: string; label: string; thumb: [string, string] };
+  active: boolean;
+  onClick: () => void;
+  accent: string;
+}) {
+  return (
+    <motion.button
+      onClick={onClick}
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ type: "spring", stiffness: 320, damping: 26 }}
+      className="text-left rounded-[14px] overflow-hidden transition-all"
+      style={{
+        background: active ? `color-mix(in srgb, ${accent} 12%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+        border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
+        boxShadow: active
+          ? `0 12px 24px -14px color-mix(in srgb, ${accent} 50%, transparent)`
+          : "0 6px 12px -12px rgba(0,0,0,0.14)",
+      }}
+    >
+      {/* Procedural thumbnail — radial light source at top + horizon
+          fade so the swatch reads as an environment, not a flat chip. */}
+      <div
+        className="w-full aspect-[16/10]"
+        style={{
+          background: `radial-gradient(ellipse at 50% 25%, ${env.thumb[1]} 0%, ${env.thumb[0]} 78%)`,
+        }}
+        aria-hidden
+      />
+      <div className="px-3 py-2">
+        <div className="text-[0.78rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: active ? accent : "currentColor" }}>{env.label}</div>
+      </div>
+    </motion.button>
   );
 }
 

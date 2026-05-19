@@ -64,6 +64,7 @@ export function CameraSync() {
   const { camera, controls } = useThree();
   const cameraFov = useConfig((s) => s.cameraFov);
   const cameraPreset = useConfig((s) => s.cameraPreset);
+  const yawBreathEnabled = useConfig((s) => s.cameraYawBreathEnabled);
   const cameraPresetOverrides = useConfig((s) => s.cameraPresetOverrides);
   const cameraEntryFired = useConfig((s) => s.cameraEntryFired);
   const apply = useConfig((s) => s.apply);
@@ -196,11 +197,15 @@ export function CameraSync() {
         };
         lastYawDeltaRef.current = 0;
       }
-    } else if (!interactingRef.current) {
+    } else if (yawBreathEnabled && !interactingRef.current) {
       // Yaw breathing — orbit the camera ±10° around its target with a
-      // slow sine wave (~12s period). Applied as an INCREMENTAL delta
-      // each frame so OrbitControls' own damping / inertia can still
-      // act normally; we only inject the delta-since-last-frame.
+      // VERY slow sine wave (60s period — 5× slower than the original 12s
+      // so it reads as ambient room rotation rather than a moving camera).
+      // Only runs when the wizard has opted in (cameraYawBreathEnabled in
+      // the store) — main editor stays static so users can frame work.
+      // Applied as an INCREMENTAL delta each frame so OrbitControls'
+      // damping / inertia still act normally; we only inject the delta-
+      // since-last-frame.
       //
       // The anchor is captured the first frame after a settle. Without
       // it, the very first breathe would jump because we'd be comparing
@@ -213,10 +218,11 @@ export function CameraSync() {
         lastYawDeltaRef.current = 0;
       }
       if (anchorRef.current && ctrl?.target) {
-        // 12s period → 2π / 12 rad/s. Amplitude ±10° (0.1745 rad).
-        const omega = (2 * Math.PI) / 12;
+        // 60s period → 2π / 60 rad/s. Amplitude ±10° (0.1745 rad).
+        const PERIOD_S = 60;
+        const omega = (2 * Math.PI) / PERIOD_S;
         const amp = (10 * Math.PI) / 180;
-        const phase = (Date.now() % (12 * 1000)) / 1000;
+        const phase = (Date.now() % (PERIOD_S * 1000)) / 1000;
         const yaw = Math.sin(phase * omega) * amp;
         const dYaw = yaw - lastYawDeltaRef.current;
         lastYawDeltaRef.current = yaw;

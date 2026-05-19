@@ -89,6 +89,10 @@ export type ConfigState = {
   floorStyle: "herringbone" | "diagonal" | "rectangular";
   renderMode: "edit" | "viz";       // edit = fewer lights/emissive for editing speed; viz = full
   cameraEntryFired: boolean;        // tracks whether the entry-mode pullback has played
+  /** Subtle ±10° yaw oscillation around the orbit target while the camera
+   *  is at rest. Only enabled in the wizard live preview — distracting in
+   *  the main editor where users want a static frame to work against. */
+  cameraYawBreathEnabled: boolean;
   exposure: number;                  // -1..+1
   keyLightIntensity: number;         // 0..2.5
   // Colour grading — applied as CSS filters on the canvas wrapper.
@@ -255,6 +259,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   floorStyle: "herringbone",
   renderMode: "viz",
   cameraEntryFired: false,
+  cameraYawBreathEnabled: false,    // off in the main editor; wizard flips it on
   exposure: 0,
   keyLightIntensity: 1.0,
   cgBrightness: 1.0,
@@ -584,6 +589,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       case "scene.setFloorStyle":     { set({ floorStyle: intent.value }); break; }
       case "scene.setRenderMode":     { set({ renderMode: intent.value }); break; }
       case "camera.markEntryFired":   { set({ cameraEntryFired: true }); break; }
+      case "camera.setYawBreathEnabled": { set({ cameraYawBreathEnabled: intent.value }); break; }
       case "scene.setExposure": {
         set({ exposure: clamp(intent.value, -1.5, 1.5) });
         break;

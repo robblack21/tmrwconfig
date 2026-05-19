@@ -124,6 +124,19 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     if (!box2.isEmpty() && isFinite(box2.min.y) && Math.abs(box2.min.y - yLift) > 1e-3) {
       scene.position.y += yLift - box2.min.y;
     }
+    // Belt-and-braces: re-measure the FULL bbox (no helper filter) and
+    // lift if the lowest visible point still dips below the intended
+    // base. Catches plants whose saucer / pot mesh is literally named
+    // "floor" / "ground" etc and got filtered out of the measurement
+    // pass — left plant variants were embedding in the floor by ~10cm
+    // for exactly this reason. Cap the lift at 0.5m so we don't paper
+    // over a far-away stray helper (those should be removed, not lifted).
+    scene.updateMatrixWorld(true);
+    const fullBox = new THREE.Box3().setFromObject(scene, true);
+    if (isFinite(fullBox.min.y) && fullBox.min.y < yLift) {
+      const dip = yLift - fullBox.min.y;
+      if (dip < 0.5) scene.position.y += dip;
+    }
     return scene;
   }, [gltf, targetHeightM, tintHex, yLift]);
 }

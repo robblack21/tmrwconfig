@@ -12,7 +12,7 @@
 // routes the user from the home view straight into the configurator
 // with the resulting kit applied.
 
-import type { WizardSize, WizardDesignLine, WizardResult, WizardState } from "@/lib/wizard";
+import type { WizardSize, WizardDesignLine, WizardEnvironment, WizardResult, WizardState } from "@/lib/wizard";
 import type { useConfig } from "@/lib/store/configStore";
 import { tmrwBlank } from "@/lib/fixtures/brandKits";
 import { measureImageDims } from "@/lib/util/measureImage";
@@ -67,6 +67,21 @@ const meetingRoomTableMeta: Record<string, { tableLengthM: number; tableWidthM: 
 // ── Design lines ──────────────────────────────────────────────────────────
 // Each line drives a different cluster of scene defaults — wall finish,
 // floor style, chair variant, pendant shape, parquet warmth.
+// ── Environment cards ─────────────────────────────────────────────────────
+// Each card maps to one of the HDRIs in /public/hdri/. The wizard uses
+// the thumb tuple to render a procedural gradient swatch in lieu of a
+// pre-baked thumbnail JPG — HDR sources are 24-26MB each so we keep the
+// preview cheap. Mood colours roughly match the sky / horizon of each
+// HDRI so users can recognise them.
+export const meetingRoomEnvironments: WizardEnvironment[] = [
+  { id: "canary_wharf_4k",              label: "Canary Wharf",   thumb: ["#1d2330", "#3f4a5f"] },
+  { id: "docklands_02_4k",              label: "Docklands",      thumb: ["#2e3645", "#7d8597"] },
+  { id: "lake_pier_4k",                 label: "Lake pier",      thumb: ["#6b7e8f", "#c4d3d8"] },
+  { id: "schadowplatz_4k",              label: "Schadowplatz",   thumb: ["#3a3024", "#9c7d59"] },
+  { id: "limpopo_golf_course_4k",       label: "Limpopo golf",   thumb: ["#5d6f3a", "#dfd2a2"] },
+  { id: "little_paris_eiffel_tower_4k", label: "Paris · Eiffel", thumb: ["#3d3c46", "#cfb88a"] },
+];
+
 export const meetingRoomDesignLines: WizardDesignLine[] = [
   {
     id: "warm",
@@ -149,8 +164,9 @@ const CAMERA_BY_STEP: Record<number, string> = {
   2: "front",    // Artwork — frames the back-wall video matrix
   3: "side",     // Colours — wall-on-wall view so the recolour reads
   4: "closeup",  // Design line — tight on the table + chairs
-  5: "hero",     // Customisation — wide shot showing cups/plants/sofas/displays
-  6: "hero",     // Summary — the brand-room hero shot
+  5: "side",     // Environment — frames the windowed side wall so HDRI swap is visible
+  6: "hero",     // Customisation — wide shot showing cups/plants/sofas/displays
+  7: "hero",     // Summary — the brand-room hero shot
 };
 
 export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: WizardState): void {
@@ -198,6 +214,20 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   }
   if (!prev || prev.extendedColours.chairs !== state.extendedColours.chairs) {
     apply({ type: "colourOverride.set", surface: "chair", value: state.extendedColours.chairs });
+  }
+
+  // Environment — HDRI swap + hall toggle. When the user picks an HDRI
+  // in step 5, we apply it AND hide the warehouse hall (the brand
+  // experience reads as "this room is in <environment>"). Clearing the
+  // selection (clicking the active card again) restores the hall.
+  if (!prev || prev.environmentId !== state.environmentId) {
+    if (state.environmentId) {
+      apply({ type: "scene.setHdri", hdriId: state.environmentId });
+      apply({ type: "scene.setHallVisible", value: false });
+    } else {
+      apply({ type: "scene.setHdri", hdriId: "" });
+      apply({ type: "scene.setHallVisible", value: true });
+    }
   }
 
   // Customisation — cups / plants / sofas / displays. Dispatched only on
@@ -302,14 +332,25 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   apply({ type: "layout.setPlantCount", value: patch.plantCount });
   apply({ type: "room.setWallTextureEnabled", value: patch.wallTextureEnabled });
 
-  // 7. Customisation flourishes (step 5) — cups / plants / sofas / displays.
+  // 7. Environment — HDRI + hall toggle. Picking an environment in step 5
+  //    swaps the HDRI and disables the warehouse hall so the brand room
+  //    reads as being IN that environment.
+  if (result.environmentId) {
+    apply({ type: "scene.setHdri", hdriId: result.environmentId });
+    apply({ type: "scene.setHallVisible", value: false });
+  } else {
+    apply({ type: "scene.setHdri", hdriId: "" });
+    apply({ type: "scene.setHallVisible", value: true });
+  }
+
+  // 8. Customisation flourishes (step 6) — cups / plants / sofas / displays.
   apply({ type: "merch.setCupsEnabled", value: result.customisation.cupsEnabled });
   apply({ type: "layout.setPlantCount", value: result.customisation.plantCount });
   apply({ type: "layout.setSofaCount",  value: result.customisation.sofaCount });
   apply({ type: "layout.setStandingDisplayCount", value: result.customisation.standingDisplayCount });
 
-  // 8. Reasonable defaults for everything else the wizard didn't ask
-  //    about — gallery mode, lights on, ceiling closed.
+  // 9. Reasonable defaults for everything else the wizard didn't ask
+  //    about — lights on, ceiling closed.
   apply({ type: "room.setCeilingEnabled", value: true });
   apply({ type: "room.setWindowsEnabled", value: true });
 }

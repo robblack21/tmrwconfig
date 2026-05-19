@@ -127,6 +127,11 @@ export const Intent = z.discriminatedUnion("type", [
   /** Per-kit wall-graphic URL override via UI. */
   z.object({ type: z.literal("kit.setWallGraphic"), kitId: z.string(), url: z.string().nullable() }),
 
+  /** Toggle the cinematic ±10° yaw breath on the camera. Wizard turns it
+   *  ON for the live preview; main editor leaves it OFF for a static
+   *  frame. */
+  z.object({ type: z.literal("camera.setYawBreathEnabled"), value: z.boolean() }),
+
   z.object({ type: z.literal("scene.save"), name: z.string() }),
 ]);
 export type Intent = z.infer<typeof Intent>;

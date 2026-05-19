@@ -264,24 +264,45 @@ export function LongPressModal({ kind, screenX, screenY, onClose }: {
   const x = Math.min(Math.max(8, screenX + 12), window.innerWidth - W - 8);
   const y = Math.min(Math.max(8, screenY + 12), window.innerHeight - H - 8);
 
-  // Close on Escape
+  // Close on Escape.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Close on click-outside via a document pointerdown listener that
+  // respects the modal's hit-area. The previous transparent backdrop
+  // closed the modal whenever a "click" event landed anywhere off the
+  // panel — including the native colour-picker dialog's edges and any
+  // stray mouseup from a canvas drag — which made the modal vanish
+  // mid-pick. This pattern only closes when the user genuinely starts a
+  // press OUTSIDE the modal panel.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (panelRef.current && t && panelRef.current.contains(t)) return;
+      onClose();
+    };
+    // Defer one tick so the press that OPENED the modal doesn't
+    // immediately close it via document propagation.
+    const tid = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [onClose]);
+
   return createPortal(
     <>
-      {/* Click-outside catcher */}
-      <div
-        onClick={onClose}
-        style={{ position: "fixed", inset: 0, zIndex: 1000, background: "transparent" }}
-      />
       {/* Restyled to match the rest of the configurator UI — panel-glass
           background + neumorph chips on the controls, t-label / t-num
           typography. */}
       <div
+        ref={panelRef}
         className="ui-overlay panel-glass"
         style={{
           position: "fixed",
@@ -309,11 +330,19 @@ export function LongPressModal({ kind, screenX, screenY, onClose }: {
 
         {/* Colour picker + hex readout */}
         <div className="flex items-center gap-2 mb-2.5">
-          <label className="rounded-[6px] neumorph-raised h-8 w-9 grid place-items-center cursor-pointer overflow-hidden" style={{ background: colour }}>
+          <label
+            className="rounded-[6px] neumorph-raised h-8 w-9 grid place-items-center cursor-pointer overflow-hidden"
+            style={{ background: colour }}
+            // Belt-and-braces — stop pointerdown so the doc-level
+            // click-outside listener can't see a downstream sibling
+            // event from the native colour picker as an "outside" press.
+            onPointerDown={(e) => e.stopPropagation()}
+          >
             <input
               type="color"
               value={colour}
               onChange={(e) => apply({ type: "colourOverride.set", surface: kind, value: e.target.value })}
+              onInput={(e) => apply({ type: "colourOverride.set", surface: kind, value: (e.target as HTMLInputElement).value })}
               className="opacity-0 w-9 h-8 cursor-pointer"
             />
           </label>
