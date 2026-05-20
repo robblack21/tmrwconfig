@@ -2,7 +2,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { extractDominantColours, harmonise, type HarmonyRule } from "./colour";
-import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation } from "./types";
+import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation, WizardEnvironment } from "./types";
 
 const HARMONY_RULES: { id: HarmonyRule; label: string; description: string }[] = [
   { id: "complementary",      label: "Complementary",      description: "Brand + its opposite for high contrast" },
@@ -34,7 +34,8 @@ function mixHex(a: string, b: string, t: number): string {
  *  swatches. Mirrors the scene's `tableResolved` / `chairResolved` mixing
  *  recipes so the wizard preview matches what the configurator actually
  *  renders. */
-function deriveExtendedColours([primary, carpet, accent]: [string, string, string]): WizardExtendedColours {
+function deriveExtendedColours([primary, carpet, accent, highlight]: [string, string, string, string]): WizardExtendedColours {
+  void highlight; // reserved — extended surfaces still derive from primary/carpet/accent
   // Floor reads as the user's "carpet" pick directly — it IS the floor.
   // Table = brand-tinted dark walnut.
   // Chairs = a soft mid-tone built from the accent over a dark anchor.
@@ -101,11 +102,11 @@ export function Wizard({
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [artworkUrls, setArtworkUrls] = useState<[string | null, string | null, string | null, string | null]>([null, null, null, null]);
   const artworkUrl = artworkUrls[0]; // first slot drives the back wall full-bleed
-  const [colours, setColours] = useState<[string, string, string]>(["#1f1f1f", "#e0d6c5", "#d33b2d"]);
+  const [colours, setColours] = useState<[string, string, string, string]>(["#1f1f1f", "#e0d6c5", "#d33b2d", "#1a1814"]);
   // Extended colours (floor/table/chairs). Tracked separately from `colours`
   // so the user can edit individual derived swatches without losing the
   // auto-derivation. Re-derived whenever the user hasn't touched them.
-  const [extendedColours, setExtendedColours] = useState<WizardExtendedColours>(() => deriveExtendedColours(["#1f1f1f", "#e0d6c5", "#d33b2d"]));
+  const [extendedColours, setExtendedColours] = useState<WizardExtendedColours>(() => deriveExtendedColours(["#1f1f1f", "#e0d6c5", "#d33b2d", "#1a1814"]));
   const [extendedTouched, setExtendedTouched] = useState<{ floor: boolean; table: boolean; chairs: boolean; cups: boolean; pendant: boolean }>({ floor: false, table: false, chairs: false, cups: false, pendant: false });
   // Customisation (cups / plants / sofas / displays) — new step 5.
   // Defaults mirror the configurator's defaults so a "skip the step" user
@@ -175,13 +176,14 @@ export function Wizard({
     if (!logoUrl) return;
     let cancelled = false;
     setExtracting(true);
-    extractDominantColours(logoUrl, 3)
+    extractDominantColours(logoUrl, 4)
       .then((cs) => {
         if (cancelled) return;
         setColours((prev) => [
           cs[0] ?? prev[0],
           cs[1] ?? prev[1],
           cs[2] ?? prev[2],
+          cs[3] ?? prev[3],
         ]);
       })
       .finally(() => { if (!cancelled) setExtracting(false); });
@@ -222,7 +224,7 @@ export function Wizard({
     onComplete(result);
   };
 
-  const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent"];
+  const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent", "Highlight"];
 
   // Active harmony rule for the swatch trio. When the user picks a rule
   // we DERIVE secondary + accent from primary; subsequently editing the
@@ -448,16 +450,18 @@ export function Wizard({
                   ? "Reading your logo…"
                   : (copy.coloursStep?.subtitle ?? "Brand row auto-picked from your logo. Surfaces row auto-derived — edit any swatch to override.")}
               >
-                {/* Brand row — logo-extracted trio + pendant (derived). */}
+                {/* Brand row — four logo-extracted swatches. The 4th
+                    ("Highlight") drives the pendant + any other tertiary
+                    accent surface via the extendedColours pipe. */}
                 <div className="text-[0.6rem] uppercase tracking-wider opacity-55 mt-5 mb-1.5">Brand</div>
                 <div className="grid grid-cols-4 gap-2">
-                  {([0, 1, 2] as const).map((i) => (
+                  {([0, 1, 2, 3] as const).map((i) => (
                     <ColourCard
                       key={i} compact
                       label={labels[i]!}
                       value={colours[i]}
                       onChange={(v) => setColours((c) => {
-                        const n = [...c] as [string, string, string];
+                        const n = [...c] as [string, string, string, string];
                         n[i] = v;
                         // Edit primary → re-derive the trio from the
                         // active harmony rule. Editing secondary/accent
@@ -468,11 +472,6 @@ export function Wizard({
                       })}
                     />
                   ))}
-                  <ColourCard
-                    compact label="Pendant"
-                    value={extendedColours.pendant}
-                    onChange={(v) => { setExtendedColours((c) => ({ ...c, pendant: v })); setExtendedTouched((t) => ({ ...t, pendant: true })); }}
-                  />
                 </div>
                 {/* Surfaces row — derived from brand + editable. */}
                 <div className="text-[0.6rem] uppercase tracking-wider opacity-55 mt-3 mb-1.5">Surfaces</div>
@@ -492,6 +491,7 @@ export function Wizard({
                 <div className="grid grid-cols-2 gap-2">
                   {HARMONY_RULES.map((h) => {
                     const preview = harmonise(colours[0], h.id);
+                    const isActive = harmony === h.id;
                     return (
                       <button
                         key={h.id}
@@ -499,18 +499,24 @@ export function Wizard({
                         title={h.description}
                         className="text-left rounded-[12px] px-2.5 py-2 transition-all neumorph-raised"
                         style={{
-                          background: harmony === h.id ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "var(--color-surface)",
-                          boxShadow: harmony === h.id
-                            ? `0 0 0 1.5px ${accent}, inset 0 1px 0 rgba(255,255,255,0.06)`
+                          // Active pill: brand accent fill with neumorphic
+                          // inset highlight. Inactive: surface colour with
+                          // the existing neumorph-raised shadow.
+                          background: isActive ? accent : "var(--color-surface)",
+                          color: isActive ? "#fff" : "currentColor",
+                          boxShadow: isActive
+                            ? "inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.18), " +
+                              `0 8px 22px -10px color-mix(in srgb, ${accent} 60%, transparent), ` +
+                              "0 2px 6px -1px rgba(0,0,0,0.18)"
                             : undefined,
                         }}
                       >
                         <div className="flex items-center gap-1.5 mb-1">
                           {preview.map((c, i) => (
-                            <span key={i} className="h-[30px] w-[30px] rounded-[8px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+                            <span key={i} className="h-[26px] w-[26px] rounded-[7px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
                           ))}
                         </div>
-                        <div className="text-[0.68rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: harmony === h.id ? accent : "currentColor" }}>{h.label}</div>
+                        <div className="text-[0.68rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{h.label}</div>
                       </button>
                     );
                   })}
@@ -569,15 +575,20 @@ export function Wizard({
             {step === 7 && (
               <StepHeader
                 eyebrow="All set"
-                title={copy.summaryStep?.title ?? "Ready to build"}
-                subtitle={copy.summaryStep?.subtitle ?? "We'll assemble everything in 3D. You can tweak any detail in the configurator."}
+                title={copy.summaryStep?.title ?? "Your space is ready"}
+                subtitle={copy.summaryStep?.subtitle ?? "Here's what we'll assemble. Every detail stays editable from the configurator after you generate the room."}
               >
                 <SummaryCard
                   size={size}
+                  wallHeightM={heightM}
                   designLine={designLine}
                   logoUrl={logoUrl}
-                  artworkUrl={artworkUrl}
+                  artworkUrls={artworkUrls}
                   colours={colours}
+                  extendedColours={extendedColours}
+                  customisation={customisation}
+                  environmentId={environmentId}
+                  environments={environments}
                   accent={accent}
                 />
               </StepHeader>
@@ -600,8 +611,19 @@ export function Wizard({
           {step < LAST_STEP ? (
             <button
               onClick={next}
-              className="px-6 h-10 rounded-[10px] text-[0.78rem] uppercase tracking-wider flex items-center gap-1.5"
-              style={{ background: accent, color: "#fff", fontVariationSettings: '"wdth" 100, "wght" 600', boxShadow: `0 8px 24px -12px color-mix(in srgb, ${accent} 60%, transparent)` }}
+              className="px-6 h-10 rounded-[10px] text-[0.78rem] uppercase tracking-wider flex items-center gap-1.5 transition-all"
+              style={{
+                background: accent,
+                color: "#fff",
+                fontVariationSettings: '"wdth" 100, "wght" 600',
+                // Neumorphic-on-accent — inset highlight on top + soft dual
+                // shadow below so the pill reads as raised in dark mode too.
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.30), " +
+                  "inset 0 -1px 0 rgba(0,0,0,0.18), " +
+                  `0 10px 24px -10px color-mix(in srgb, ${accent} 70%, transparent), ` +
+                  "0 3px 8px -2px rgba(0,0,0,0.25)",
+              }}
             >
               Next
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -609,8 +631,17 @@ export function Wizard({
           ) : (
             <button
               onClick={submit}
-              className="px-7 h-11 rounded-[10px] text-[0.82rem] uppercase tracking-wider"
-              style={{ background: accent, color: "#fff", fontVariationSettings: '"wdth" 100, "wght" 700', boxShadow: `0 12px 32px -12px color-mix(in srgb, ${accent} 70%, transparent)` }}
+              className="px-7 h-11 rounded-[10px] text-[0.82rem] uppercase tracking-wider transition-all"
+              style={{
+                background: accent,
+                color: "#fff",
+                fontVariationSettings: '"wdth" 100, "wght" 700',
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.30), " +
+                  "inset 0 -1px 0 rgba(0,0,0,0.20), " +
+                  `0 14px 32px -10px color-mix(in srgb, ${accent} 75%, transparent), ` +
+                  "0 4px 10px -2px rgba(0,0,0,0.28)",
+              }}
             >
               {copy.summaryStep?.cta ?? "Build →"}
             </button>
@@ -647,22 +678,24 @@ function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; acti
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="w-full text-left rounded-[16px] backdrop-blur-md transition-all flex items-center gap-4 px-4 py-3.5"
+      className="w-full text-left rounded-[16px] transition-all flex items-center gap-4 px-4 py-3.5 neumorph-raised"
       style={{
-        background: active ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
-        border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
+        background: active ? accent : "var(--color-surface)",
+        color: active ? "#fff" : "currentColor",
         boxShadow: active
-          ? `0 14px 30px -16px color-mix(in srgb, ${accent} 50%, transparent)`
-          : "0 6px 16px -12px rgba(0,0,0,0.12)",
+          ? "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.18), " +
+            `0 14px 32px -10px color-mix(in srgb, ${accent} 60%, transparent), ` +
+            "0 4px 10px -2px rgba(0,0,0,0.22)"
+          : undefined,
       }}
     >
       <div className="min-w-0 flex-1">
         <div className="text-[1.05rem] tracking-tight" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.label}</div>
-        <div className="text-[0.7rem] opacity-65 mt-0.5 truncate">{s.description}</div>
+        <div className="text-[0.7rem] opacity-80 mt-0.5 truncate">{s.description}</div>
       </div>
       <div className="text-right flex-shrink-0" style={{ fontVariantNumeric: "tabular-nums" }}>
-        <div className="text-[0.92rem]" style={{ color: active ? accent : "currentColor", fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.sqm} m²</div>
-        <div className="text-[0.65rem] opacity-55 mt-0.5">{s.widthM.toFixed(1)} × {s.depthM.toFixed(1)} m</div>
+        <div className="text-[0.92rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{s.sqm} m²</div>
+        <div className="text-[0.65rem] opacity-75 mt-0.5">{s.widthM.toFixed(1)} × {s.depthM.toFixed(1)} m</div>
       </div>
     </motion.button>
   );
@@ -797,29 +830,32 @@ function ColourCard({ label, value, onChange, compact = false }: { label: string
 // ── Step 5: Design line card ───────────────────────────────────────────
 
 function DesignLineCard({ line, active, onClick, accent }: { line: WizardDesignLine; active: boolean; onClick: () => void; accent: string }) {
-  // Row layout (matches SizeCard) — the generic SVG icons used to live
-  // here but didn't match warm/studio/minimal so they were removed. Hosts
-  // can still ship a bespoke preview via `designLine.preview`.
+  // Row layout (matches SizeCard) — active state is a neumorphic
+  // accent-filled pill (white text + inset/outer shadow); inactive is
+  // a neutral neumorph-raised surface so the row reads as a stack of
+  // tactile chips.
   return (
     <motion.button
       onClick={onClick}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="text-left rounded-[16px] backdrop-blur-md transition-all flex items-start gap-3 px-4 py-3.5"
+      className="w-full text-left rounded-[16px] transition-all flex items-start gap-3 px-4 py-3.5 neumorph-raised"
       style={{
-        background: active ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
-        border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
+        background: active ? accent : "var(--color-surface)",
+        color: active ? "#fff" : "currentColor",
         boxShadow: active
-          ? `0 14px 30px -16px color-mix(in srgb, ${accent} 50%, transparent)`
-          : "0 6px 16px -12px rgba(0,0,0,0.12)",
+          ? "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.18), " +
+            `0 14px 32px -10px color-mix(in srgb, ${accent} 60%, transparent), ` +
+            "0 4px 10px -2px rgba(0,0,0,0.22)"
+          : undefined,
       }}
     >
       {line.preview && <div className="flex-shrink-0">{line.preview}</div>}
       <div className="min-w-0 flex-1">
-        <div className="text-[0.62rem] uppercase tracking-wider opacity-55">{line.tagline}</div>
+        <div className="text-[0.62rem] uppercase tracking-wider opacity-75">{line.tagline}</div>
         <div className="text-[1.05rem] tracking-tight mt-0.5" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{line.label}</div>
-        <div className="text-[0.72rem] opacity-65 mt-0.5">{line.description}</div>
+        <div className="text-[0.72rem] opacity-80 mt-0.5">{line.description}</div>
       </div>
     </motion.button>
   );
@@ -828,38 +864,95 @@ function DesignLineCard({ line, active, onClick, accent }: { line: WizardDesignL
 // ── Summary card ───────────────────────────────────────────────────────
 
 function SummaryCard({
-  size, designLine, logoUrl, artworkUrl, colours, accent,
-}: { size: WizardSize; designLine: WizardDesignLine; logoUrl: string | null; artworkUrl: string | null; colours: [string, string, string]; accent: string }) {
+  size, wallHeightM, designLine, logoUrl, artworkUrls, colours, extendedColours, customisation, environmentId, environments, accent,
+}: {
+  size: WizardSize;
+  wallHeightM: number;
+  designLine: WizardDesignLine;
+  logoUrl: string | null;
+  artworkUrls: [string | null, string | null, string | null, string | null];
+  colours: [string, string, string, string];
+  extendedColours: WizardExtendedColours;
+  customisation: WizardCustomisation;
+  environmentId: string | null;
+  environments: WizardEnvironment[];
+  accent: string;
+}) {
+  const cardBg = "color-mix(in srgb, var(--color-surface) 70%, transparent)";
+  const envLabel = environments.find((e) => e.id === environmentId)?.label ?? "Warehouse";
+  const artworks = artworkUrls.filter((u): u is string => !!u);
+  // Customisation summary lines — only show non-zero counts.
+  const cLines: { label: string; value: string }[] = [];
+  if (customisation.cupsEnabled)            cLines.push({ label: "Branded cups",      value: "on" });
+  if (customisation.plantCount > 0)         cLines.push({ label: "Plants",            value: `${customisation.plantCount}` });
+  if (customisation.sofaCount > 0)          cLines.push({ label: "Breakout sofas",    value: `${customisation.sofaCount}` });
+  if (customisation.standingDisplayCount > 0) cLines.push({ label: "Standing displays", value: `${customisation.standingDisplayCount}` });
+  if (customisation.posterboardCount > 0)   cLines.push({ label: "Posterboards",      value: `${customisation.posterboardCount}` });
+  if (customisation.cubeCount > 0)          cLines.push({ label: "Cube plinths",      value: `${customisation.cubeCount}` });
   return (
-    <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
-      <div className="p-6 rounded-[20px] backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
-        <div className="text-[0.66rem] uppercase tracking-wider opacity-60 mb-1">Room</div>
-        <div className="text-[1.4rem] mb-4" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{size.label} · {size.sqm} m² · {designLine.label}</div>
-        <div className="text-[0.72rem] opacity-70 mb-1">Dimensions</div>
-        <div className="text-[1.4rem] tracking-tight" style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600', fontVariantNumeric: "tabular-nums" }}>
-          {size.widthM.toFixed(1)} × {size.depthM.toFixed(1)} m
+    <div className="mt-7 grid grid-cols-2 gap-3">
+      {/* Room — size + dims */}
+      <div className="rounded-[16px] p-4 neumorph-raised" style={{ background: cardBg }}>
+        <div className="text-[0.58rem] uppercase tracking-wider opacity-55 mb-1">Room</div>
+        <div className="text-[1.05rem] leading-tight mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{size.label}</div>
+        <div className="text-[0.7rem] opacity-70">{size.sqm} m² · {designLine.label}</div>
+        <div className="text-[0.74rem] mt-2" style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600', fontVariantNumeric: "tabular-nums" }}>
+          {size.widthM.toFixed(1)} × {size.depthM.toFixed(1)} × {wallHeightM.toFixed(1)} m
         </div>
       </div>
-      <div className="p-6 rounded-[20px] backdrop-blur-md flex items-center gap-4" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
+      {/* Environment */}
+      <div className="rounded-[16px] p-4 neumorph-raised" style={{ background: cardBg }}>
+        <div className="text-[0.58rem] uppercase tracking-wider opacity-55 mb-1">Environment</div>
+        <div className="text-[1.05rem] leading-tight" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{envLabel}</div>
+        <div className="text-[0.7rem] opacity-70 mt-1">{environmentId ? "Hall hidden" : "Warehouse hall"}</div>
+      </div>
+      {/* Logo + brand colours */}
+      <div className="col-span-2 rounded-[16px] p-4 neumorph-raised flex items-center gap-4" style={{ background: cardBg }}>
         {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={logoUrl} alt="logo" className="h-16 w-16 object-contain rounded-[8px] p-1" style={{ background: "var(--color-bg)" }} />
+          <img src={logoUrl} alt="logo" className="h-14 w-14 object-contain rounded-[8px] p-1" style={{ background: "var(--color-bg)" }} />
         ) : (
-          <div className="h-16 w-16 rounded-[8px] grid place-items-center text-[0.7rem] opacity-40" style={{ background: "color-mix(in srgb, var(--color-text) 6%, transparent)" }}>no logo</div>
+          <div className="h-14 w-14 rounded-[8px] grid place-items-center text-[0.62rem] opacity-50" style={{ background: "color-mix(in srgb, var(--color-text) 6%, transparent)" }}>no logo</div>
         )}
-        <div className="flex-1">
-          <div className="text-[0.72rem] opacity-70 mb-1">Brand colours</div>
-          <div className="flex gap-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="text-[0.58rem] uppercase tracking-wider opacity-55 mb-1.5">Brand · surfaces</div>
+          <div className="flex flex-wrap gap-1">
             {colours.map((c, i) => (
-              <span key={i} className="block h-8 w-8 rounded-md" style={{ background: c, boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-text) 12%, transparent)" }} />
+              <span key={`b${i}`} className="block h-6 w-6 rounded-[4px]" title={`Brand ${i + 1}: ${c.toUpperCase()}`} style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+            ))}
+            <span className="block w-2" />
+            {(["floor", "table", "chairs", "cups", "pendant"] as const).map((k) => (
+              <span key={k} className="block h-6 w-6 rounded-[4px]" title={`${k}: ${extendedColours[k].toUpperCase()}`} style={{ background: extendedColours[k], boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
             ))}
           </div>
         </div>
       </div>
-      {artworkUrl && (
-        <div className="md:col-span-2 p-2 rounded-[20px] backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--color-surface) 70%, transparent)" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={artworkUrl} alt="back-wall hero" className="w-full aspect-[16/6] object-cover rounded-[14px]" />
+      {/* Artwork — first slot full bleed; remaining as thumbnails */}
+      {artworks.length > 0 && (
+        <div className="col-span-2 rounded-[16px] p-2.5 neumorph-raised" style={{ background: cardBg }}>
+          <div className="text-[0.58rem] uppercase tracking-wider opacity-55 mb-1.5 px-1">Hero artwork · {artworks.length} of 4</div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {artworks.map((u, i) => (
+              <div key={i} className="rounded-[8px] overflow-hidden aspect-[3/4]" style={{ background: "color-mix(in srgb, var(--color-text) 5%, transparent)" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={u} alt={`art-${i}`} className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Customisation flourishes */}
+      {cLines.length > 0 && (
+        <div className="col-span-2 rounded-[16px] p-4 neumorph-raised" style={{ background: cardBg }}>
+          <div className="text-[0.58rem] uppercase tracking-wider opacity-55 mb-2">Flourishes</div>
+          <div className="flex flex-wrap gap-2">
+            {cLines.map((l) => (
+              <span key={l.label} className="px-2.5 py-1 rounded-full text-[0.66rem] flex items-center gap-1.5 neumorph-inset" style={{ background: "color-mix(in srgb, var(--color-surface) 90%, transparent)" }}>
+                <span className="opacity-65">{l.label}</span>
+                <span style={{ color: accent, fontVariationSettings: '"wdth" 100, "wght" 600' }}>{l.value}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>

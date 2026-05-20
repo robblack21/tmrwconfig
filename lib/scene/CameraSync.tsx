@@ -191,7 +191,7 @@ export function CameraSync() {
       // (e.g. wizard step transitions firing gotoPreset while the
       // user is still mousedown on the canvas).
       const a = animRef.current;
-      a.t = Math.min(1, a.t + dt * 0.18); // ~5.5s total — 5× slower (was 0.9) for a gentle cinematic pan that lets the user appreciate the move rather than feeling whip-panned between presets
+      a.t = Math.min(1, a.t + dt * 0.072); // ~14s total — slowed another 2.5× (was 0.18). The wider FOV (75°) adds visible parallax that reads as motion-blur-fast at quicker speeds; slowing the lerp keeps the move legible and feels intentional.
       const ease = easeOutCubic(a.t);
       cam.position.lerp(a.pos, ease - (a.t === 1 ? 0 : 0));
       if (ctrl?.target) {

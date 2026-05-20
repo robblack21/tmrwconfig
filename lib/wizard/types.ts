@@ -88,9 +88,9 @@ export type WizardResult = {
   /** @deprecated Kept on the result for back-compat with single-slot
    *  callers; resolves to artworkUrls[0]. */
   artworkUrl: string | null;
-  /** [primary, secondary, accent] — hex strings. Auto-extracted from the
-   *  logo and editable in step 4. */
-  colours: [string, string, string];
+  /** [primary, secondary, accent, highlight] — hex strings. Auto-extracted
+   *  from the logo (top-4 dominant colours) and editable in step 4. */
+  colours: [string, string, string, string];
   /** floor / table / chairs colours derived from `colours` + editable in
    *  step 4's second row. */
   extendedColours: WizardExtendedColours;
@@ -108,7 +108,7 @@ export type WizardCopy = {
   sizeStep?:           { title?: string; subtitle?: string };
   logoStep?:           { title?: string; subtitle?: string; hint?: string };
   artworkStep?:        { title?: string; subtitle?: string; hint?: string };
-  coloursStep?:        { title?: string; subtitle?: string; labels?: [string, string, string] };
+  coloursStep?:        { title?: string; subtitle?: string; labels?: [string, string, string, string] };
   designLineStep?:     { title?: string; subtitle?: string };
   environmentStep?:    { title?: string; subtitle?: string };
   customisationStep?:  { title?: string; subtitle?: string };
@@ -130,7 +130,7 @@ export type WizardState = {
   logoUrl: string | null;
   artworkUrl: string | null;
   artworkUrls: [string | null, string | null, string | null, string | null];
-  colours: [string, string, string];
+  colours: [string, string, string, string];
   extendedColours: WizardExtendedColours;
   customisation: WizardCustomisation;
   environmentId: string | null;

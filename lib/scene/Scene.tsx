@@ -1,6 +1,6 @@
 "use client";
 import { Suspense, useMemo, useEffect, useRef, useState } from "react";
-import { Environment, OrbitControls, ContactShadows, RoundedBox, Html } from "@react-three/drei";
+import { Environment, OrbitControls, ContactShadows, RoundedBox, Html, useGLTF } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -138,7 +138,12 @@ export function Scene() {
   // Resolve surface colours: user override > kit scene override > kit palette default
   const wallColor    = colourOverrides.walls   ?? kit.scene?.wallColor   ?? kit.palette.primary;
   const floorColor   = colourOverrides.floor   ?? kit.scene?.floorColor  ?? mixHex(kit.palette.neutralLight, kit.palette.primary, 0.25);
-  const trimColor    = colourOverrides.trim    ?? kit.palette.accent;
+  // Trim flows through one chain: user override → kit's explicit
+  // windowTrimColor override → palette.accent. The previous Window
+  // bind read `kit.scene.windowTrimColor` directly which bypassed
+  // colourOverrides.trim — window mullions ignored the wizard's
+  // Trim swatch entirely.
+  const trimColor    = colourOverrides.trim    ?? kit.scene?.windowTrimColor ?? kit.palette.accent;
   const pendantColor = colourOverrides.pendant ?? kit.palette.primary;
   const trussColor   = colourOverrides.truss   ?? "#15171c";
   const sofaResolved    = colourOverrides.sofa    ?? kit.palette.primary;
@@ -281,7 +286,7 @@ export function Scene() {
             backWallMotif={kit.scene?.wallMotif}
             windowsEnabled={windowsEnabled}
             windowSillM={windowSillM}
-            windowTrimColor={kit.scene?.windowTrimColor ?? kit.palette.accent}
+            windowTrimColor={trimColor}
             logo={exteriorLogo}
             connectLeft={ri > 0}
             skipRight={ri < roomCount - 1}
@@ -499,68 +504,46 @@ export function Scene() {
               </group>
             </Suspense>
 
-            {/* Optional breakout seating — sofa pair against the front-right
-                wall, count-driven (0 by default for a clean boardroom). The
-                sofa is rotated -π/2 so its long axis (~1.7m) runs along Z
-                and its depth (~0.85m) points outward into the room. We use
-                0.85m as the radius for `placeOnFloor` so wall + table
-                clearance always covers the *longer* extent — a touch
-                conservative across-wall but safe in every shape.
-
-                Coffee table sits between the sofas and the boardroom table.
-                Both flow through `placeOnFloor` so they cannot crash into
-                walls / table / chairs in any room shape. */}
+            {/* Optional breakout seating — ONE sofa centred against each
+                side wall, BACK to the window. Count = 1 puts one against
+                the right wall; count >= 2 mirrors it on the left. A
+                nespresso counter sits alongside each sofa on the back-
+                wall side (toward the video wall) so the breakout area
+                reads as a self-contained lounge zone — sofa, side table,
+                coffee machine. The OLD layout was a pair stacked against
+                the same wall with a coffee table between, which felt
+                cramped against the table + table chairs. */}
             {Array.from({ length: Math.min(sofaCount, 2) }, (_, i) => {
               const SOFA_HEIGHT = 1.0;
-              const SOFA_RADIUS = 0.85;
-              // Ideal: hugged against the right wall, forward sofa at +z,
-              // pair sits behind it. Real values then get clamped to safe
-              // bounds for this room shape + table footprint.
-              const idealX = widthM / 2 - 1.05;
-              const idealZ = depthM / 2 - 1.6 - (i === 0 ? 0 : 1.45);
-              const placed = placeOnFloor({
-                label: `sofa.${i}`,
-                x: idealX,
-                z: idealZ,
-                radius: SOFA_RADIUS,
-                shape: shape as RoomShape,
-                widthM, depthM,
-                tableLengthM, tableWidthM,
-                tableClearanceM: 0.7,
-              });
-              const rotY = -Math.PI / 2;
+              // i=0 → right wall, i=1 → left wall.
+              const side = i === 0 ? 1 : -1;
+              const sofaX = side * (widthM / 2 - 0.55);  // centre 0.55m off the wall
+              const sofaZ = 0;                            // centred along Z
+              const rotY = side === 1 ? -Math.PI / 2 : Math.PI / 2; // face inward
+              // Nespresso counter — 0.6m wide, sat on the BACK-wall side
+              // of the sofa (z < 0). Stays on the same side as the sofa.
+              const counterX = side * (widthM / 2 - 0.45);
+              const counterZ = -1.3;
               return (
-                <Suspense key={`sofa-${i}`} fallback={null}>
-                  <Sofa
-                    position={[placed.x, platformHeightM + SOFA_HEIGHT * 0.5, placed.z]}
-                    rotationY={rotY}
-                    heightM={SOFA_HEIGHT}
-                    tintHex={sofaResolved}
-                  />
-                </Suspense>
+                <group key={`sofa-${i}`}>
+                  <Suspense fallback={null}>
+                    <Sofa
+                      position={[sofaX, platformHeightM + SOFA_HEIGHT * 0.5, sofaZ]}
+                      rotationY={rotY}
+                      heightM={SOFA_HEIGHT}
+                      tintHex={sofaResolved}
+                    />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <NespressoCounter
+                      position={[counterX, platformHeightM, counterZ]}
+                      rotationY={rotY}
+                      accentHex={kit.palette.accent}
+                    />
+                  </Suspense>
+                </group>
               );
             })}
-            {sofaCount >= 2 && (() => {
-              // Coffee table sits in front of the sofa pair, between sofas
-              // and the boardroom table. Routed through `placeOnFloor` so
-              // it's guaranteed to clear the boardroom-table footprint plus
-              // chair walking-zone.
-              const ct = placeOnFloor({
-                label: "coffeeTable",
-                x: widthM / 2 - 2.0,
-                z: depthM / 2 - 2.3,
-                radius: 0.45,
-                shape: shape as RoomShape,
-                widthM, depthM,
-                tableLengthM, tableWidthM,
-                tableClearanceM: 0.6,
-              });
-              return (
-                <Suspense fallback={null}>
-                  <CoffeeTable variant={coffeeTableVariant} position={[ct.x, platformHeightM, ct.z]} heightM={0.335} />
-                </Suspense>
-              );
-            })()}
 
             <Plants widthM={widthM} depthM={depthM} plantCount={plantCount} platformHeightM={platformHeightM} shape={shape} tableLengthM={tableLengthM} tableWidthM={tableWidthM} />
 
@@ -611,16 +594,17 @@ export function Scene() {
             />
 
             {/* Multi-panel hero artwork distributed across the back wall.
-                Each non-null heroArtworkUrls slot becomes a full-wall-
-                height panel; widths split evenly so N artworks tile the
-                wall side-by-side. Mounted just in front of the back
-                wall surface; reads as a gallery hang. */}
+                The youtube/video-wall area in the centre is SACROSANCT —
+                artworks fill the two side strips (left + right of where
+                the LED wall sits). The unused area gets a shiny black
+                backplane for a gallery-glossy finish. */}
             <BackWallArtworks
               urls={heroArtworkUrls}
               widthM={widthM}
               depthM={depthM}
               wallHeightM={wallHeightM}
               platformHeightM={platformHeightM}
+              videoWallWidthM={ledWallEnabled ? ledWallWidthM : 0}
             />
           </>
         )}
@@ -1967,25 +1951,66 @@ function StandingDisplays({
 // own aspect ratio inside the column (fills width, anchored to top of
 // the wall, image scales to fit without distortion).
 
-function BackWallArtworks({ urls, widthM, depthM, wallHeightM, platformHeightM }: {
+function BackWallArtworks({ urls, widthM, depthM, wallHeightM, platformHeightM, videoWallWidthM }: {
   urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
+  /** Width of the centred video wall — artwork columns flow AROUND it
+   *  (left + right side strips). 0 = no video wall, artwork spans the
+   *  whole back wall. */
+  videoWallWidthM: number;
 }) {
   const active = (urls ?? []).filter((u): u is string => !!u);
-  if (active.length === 0) return null;
   // Mount just in front of the back wall's inner face (wall thickness
-  // 0.08m, plus a 5mm proud offset so we don't z-fight).
+  // 0.08m, plus a 6mm proud offset so we don't z-fight).
   const z = -depthM / 2 + 0.08 + 0.006;
   const margin = 0.25;                       // wall-edge breathing room
-  const gap = active.length > 1 ? 0.15 : 0;  // gap between panels
-  const totalGap = gap * (active.length - 1);
-  const usableW = widthM - margin * 2 - totalGap;
-  const colW = usableW / active.length;
+  // Centre gap reserves room for the video wall (with a small bezel
+  // buffer either side so the artworks don't touch the LED panel).
+  const centreReserve = videoWallWidthM > 0 ? videoWallWidthM + 0.4 : 0;
   const colH = wallHeightM - margin * 2;
   const cy = platformHeightM + margin + colH / 2;
+  // Glossy black backplane filling the whole back wall — sits behind
+  // any artwork + the video wall, so the unused strips read as a
+  // continuous gallery-glossy finish.
+  const bgZ = -depthM / 2 + 0.08 + 0.001;
+  const bg = (
+    <mesh position={[0, platformHeightM + wallHeightM / 2, bgZ]} userData={{ kind: "walls" }}>
+      <planeGeometry args={[widthM - 0.01, wallHeightM]} />
+      <meshPhysicalMaterial color="#0a0c10" roughness={0.18} metalness={0.55} clearcoat={0.85} clearcoatRoughness={0.18} />
+    </mesh>
+  );
+  if (active.length === 0) return bg;
+  // Compute side-strip widths. If videoWallWidth is 0 or there's no
+  // centre reserve, artworks span the entire wall.
+  const sideStripW = (widthM - centreReserve - margin * 2) / 2;
+  // Distribute artworks between left and right strips. Even split:
+  // - 1 artwork: right side, centred in its strip
+  // - 2: one each side, centred in their strip
+  // - 3: 1 left + 2 right (split bigger half)
+  // - 4: 2 each side
+  const leftCount  = Math.floor(active.length / 2);
+  const rightCount = active.length - leftCount;
+  const stripsW = sideStripW;
+  const gap = 0.15;
+  // If no video wall, fall back to full-width even distribution.
+  const fullSpan = centreReserve === 0;
+  const colW = fullSpan
+    ? (widthM - margin * 2 - gap * (active.length - 1)) / active.length
+    : (stripsW - gap * Math.max(0, Math.max(leftCount, rightCount) - 1)) / Math.max(1, Math.max(leftCount, rightCount));
   return (
     <>
+      {bg}
       {active.map((url, i) => {
-        const cx = -widthM / 2 + margin + colW / 2 + i * (colW + gap);
+        let cx: number;
+        if (fullSpan) {
+          cx = -widthM / 2 + margin + colW / 2 + i * (colW + gap);
+        } else {
+          const isLeft = i < leftCount;
+          const local = isLeft ? i : i - leftCount;
+          const count = isLeft ? leftCount : rightCount;
+          const stripCx = isLeft ? (-centreReserve / 2 - stripsW / 2) : (centreReserve / 2 + stripsW / 2);
+          const stripStartX = stripCx - (count * colW + (count - 1) * gap) / 2;
+          cx = stripStartX + colW / 2 + local * (colW + gap);
+        }
         return (
           <Suspense key={i} fallback={null}>
             <BackWallArtwork
@@ -2172,6 +2197,70 @@ function Posterboard({ position, rotationY, heightM, url }: {
 // Centre-of-room blocks the user adds in the Customisation step. The
 // upload-or-generate hotspot UI is a future iteration; for now we render
 // each cube in a brand accent colour so the user sees the slot.
+
+// ── Nespresso counter — sofa-side breakout ─────────────────────────────
+// A small counter (0.6×0.4×0.85m box) with a Nespresso machine GLB on
+// top. Sits alongside each breakout sofa on the back-wall side. The
+// counter body is brand-accent-tinted so it doubles as a brand prop.
+
+const NESPRESSO_URL = asset("/glb/props/nespresso_machine_3.glb");
+useGLTF.preload(NESPRESSO_URL);
+
+function NespressoCounter({ position, rotationY, accentHex }: {
+  position: [number, number, number]; rotationY: number; accentHex: string;
+}) {
+  const counterW = 0.6;
+  const counterD = 0.4;
+  const counterH = 0.85;
+  return (
+    <group position={position} rotation-y={rotationY}>
+      {/* Counter body — sat on the floor, top surface at `counterH`. */}
+      <mesh castShadow receiveShadow position={[0, counterH / 2, 0]}>
+        <boxGeometry args={[counterW, counterH, counterD]} />
+        <meshPhysicalMaterial color={accentHex} roughness={0.45} metalness={0.18} clearcoat={0.4} clearcoatRoughness={0.2} />
+      </mesh>
+      {/* Top trim — thin darker strip so the counter reads as a
+          machined product rather than a plain block. */}
+      <mesh position={[0, counterH + 0.001, 0]}>
+        <boxGeometry args={[counterW + 0.004, 0.01, counterD + 0.004]} />
+        <meshPhysicalMaterial color="#0e1014" roughness={0.4} metalness={0.55} />
+      </mesh>
+      {/* Nespresso machine — normalised so it sits on the counter top
+          regardless of the GLB's intrinsic scale. PropMount uses
+          useNormalizedScene which base-pins to y=0; we lift by
+          counterH to seat it. */}
+      <Suspense fallback={null}>
+        <NespressoMachine position={[0, counterH, 0]} />
+      </Suspense>
+    </group>
+  );
+}
+
+function NespressoMachine({ position }: { position: [number, number, number] }) {
+  const gltf = useGLTF(NESPRESSO_URL);
+  const scene = useMemo(() => {
+    if (!gltf?.scene) return new THREE.Group();
+    const s = gltf.scene.clone(true);
+    s.traverse((o: THREE.Object3D) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+    });
+    // Normalise to 0.32m tall, base-pinned to y=0.
+    s.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(s);
+    const size = box.getSize(new THREE.Vector3());
+    if (size.y > 1e-3) {
+      const k = 0.32 / size.y;
+      s.scale.multiplyScalar(k);
+      s.updateMatrixWorld(true);
+      const box2 = new THREE.Box3().setFromObject(s);
+      const ctr = box2.getCenter(new THREE.Vector3());
+      s.position.sub(new THREE.Vector3(ctr.x, box2.min.y, ctr.z));
+    }
+    return s;
+  }, [gltf]);
+  return <primitive object={scene} position={position} />;
+}
 
 function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
   count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit;

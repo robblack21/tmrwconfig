@@ -126,18 +126,19 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     }
     // Belt-and-braces: re-measure the FULL bbox (no helper filter) and
     // lift if the lowest visible point still dips below the intended
-    // base. Catches plants whose saucer / pot mesh is literally named
-    // "floor" / "ground" etc and got filtered out of the measurement
-    // pass. Lift cap bumped 0.5m → 1.5m because some plant GLBs ship
-    // with deep pots (>0.5m) that were exceeding the previous cap and
-    // failing silently — left the plant embedded by ~0.6m. 1.5m is a
-    // generous ceiling that still rules out far-away stray helpers
-    // (those are typically tens of metres off in skinned GLBs).
+    // base. The previous 1.5m cap was a heuristic against stray helper
+    // meshes — but plant GLBs (hexapot in particular) ship with pot
+    // bases > 1.5m below the leaves' bbox, so the cap was preventing
+    // legitimate lifts and leaving them embedded.
+    //
+    // Removed the cap entirely. Stray helpers in the prop GLBs we
+    // actually use are already caught by the per-mesh-distance pruning
+    // upstream (lines 60-81). If a future GLB needs a cap, we'll add
+    // an explicit opt-in flag.
     scene.updateMatrixWorld(true);
     const fullBox = new THREE.Box3().setFromObject(scene, true);
     if (isFinite(fullBox.min.y) && fullBox.min.y < yLift) {
-      const dip = yLift - fullBox.min.y;
-      if (dip < 1.5) scene.position.y += dip;
+      scene.position.y += yLift - fullBox.min.y;
     }
     return scene;
   }, [gltf, targetHeightM, tintHex, yLift]);

@@ -272,8 +272,16 @@ function TableTopCentreDecal({ kit, url, tableLengthM, tableWidthM }: { kit: Bra
   const wMax = Math.min(tableWidthM * 0.55, tableLengthM * 0.25);
   const w = wMax;
   const h = Math.min(w / aspect, tableWidthM * 0.4);
+  // The table-top decal is rendered on a plane that's been laid FLAT
+  // by `rotation-x = -π/2`. After that rotation, the plane's local +X
+  // axis maps to world +X, and local +Y maps to world -Z. The logo
+  // reads correctly along the table's WIDTH axis by default. User
+  // wants it rotated 90° clockwise (when looking down) so the logo
+  // reads along the LENGTH axis instead — extra `rotation-z = -π/2`
+  // applied AFTER the X-flip rotates the plane in its new horizontal
+  // orientation.
   return (
-    <mesh position={[0, 0.001, 0]} rotation-x={-Math.PI / 2}>
+    <mesh position={[0, 0.001, 0]} rotation-x={-Math.PI / 2} rotation-z={-Math.PI / 2}>
       <planeGeometry args={[w, h]} />
       <meshStandardMaterial
         map={tex}

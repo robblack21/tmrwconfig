@@ -110,19 +110,40 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 
 export type HarmonyRule = "complementary" | "triadic" | "splitComplementary" | "analogous";
 
-export function harmonise(primaryHex: string, rule: HarmonyRule): [string, string, string] {
+export function harmonise(primaryHex: string, rule: HarmonyRule): [string, string, string, string] {
   const [h, s, l] = hexToHsl(primaryHex);
-  // For each rule, the secondary + accent are hue rotations of primary,
-  // KEEPING saturation + lightness so the trio reads as one family.
+  // Returns FOUR colours per scheme: primary + three siblings. Wizard
+  // step 4 renders these as a row of four equal swatches; the fourth
+  // slot ("highlight") deepens the family for accent-on-accent uses.
   switch (rule) {
     case "complementary":
-      return [primaryHex, rotateHue(h, 180, s, l), rotateHue(h, 180, s, Math.max(0.25, l * 0.7))];
+      return [
+        primaryHex,
+        rotateHue(h, 180, s, l),
+        rotateHue(h, 180, s, Math.max(0.25, l * 0.7)),
+        rotateHue(h, 0, Math.max(0.1, s * 0.5), Math.max(0.18, l * 0.55)),
+      ];
     case "triadic":
-      return [primaryHex, rotateHue(h, 120, s, l), rotateHue(h, 240, s, l)];
+      return [
+        primaryHex,
+        rotateHue(h, 120, s, l),
+        rotateHue(h, 240, s, l),
+        rotateHue(h, 0, s, Math.max(0.18, l * 0.55)),
+      ];
     case "splitComplementary":
-      return [primaryHex, rotateHue(h, 150, s, l), rotateHue(h, 210, s, l)];
+      return [
+        primaryHex,
+        rotateHue(h, 150, s, l),
+        rotateHue(h, 210, s, l),
+        rotateHue(h, 180, s, Math.max(0.2, l * 0.6)),
+      ];
     case "analogous":
-      return [primaryHex, rotateHue(h, 30, s, l), rotateHue(h, -30, s, l)];
+      return [
+        primaryHex,
+        rotateHue(h, 30, s, l),
+        rotateHue(h, -30, s, l),
+        rotateHue(h, 60, s, Math.max(0.22, l * 0.75)),
+      ];
   }
 }
 

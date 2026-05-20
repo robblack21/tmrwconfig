@@ -174,12 +174,13 @@ const designLineEffects: Record<string, DesignLinePatch> = {
     wallTextureEnabled: false,
   },
   // Power-room — Studio's diagonal parquet + executive chairs + squircle
-  // pendant, but bumps the table variant up to presenter for a punchier
-  // boardroom-table look.
+  // pendant + the secondary oval table so chairs / cups curve along its
+  // rounded ends (presenter was rectangular and looked stiff with the
+  // exec chair variant).
   executive: {
     floorStyle: "diagonal",
     chairVariant: "executive",
-    tableVariant: "presenter",
+    tableVariant: "secondary",
     pendantShape: "squircle",
     plantCount: 1,
     wallTextureEnabled: true,
@@ -254,14 +255,14 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   // deriveExtendedColours useEffect also re-derives floor/table/chairs
   // from the new primary trio whenever colours[] changes.
   if (!prev || prev.colours.some((c, i) => c !== state.colours[i])) {
-    const [primary, carpet, accent] = state.colours;
+    const [primary, carpet, accent, highlight] = state.colours;
     apply({ type: "colourOverride.set", surface: "walls",   value: primary });
     apply({ type: "colourOverride.set", surface: "trim",    value: accent });
-    // Secondary (carpet) drives the soft secondary surfaces — pendant
-    // body + sofa upholstery — that aren't covered by the extended-
-    // colours dispatch below.
-    apply({ type: "colourOverride.set", surface: "pendant", value: carpet });
+    // Secondary (carpet) drives the sofa upholstery. Highlight (the
+    // 4th brand swatch) drives the pendant body so it pulls the
+    // brand's deepest tone — separates it from the wall colour.
     apply({ type: "colourOverride.set", surface: "sofa",    value: carpet });
+    apply({ type: "colourOverride.set", surface: "pendant", value: highlight });
   }
 
   // Extended colours — surfaces row of step 3 (floor/table/chairs/cups)

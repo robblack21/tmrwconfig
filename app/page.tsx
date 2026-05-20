@@ -140,7 +140,7 @@ export default function Page() {
             sizeStep:    { title: "Choose a meeting-room size" },
             logoStep:    { title: "Drop in your brand logo", hint: "PNG or SVG — we'll respect its aspect ratio." },
             artworkStep: { title: "Hero artwork", hint: "Image for the back-wall video matrix." },
-            coloursStep: { labels: ["Walls", "Trim", "Accent"] },
+            coloursStep: { labels: ["Walls", "Trim", "Accent", "Highlight"] },
             environmentStep: { title: "Environment", subtitle: "Pick what's outside the windows. Disables the warehouse hall." },
             customisationStep: { title: "Customisation" },
             summaryStep: { cta: "Generate room →" },
