@@ -37,22 +37,39 @@ export type WizardDesignLine = {
   preview?: ReactNode;
 };
 
-/** Auto-derived second line of brand colours — floor / table / chairs.
- *  Computed from the primary palette whenever the user changes a swatch
- *  in step 3, but EDITABLE so the user can override individual surfaces. */
+/** Auto-derived surface colours that complete the room palette beyond
+ *  the logo-extracted brand trio. Editable per-swatch so the user can
+ *  override individual surfaces; otherwise re-derived whenever the
+ *  brand trio (or harmony rule) changes.
+ *
+ *  Five surfaces: floor / table / chairs / cups + pendant. Pendant
+ *  lives here too (not in the brand-row trio) because it's a derived
+ *  brand-shade, not one of the dominant logo colours. */
 export type WizardExtendedColours = {
   floor: string;
   table: string;
   chairs: string;
+  cups: string;
+  pendant: string;
 };
 
 /** Customisation choices made in the new step 5 — cups / plants / sofas /
- *  displays. The host can apply each value to its scene directly. */
+ *  displays / posterboards / cube plinths. The host can apply each value
+ *  to its scene directly. */
 export type WizardCustomisation = {
   cupsEnabled: boolean;
   plantCount: number;
   sofaCount: number;
   standingDisplayCount: number;
+  /** Upright portrait-ratio posterboards distributed along the side walls.
+   *  Each carries a `posterboardUrls[i]` (may be null = brand logo). */
+  posterboardCount: number;
+  posterboardUrls: (string | null)[];
+  /** Cube plinths in the middle of the room — each with a hotspot the
+   *  user clicks to upload or generate a hero 3D object. (Hotspot UI is
+   *  the next iteration; the count + cubeAssets array is plumbed now.) */
+  cubeCount: number;
+  cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
 };
 
 /** Returned to the host's `onComplete` callback. The host wires this into
@@ -63,7 +80,13 @@ export type WizardResult = {
   wallHeightM: number;
   /** data: URL of the uploaded logo, or null if the user skipped. */
   logoUrl: string | null;
-  /** data: URL of the uploaded hero artwork, or null if skipped. */
+  /** data: URLs of the up-to-four uploaded hero artworks (or null per
+   *  empty slot). The first non-null one drives the back-wall
+   *  full-bleed graphic; remaining ones become extra wall posters via
+   *  kit.scene.exhibitionGraphics. */
+  artworkUrls: [string | null, string | null, string | null, string | null];
+  /** @deprecated Kept on the result for back-compat with single-slot
+   *  callers; resolves to artworkUrls[0]. */
   artworkUrl: string | null;
   /** [primary, secondary, accent] — hex strings. Auto-extracted from the
    *  logo and editable in step 4. */
@@ -106,6 +129,7 @@ export type WizardState = {
   designLine: WizardDesignLine;
   logoUrl: string | null;
   artworkUrl: string | null;
+  artworkUrls: [string | null, string | null, string | null, string | null];
   colours: [string, string, string];
   extendedColours: WizardExtendedColours;
   customisation: WizardCustomisation;

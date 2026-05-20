@@ -178,7 +178,7 @@ export function CameraSync() {
 
     if (animRef.current) {
       const a = animRef.current;
-      a.t = Math.min(1, a.t + dt * 0.9); // ~1.1s total — slower for cinematic feel
+      a.t = Math.min(1, a.t + dt * 0.18); // ~5.5s total — 5× slower (was 0.9) for a gentle cinematic pan that lets the user appreciate the move rather than feeling whip-panned between presets
       const ease = easeOutCubic(a.t);
       cam.position.lerp(a.pos, ease - (a.t === 1 ? 0 : 0));
       if (ctrl?.target) {

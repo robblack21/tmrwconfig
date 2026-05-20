@@ -33,7 +33,7 @@ export type ConfigState = {
   pendantShape: PendantShape;
   pendantWidthM: number;        // 1.0..8.0
   pendantDepthM: number;        // 1.0..6.0
-  pendantHeightM: number;       // 0.3..1.2 (vertical thickness)
+  pendantHeightM: number;       // 0.3..1.0 (vertical thickness)
   pendantYOffsetM: number;      // -1.5..+1.5 — moves pendant up/down from default (which is trussTop - 1.2)
   pendantRotationDeg: number;   // 0..90 — applied as rotation-Y on the pendant group (45° → diamond)
   pendantRingVertical: boolean; // ring shape: true = stands vertically (faces camera), false = horizontal halo
@@ -118,6 +118,10 @@ export type ConfigState = {
   sofaCount: number;                 // 0..4
   coffeeTableVariant: "avarta" | "kumo" | "geo"; // which glb sits between the sofa pair
   standingDisplayCount: number;      // 0..4 — angled standing displays around the room (suppressed when kit opts out via noDefaultDressing)
+  posterboardCount: number;          // 0..4 — upright portrait frames against the side walls
+  posterboardUrls: (string | null)[]; // one image per posterboard slot; null = brand logo fallback
+  cubeCount: number;                 // 0..4 — centre-of-room cube plinths with upload/generate hotspots
+  cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
   platformHeightM: number;           // 0.10..0.30 — raised platform thickness
   cameraFov: number;                 // 20..70
   cameraPreset: string;              // last requested preset id ('' = no command)
@@ -127,7 +131,7 @@ export type ConfigState = {
   cameraActivePreset: string;
 
   // Manual colour overrides per surface — null = use kit default
-  colourOverrides: Partial<Record<"walls" | "floor" | "trim" | "pendant" | "truss" | "sofa" | "counter" | "vitrine" | "monitor" | "table" | "chair" | "ceiling", string | null>>;
+  colourOverrides: Partial<Record<"walls" | "floor" | "trim" | "pendant" | "truss" | "sofa" | "counter" | "vitrine" | "monitor" | "table" | "chair" | "ceiling" | "cup", string | null>>;
   // brand
   brandKitId: string;
   /** Revision counter bumped when an active brand kit's mutable fields (e.g. youtubeId) change in-memory. */
@@ -278,6 +282,10 @@ export const useConfig = create<ConfigState>((set, get) => ({
   sofaCount: 0,
   coffeeTableVariant: "avarta",
   standingDisplayCount: 2,
+  posterboardCount: 0,
+  posterboardUrls: [null, null, null, null],
+  cubeCount: 0,
+  cubeAssets: [null, null, null, null],
   platformHeightM: 0.20,
   cameraFov: 60,
   cameraPreset: "",
@@ -351,7 +359,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "pendant.setHeight": {
-        set({ pendantHeightM: clamp(intent.value, 0.3, 1.2) });
+        set({ pendantHeightM: clamp(intent.value, 0.3, 1.0) });
         break;
       }
       case "pendant.setYOffset": {
@@ -682,6 +690,22 @@ export const useConfig = create<ConfigState>((set, get) => ({
       }
       case "layout.setStandingDisplayCount": {
         set({ standingDisplayCount: Math.round(clamp(intent.value, 0, 4)) });
+        break;
+      }
+      case "layout.setPosterboardCount": {
+        set({ posterboardCount: Math.round(clamp(intent.value, 0, 4)) });
+        break;
+      }
+      case "layout.setPosterboardUrls": {
+        set({ posterboardUrls: intent.urls.slice(0, 4) });
+        break;
+      }
+      case "layout.setCubeCount": {
+        set({ cubeCount: Math.round(clamp(intent.value, 0, 4)) });
+        break;
+      }
+      case "layout.setCubeAssets": {
+        set({ cubeAssets: intent.assets.slice(0, 4) });
         break;
       }
       case "layout.setPlatformHeight": {

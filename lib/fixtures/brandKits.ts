@@ -462,7 +462,10 @@ const HERO_ASSETS: Record<string, HeroSpec[]> = {
   "brand.mercedes": [{ file: "maybach.glb", heightM: 1.55 }],
   "brand.netflix": [
     { file: "netflix_symbol.glb", heightM: 0.75, plinth: true },
-    { file: "castle_byers.glb",   heightM: 1.60 },
+    // Stranger Things castle moved to the RIGHT side (was placed on the
+    // left by the default floor-item layout). Explicit pos overrides
+    // buildHeroProps' default.
+    { file: "castle_byers.glb",   heightM: 1.60, pos: [3.4, 0, -3.0], rotationY: Math.PI / 5 },
   ],
   "brand.nike": [
     { file: "miles_morales_shoes.glb",     heightM: 0.32, plinth: true },

@@ -110,6 +110,9 @@ export function Scene() {
   const cupsEnabled = useConfig((s) => s.cupsEnabled);
   const coffeeTableVariant = useConfig((s) => s.coffeeTableVariant);
   const standingDisplayCount = useConfig((s) => s.standingDisplayCount);
+  const posterboardCount = useConfig((s) => s.posterboardCount);
+  const posterboardUrls = useConfig((s) => s.posterboardUrls);
+  const cubeCount = useConfig((s) => s.cubeCount);
   const platformHeightM = useConfig((s) => s.platformHeightM);
   const windowsEnabled = useConfig((s) => s.windowsEnabled);
   const ceilingEnabled = useConfig((s) => s.ceilingEnabled);
@@ -480,6 +483,7 @@ export function Scene() {
                     tableWidthM={tableWidthM}
                     position={[0, platformHeightM, 0]}
                     kit={kit}
+                    cupTint={colourOverrides.cup ?? undefined}
                   />
                 )}
                 <TableTopBrandDecals
@@ -575,6 +579,32 @@ export function Scene() {
             {/* Exhibition graphics applied to the back wall (printed posters /
                 campaign artwork rather than full-bleed `wallGraphic`). */}
             <WallExhibitionGraphics kit={kit} widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
+
+            {/* Upright portrait posterboards — count-driven, distributed
+                along the side walls. Each carries a kit-uploaded image
+                (or the kit's primary logo if no upload). Added via the
+                wizard's Customisation step. */}
+            <Posterboards
+              count={posterboardCount}
+              urls={posterboardUrls}
+              widthM={widthM}
+              depthM={depthM}
+              wallHeightM={wallHeightM}
+              platformHeightM={platformHeightM}
+              kit={kit}
+            />
+
+            {/* Centre-of-room cube plinths — dealers'-choice slots. The
+                clickable hotspot UI (upload / generate) is the next
+                iteration; for now each cube renders with a brand
+                accent material so the user sees where they'll land. */}
+            <CubePlinths
+              count={cubeCount}
+              widthM={widthM}
+              depthM={depthM}
+              platformHeightM={platformHeightM}
+              kit={kit}
+            />
           </>
         )}
       </group>
@@ -639,7 +669,10 @@ function CameraRoomClamp({ widthM, depthM, wallHeightM, platformHeightM }: { wid
   // Reset the cooldown whenever a preset fires so the cinematic move
   // can fly through wall space without the clamp dragging it back.
   useEffect(() => {
-    if (cameraPreset) cooldownRef.current = Date.now() + 1200;
+    // 6s window — must outlast the camera-preset transition (5.5s) +
+    // a small settle. Otherwise the clamp starts pulling the camera
+    // back to room interior mid-flight and fights the cinematic move.
+    if (cameraPreset) cooldownRef.current = Date.now() + 6000;
   }, [cameraPreset]);
   useFrame(() => {
     if (Date.now() < cooldownRef.current) return;
@@ -1967,6 +2000,99 @@ function StandingDisplays({
 // Renders any kit graphics tagged `surface: "wall"` as printed-poster decals
 // on the back wall. Different from `wallGraphic` (which is the full-bleed
 // hero artwork): these read as gallery-style posters with frame highlights.
+// ── Posterboards ───────────────────────────────────────────────────────
+// Upright portrait frames distributed along the side walls. Each carries
+// either a user-uploaded image or the kit's primary logo. Frame is a
+// thin dark box; artwork is a planeGeometry slightly proud of the
+// frame's inner face to avoid z-fight.
+
+function Posterboards({ count, urls, widthM, depthM, wallHeightM, platformHeightM, kit }: {
+  count: number; urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; kit: BrandKit;
+}) {
+  if (count <= 0) return null;
+  // Slot ideal positions: alternate left/right side walls; back-to-front
+  // along Z (z negative = back of room, positive = front).
+  const w = 1.0;
+  const h = 1.6;
+  const wallInset = 0.08;
+  const cy = platformHeightM + wallHeightM * 0.5;
+  const slots: { pos: [number, number, number]; rot: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const idx = Math.floor(i / 2);
+    const z = (idx === 0 ? -0.6 : -0.6 + idx * 1.8) - depthM * 0.05;
+    const x = side * (widthM / 2 - wallInset);
+    slots.push({ pos: [x, cy, z], rot: side === -1 ? Math.PI / 2 : -Math.PI / 2 });
+  }
+  return (
+    <>
+      {slots.map((s, i) => (
+        <Suspense key={i} fallback={null}>
+          <Posterboard
+            position={s.pos}
+            rotationY={s.rot}
+            w={w}
+            h={h}
+            url={urls[i] ?? kit.logos.primary.rasterUrl ?? ""}
+          />
+        </Suspense>
+      ))}
+    </>
+  );
+}
+
+function Posterboard({ position, rotationY, w, h, url }: {
+  position: [number, number, number]; rotationY: number; w: number; h: number; url: string;
+}) {
+  const tex = useWallGraphic(url);
+  return (
+    <group position={position} rotation-y={rotationY} userData={{ kind: "walls" }}>
+      {/* Frame */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[w + 0.06, h + 0.06, 0.03]} />
+        <meshPhysicalMaterial color="#0e1014" roughness={0.55} metalness={0.35} />
+      </mesh>
+      {/* Artwork — slightly proud of the frame's inner face. */}
+      <mesh position={[0, 0, 0.018]}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial map={tex} toneMapped />
+      </mesh>
+    </group>
+  );
+}
+
+// ── Cube plinths ───────────────────────────────────────────────────────
+// Centre-of-room blocks the user adds in the Customisation step. The
+// upload-or-generate hotspot UI is a future iteration; for now we render
+// each cube in a brand accent colour so the user sees the slot.
+
+function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
+  count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit;
+}) {
+  if (count <= 0) return null;
+  const size = 0.6;
+  const halfW = widthM / 2 - 1.4;
+  const halfD = depthM / 2 - 1.4;
+  const slots: [number, number, number][] = [];
+  for (let i = 0; i < Math.min(count, 4); i++) {
+    // 4-corner pattern around the table.
+    const sx = i % 2 === 0 ? -1 : 1;
+    const sz = i < 2 ? -1 : 1;
+    slots.push([sx * halfW, platformHeightM + size / 2, sz * halfD]);
+  }
+  const colour = kit.palette.accent;
+  return (
+    <>
+      {slots.map((pos, i) => (
+        <mesh key={i} position={pos} castShadow receiveShadow>
+          <boxGeometry args={[size, size, size]} />
+          <meshPhysicalMaterial color={colour} roughness={0.5} metalness={0.2} clearcoat={0.4} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
 function WallExhibitionGraphics({
   kit, widthM, depthM, wallHeightM, platformHeightM,
 }: { kit: BrandKit; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {

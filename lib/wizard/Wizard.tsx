@@ -38,10 +38,16 @@ function deriveExtendedColours([primary, carpet, accent]: [string, string, strin
   // Floor reads as the user's "carpet" pick directly — it IS the floor.
   // Table = brand-tinted dark walnut.
   // Chairs = a soft mid-tone built from the accent over a dark anchor.
+  // Cups = lightened neutral with a hint of carpet so they read as
+  //   ceramic-with-brand-undertone.
+  // Pendant = primary darkened, gives the suspended sign a punchier
+  //   silhouette against the ceiling.
   return {
-    floor:  carpet,
-    table:  mixHex("#1a1814", primary, 0.3),
-    chairs: mixHex("#222428", accent, 0.55),
+    floor:   carpet,
+    table:   mixHex("#1a1814", primary, 0.3),
+    chairs:  mixHex("#222428", accent, 0.55),
+    cups:    mixHex("#f5f4ee", carpet, 0.18),
+    pendant: mixHex("#0a0a0a", primary, 0.55),
   };
 }
 
@@ -86,16 +92,17 @@ export function Wizard({
   const [dimsTouched, setDimsTouched] = useState<{ w: boolean; d: boolean; h: boolean }>({ w: false, d: false, h: false });
   const [widthM,  setWidthM]   = useState<number>(sizes[0]!.widthM);
   const [depthM,  setDepthM]   = useState<number>(sizes[0]!.depthM);
-  const [heightM, setHeightM]  = useState<number>(2.8);
+  const [heightM, setHeightM]  = useState<number>(3.8);
   const [designLineId, setDesignLineId] = useState<string>(initialDesignLineId ?? designLines[0]!.id);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
+  const [artworkUrls, setArtworkUrls] = useState<[string | null, string | null, string | null, string | null]>([null, null, null, null]);
+  const artworkUrl = artworkUrls[0]; // first slot drives the back wall full-bleed
   const [colours, setColours] = useState<[string, string, string]>(["#1f1f1f", "#e0d6c5", "#d33b2d"]);
   // Extended colours (floor/table/chairs). Tracked separately from `colours`
   // so the user can edit individual derived swatches without losing the
   // auto-derivation. Re-derived whenever the user hasn't touched them.
   const [extendedColours, setExtendedColours] = useState<WizardExtendedColours>(() => deriveExtendedColours(["#1f1f1f", "#e0d6c5", "#d33b2d"]));
-  const [extendedTouched, setExtendedTouched] = useState<{ floor: boolean; table: boolean; chairs: boolean }>({ floor: false, table: false, chairs: false });
+  const [extendedTouched, setExtendedTouched] = useState<{ floor: boolean; table: boolean; chairs: boolean; cups: boolean; pendant: boolean }>({ floor: false, table: false, chairs: false, cups: false, pendant: false });
   // Customisation (cups / plants / sofas / displays) — new step 5.
   // Defaults mirror the configurator's defaults so a "skip the step" user
   // gets a sensible room.
@@ -104,6 +111,10 @@ export function Wizard({
     plantCount: 2,
     sofaCount: 0,
     standingDisplayCount: 0,
+    posterboardCount: 0,
+    posterboardUrls: [null, null, null, null],
+    cubeCount: 0,
+    cubeAssets: [null, null, null, null],
   });
   // Anthracite dark-mode toggle. Applies only to the wizard chrome —
   // swaps a small set of CSS vars on the wizard's own root element so
@@ -140,9 +151,11 @@ export function Wizard({
   useEffect(() => {
     const derived = deriveExtendedColours(colours);
     setExtendedColours((prev) => ({
-      floor:  extendedTouched.floor  ? prev.floor  : derived.floor,
-      table:  extendedTouched.table  ? prev.table  : derived.table,
-      chairs: extendedTouched.chairs ? prev.chairs : derived.chairs,
+      floor:   extendedTouched.floor   ? prev.floor   : derived.floor,
+      table:   extendedTouched.table   ? prev.table   : derived.table,
+      chairs:  extendedTouched.chairs  ? prev.chairs  : derived.chairs,
+      cups:    extendedTouched.cups    ? prev.cups    : derived.cups,
+      pendant: extendedTouched.pendant ? prev.pendant : derived.pendant,
     }));
   }, [colours, extendedTouched]);
 
@@ -150,8 +163,8 @@ export function Wizard({
   // can build a scene in lock-step with the user's progress.
   useEffect(() => {
     if (!onState) return;
-    onState({ step, size, wallHeightM: heightM, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId });
-  }, [onState, step, size, heightM, designLine, logoUrl, artworkUrl, colours, extendedColours, customisation, environmentId]);
+    onState({ step, size, wallHeightM: heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId });
+  }, [onState, step, size, heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -179,14 +192,29 @@ export function Wizard({
     r.onload = () => { if (typeof r.result === "string") setLogoUrl(r.result); };
     r.readAsDataURL(file);
   }, []);
-  const onArtworkFile = useCallback((file: File) => {
+  const onArtworkFile = useCallback((file: File, slot: number) => {
     const r = new FileReader();
-    r.onload = () => { if (typeof r.result === "string") setArtworkUrl(r.result); };
+    r.onload = () => {
+      if (typeof r.result !== "string") return;
+      const url = r.result;
+      setArtworkUrls((prev) => {
+        const next = [...prev] as [string | null, string | null, string | null, string | null];
+        next[slot] = url;
+        return next;
+      });
+    };
     r.readAsDataURL(file);
+  }, []);
+  const onArtworkClear = useCallback((slot: number) => {
+    setArtworkUrls((prev) => {
+      const next = [...prev] as [string | null, string | null, string | null, string | null];
+      next[slot] = null;
+      return next;
+    });
   }, []);
 
   const submit = () => {
-    const result: WizardResult = { size, wallHeightM: heightM, logoUrl, artworkUrl, colours, extendedColours, designLine, customisation, environmentId };
+    const result: WizardResult = { size, wallHeightM: heightM, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, designLine, customisation, environmentId };
     onComplete(result);
   };
 
@@ -388,10 +416,22 @@ export function Wizard({
             {step === 2 && (
               <StepHeader
                 eyebrow={`Step 3 of ${TOTAL_STEPS}`}
-                title={copy.artworkStep?.title ?? "Upload a hero artwork"}
-                subtitle={copy.artworkStep?.subtitle ?? "We'll feature this as the back-wall graphic. Skip if you'd rather use a solid colour."}
+                title={copy.artworkStep?.title ?? "Hero artworks"}
+                subtitle={copy.artworkStep?.subtitle ?? "Up to four images. Slot 1 drives the back-wall full-bleed; slots 2–4 hang as wall posters."}
               >
-                <Uploader fileUrl={artworkUrl} onFile={onArtworkFile} accept="image/png,image/jpeg,image/webp,image/avif" hint={copy.artworkStep?.hint ?? "Recommended 16:9 or wider, 2048px+ for sharp printing."} accent={accent} />
+                <div className="grid grid-cols-2 gap-3 mt-5">
+                  {[0, 1, 2, 3].map((slot) => (
+                    <ArtworkSlot
+                      key={slot}
+                      slot={slot}
+                      fileUrl={artworkUrls[slot]}
+                      onFile={(f) => onArtworkFile(f, slot)}
+                      onClear={() => onArtworkClear(slot)}
+                      accent={accent}
+                    />
+                  ))}
+                </div>
+                <div className="text-[0.62rem] opacity-55 mt-3">Slot 1 is the back-wall hero. Remaining slots become exhibition wall posters.</div>
               </StepHeader>
             )}
 
@@ -401,66 +441,74 @@ export function Wizard({
                 title={copy.coloursStep?.title ?? "Brand colours"}
                 subtitle={extracting
                   ? "Reading your logo…"
-                  : (copy.coloursStep?.subtitle ?? "Auto-picked from your logo. The second row is auto-derived for floor/table/chairs — edit any one to customise.")}
+                  : (copy.coloursStep?.subtitle ?? "Brand row auto-picked from your logo. Surfaces row auto-derived — edit any swatch to override.")}
               >
-                <div className="grid grid-cols-3 gap-3 mt-6">
+                {/* Brand row — logo-extracted trio + pendant (derived). */}
+                <div className="text-[0.6rem] uppercase tracking-wider opacity-55 mt-5 mb-1.5">Brand</div>
+                <div className="grid grid-cols-4 gap-2">
                   {([0, 1, 2] as const).map((i) => (
                     <ColourCard
-                      key={i}
+                      key={i} compact
                       label={labels[i]!}
                       value={colours[i]}
                       onChange={(v) => setColours((c) => {
                         const n = [...c] as [string, string, string];
                         n[i] = v;
-                        // If user edits primary, re-derive the trio
-                        // from the active harmony rule. Editing
-                        // secondary/accent drops the rule (manual mode).
+                        // Edit primary → re-derive the trio from the
+                        // active harmony rule. Editing secondary/accent
+                        // drops the rule (manual mode).
                         if (i === 0 && harmony) return harmonise(v, harmony);
                         if (i !== 0) setHarmony(null);
                         return n;
                       })}
                     />
                   ))}
+                  <ColourCard
+                    compact label="Pendant"
+                    value={extendedColours.pendant}
+                    onChange={(v) => { setExtendedColours((c) => ({ ...c, pendant: v })); setExtendedTouched((t) => ({ ...t, pendant: true })); }}
+                  />
                 </div>
-                {/* Colour-harmony rule picker. Switching schemes re-derives
-                    secondary + accent from the current primary so the
-                    user can audition the four classical relationships
-                    without re-uploading. */}
-                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Harmony</div>
+                {/* Surfaces row — derived from brand + editable. */}
+                <div className="text-[0.6rem] uppercase tracking-wider opacity-55 mt-3 mb-1.5">Surfaces</div>
+                <div className="grid grid-cols-4 gap-2">
+                  <ColourCard compact label="Floor"  value={extendedColours.floor}  onChange={(v) => { setExtendedColours((c) => ({ ...c, floor:  v })); setExtendedTouched((t) => ({ ...t, floor:  true })); }} />
+                  <ColourCard compact label="Table"  value={extendedColours.table}  onChange={(v) => { setExtendedColours((c) => ({ ...c, table:  v })); setExtendedTouched((t) => ({ ...t, table:  true })); }} />
+                  <ColourCard compact label="Chairs" value={extendedColours.chairs} onChange={(v) => { setExtendedColours((c) => ({ ...c, chairs: v })); setExtendedTouched((t) => ({ ...t, chairs: true })); }} />
+                  <ColourCard compact label="Cups"   value={extendedColours.cups}   onChange={(v) => { setExtendedColours((c) => ({ ...c, cups:   v })); setExtendedTouched((t) => ({ ...t, cups:   true })); }} />
+                </div>
+                {/* Harmony schemes — each button renders a static preview
+                    of the trio it WOULD produce from the current primary,
+                    so the user can compare all four at a glance and
+                    "selecting one doesn't corrupt the others" — the
+                    previews are derived live but the click is the only
+                    state change. */}
+                <div className="text-[0.6rem] uppercase tracking-wider opacity-55 mt-4 mb-1.5">Harmony</div>
                 <div className="grid grid-cols-2 gap-2">
-                  {HARMONY_RULES.map((h) => (
-                    <button
-                      key={h.id}
-                      onClick={() => applyHarmony(h.id)}
-                      title={h.description}
-                      className="text-left rounded-[10px] px-2.5 py-2 transition-all"
-                      style={{
-                        background: harmony === h.id ? `color-mix(in srgb, ${accent} 16%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
-                        border: harmony === h.id ? `1.5px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",
-                      }}
-                    >
-                      <div className="text-[0.7rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: harmony === h.id ? accent : "currentColor" }}>{h.label}</div>
-                      <div className="text-[0.6rem] opacity-60 mt-0.5 leading-snug">{h.description}</div>
-                    </button>
-                  ))}
-                </div>
-                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Surfaces</div>
-                <div className="grid grid-cols-3 gap-3">
-                  <ColourCard
-                    label="Floor"
-                    value={extendedColours.floor}
-                    onChange={(v) => { setExtendedColours((c) => ({ ...c, floor: v })); setExtendedTouched((t) => ({ ...t, floor: true })); }}
-                  />
-                  <ColourCard
-                    label="Table"
-                    value={extendedColours.table}
-                    onChange={(v) => { setExtendedColours((c) => ({ ...c, table: v })); setExtendedTouched((t) => ({ ...t, table: true })); }}
-                  />
-                  <ColourCard
-                    label="Chairs"
-                    value={extendedColours.chairs}
-                    onChange={(v) => { setExtendedColours((c) => ({ ...c, chairs: v })); setExtendedTouched((t) => ({ ...t, chairs: true })); }}
-                  />
+                  {HARMONY_RULES.map((h) => {
+                    const preview = harmonise(colours[0], h.id);
+                    return (
+                      <button
+                        key={h.id}
+                        onClick={() => applyHarmony(h.id)}
+                        title={h.description}
+                        className="text-left rounded-[12px] px-2.5 py-2 transition-all neumorph-raised"
+                        style={{
+                          background: harmony === h.id ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "var(--color-surface)",
+                          boxShadow: harmony === h.id
+                            ? `0 0 0 1.5px ${accent}, inset 0 1px 0 rgba(255,255,255,0.06)`
+                            : undefined,
+                        }}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {preview.map((c, i) => (
+                            <span key={i} className="h-3 w-3 rounded-[3px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+                          ))}
+                        </div>
+                        <div className="text-[0.68rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: harmony === h.id ? accent : "currentColor" }}>{h.label}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </StepHeader>
             )}
@@ -532,28 +580,31 @@ export function Wizard({
           </motion.div>
         </AnimatePresence>
 
-        {/* Footer — prev / next */}
+        {/* Footer — Back is now a proper neumorph button (was a text link),
+            Next is the accent pill. */}
         <div className="flex items-center justify-between mt-10 pt-6 border-t border-[color:var(--color-border-soft)]">
           <button
             onClick={prev}
             disabled={step === 0}
-            className="hover:opacity-100 opacity-70 disabled:opacity-20 disabled:cursor-not-allowed flex items-center gap-1.5 text-[0.72rem] uppercase tracking-wider"
+            className="px-4 h-10 rounded-[10px] text-[0.74rem] uppercase tracking-wider neumorph-raised disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 transition-opacity"
+            style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6L8 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6L8 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
             Back
           </button>
           {step < LAST_STEP ? (
             <button
               onClick={next}
-              className="px-6 h-10 rounded-[8px] text-[0.78rem] uppercase tracking-wider"
+              className="px-6 h-10 rounded-[10px] text-[0.78rem] uppercase tracking-wider flex items-center gap-1.5"
               style={{ background: accent, color: "#fff", fontVariationSettings: '"wdth" 100, "wght" 600', boxShadow: `0 8px 24px -12px color-mix(in srgb, ${accent} 60%, transparent)` }}
             >
-              Continue
+              Next
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4 2L8 6L4 10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
           ) : (
             <button
               onClick={submit}
-              className="px-7 h-11 rounded-[8px] text-[0.82rem] uppercase tracking-wider"
+              className="px-7 h-11 rounded-[10px] text-[0.82rem] uppercase tracking-wider"
               style={{ background: accent, color: "#fff", fontVariationSettings: '"wdth" 100, "wght" 700', boxShadow: `0 12px 32px -12px color-mix(in srgb, ${accent} 70%, transparent)` }}
             >
               {copy.summaryStep?.cta ?? "Build →"}
@@ -612,6 +663,61 @@ function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; acti
   );
 }
 
+// ── Compact 4-slot artwork tile (step 2) ───────────────────────────────
+function ArtworkSlot({
+  slot, fileUrl, onFile, onClear, accent,
+}: {
+  slot: number;
+  fileUrl: string | null;
+  onFile: (f: File) => void;
+  onClear: () => void;
+  accent: string;
+}) {
+  return (
+    <div
+      className="relative rounded-[14px] overflow-hidden neumorph-raised"
+      style={{ aspectRatio: "16 / 9" }}
+    >
+      <label
+        className="block w-full h-full cursor-pointer"
+        style={{
+          background: fileUrl ? "color-mix(in srgb, var(--color-surface) 60%, transparent)" : "color-mix(in srgb, var(--color-surface) 30%, transparent)",
+        }}
+      >
+        {fileUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={fileUrl} alt={`slot ${slot + 1}`} className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 grid place-items-center text-center">
+            <div>
+              <div className="w-9 h-9 mx-auto rounded-full mb-1.5 grid place-items-center" style={{ background: `color-mix(in srgb, ${accent} 20%, transparent)` }}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 3v10M3 8h10" stroke={accent} strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div className="text-[0.6rem] opacity-70">Slot {slot + 1}</div>
+            </div>
+          </div>
+        )}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
+        />
+      </label>
+      {fileUrl && (
+        <button
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClear(); }}
+          className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full grid place-items-center text-[0.7rem]"
+          style={{ background: "rgba(0,0,0,0.55)", color: "#fff", backdropFilter: "blur(6px)" }}
+          aria-label={`Clear slot ${slot + 1}`}
+        >×</button>
+      )}
+    </div>
+  );
+}
+
 // ── Steps 2-3: Uploader ────────────────────────────────────────────────
 
 function Uploader({ fileUrl, onFile, accept, hint, accent }: { fileUrl: string | null; onFile: (f: File) => void; accept: string; hint?: string; accent: string }) {
@@ -654,7 +760,24 @@ function Uploader({ fileUrl, onFile, accept, hint, accent }: { fileUrl: string |
 
 // ── Step 4: Colour card ────────────────────────────────────────────────
 
-function ColourCard({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function ColourCard({ label, value, onChange, compact = false }: { label: string; value: string; onChange: (v: string) => void; compact?: boolean }) {
+  // `compact` is used by the 2×4 colours grid where vertical space is
+  // tight — drops the bottom hex readout, smaller padding, narrower
+  // swatch height. Hex is still visible via the swatch tooltip + the
+  // long-press editor for fine-tune.
+  if (compact) {
+    return (
+      <label
+        className="block rounded-[12px] cursor-pointer neumorph-raised relative overflow-hidden"
+        style={{ padding: 6 }}
+        title={value.toUpperCase()}
+      >
+        <div className="w-full rounded-[8px] mb-1" style={{ aspectRatio: "1 / 0.7", background: value, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+        <div className="text-[0.6rem] opacity-65 text-center" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{label}</div>
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+      </label>
+    );
+  }
   return (
     <div className="rounded-[16px] p-4 backdrop-blur-md" style={{ background: "color-mix(in srgb, var(--color-surface) 65%, transparent)", boxShadow: "0 8px 24px -16px rgba(0,0,0,0.18)" }}>
       <div className="text-[0.72rem] opacity-70 mb-3">{label}</div>
@@ -879,6 +1002,65 @@ function CustomisationStep({
         value={value.standingDisplayCount}
         min={0} max={4}
         onChange={(v) => onChange({ standingDisplayCount: v })}
+        accent={accent}
+      />
+      {/* Posterboards — upright portrait frames carrying brand art. The
+          count adds frames along the side walls; each gets its own
+          upload slot in the row below. */}
+      <CounterRow
+        label="Posterboards"
+        hint="Upright portrait frames along the side walls."
+        value={value.posterboardCount}
+        min={0} max={4}
+        onChange={(v) => onChange({ posterboardCount: v })}
+        accent={accent}
+      />
+      {value.posterboardCount > 0 && (
+        <div className="grid grid-cols-4 gap-2 -mt-2">
+          {Array.from({ length: value.posterboardCount }, (_, i) => (
+            <label
+              key={i}
+              className="relative rounded-[10px] overflow-hidden cursor-pointer neumorph-raised"
+              style={{ aspectRatio: "3 / 4" }}
+              title={`Upload posterboard ${i + 1}`}
+            >
+              {value.posterboardUrls[i] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={value.posterboardUrls[i]!} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="grid place-items-center h-full text-[0.62rem] opacity-60" style={{ background: "color-mix(in srgb, var(--color-surface) 40%, transparent)" }}>+ {i + 1}</div>
+              )}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/avif"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  const r = new FileReader();
+                  r.onload = () => {
+                    if (typeof r.result !== "string") return;
+                    const next = [...value.posterboardUrls];
+                    next[i] = r.result;
+                    onChange({ posterboardUrls: next });
+                  };
+                  r.readAsDataURL(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
+      {/* Cube plinths — dealers'-choice. Each cube renders in the scene
+          with a clickable hotspot the user uses to upload a 3D object or
+          generate one via the fal.ai pipeline. The wizard only collects
+          count + assets here; the hotspot UI lives in the configurator. */}
+      <CounterRow
+        label="Cube plinths"
+        hint="Centre-of-room blocks with hotspots — drop or generate a 3D object on each."
+        value={value.cubeCount}
+        min={0} max={4}
+        onChange={(v) => onChange({ cubeCount: v })}
         accent={accent}
       />
     </div>

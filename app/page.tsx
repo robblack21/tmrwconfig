@@ -501,7 +501,7 @@ export default function Page() {
         <Section label="Pendant dimensions" defaultOpen={false}>
           <Slider label="Width"   value={pendantWidthM}   onChange={(v) => apply({ type: "pendant.setWidth",   value: v })} min={1.0} max={8.0} step={0.1} unit="m" />
           <Slider label="Depth"   value={pendantDepthM}   onChange={(v) => apply({ type: "pendant.setDepth",   value: v })} min={1.0} max={6.0} step={0.1} unit="m" />
-          <Slider label="Height"  value={pendantHeightM}  onChange={(v) => apply({ type: "pendant.setHeight",  value: v })} min={0.3} max={1.2} step={0.05} unit="m" />
+          <Slider label="Height"  value={pendantHeightM}  onChange={(v) => apply({ type: "pendant.setHeight",  value: v })} min={0.3} max={1.0} step={0.05} unit="m" />
           <Slider label="Y-offset" value={pendantYOffsetM} onChange={(v) => apply({ type: "pendant.setYOffset", value: v })} min={-1.5} max={1.5} step={0.05} unit="m" />
           <Slider label="Rotate"   value={pendantRotationDeg} onChange={(v) => apply({ type: "pendant.setRotation", value: v })} min={0} max={90} step={5} unit="°" />
           {pendantShape === "ring" && (

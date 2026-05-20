@@ -352,10 +352,14 @@ const CUP_GLB_URL = asset("/glb/props/coffeecup.glb");
 useGLTF.preload(CUP_GLB_URL);
 
 export function BrandedCupsOnTable({
-  count, tableLengthM, tableWidthM, position, kit,
+  count, tableLengthM, tableWidthM, position, kit, cupTint,
 }: {
   count: number; tableLengthM: number; tableWidthM: number;
   position: [number, number, number]; kit: BrandKit;
+  /** Override cup body colour — when set, wins over kit.scene.cupColor.
+   *  Used by long-press editor's "cup" surface override + the wizard's
+   *  brand colours step (Cups swatch). */
+  cupTint?: string;
 }) {
   // Mirror ChairsAroundTable's slot logic so cups line up with chair seats.
   const slots = useMemo(() => {
@@ -392,15 +396,15 @@ export function BrandedCupsOnTable({
   return (
     <group position={[position[0], position[1] + TABLE_HEIGHT_M + 0.001, position[2]]}>
       {slots.map((s, i) => (
-        <BrandedCoffeeCup key={i} position={s.pos} rotationY={s.rot} kit={kit} />
+        <BrandedCoffeeCup key={i} position={s.pos} rotationY={s.rot} kit={kit} cupTint={cupTint} />
       ))}
     </group>
   );
 }
 
 function BrandedCoffeeCup({
-  position, rotationY, kit,
-}: { position: [number, number, number]; rotationY: number; kit: BrandKit }) {
+  position, rotationY, kit, cupTint,
+}: { position: [number, number, number]; rotationY: number; kit: BrandKit; cupTint?: string }) {
   const url = kit.logos.primary.rasterUrl;
   const invert = !!kit.scene?.invertLogo;
   const chroma = kit.scene?.logoChroma ?? "";
@@ -408,7 +412,7 @@ function BrandedCoffeeCup({
   const aspect = kit.logos.primary.viewBox[2] / Math.max(kit.logos.primary.viewBox[3], 1);
   // Cup body: kit-specific cup colour wins; falls back to the kit's
   // neutralLight ceramic-cream.
-  const cupColor = kit.scene?.cupColor ?? kit.palette.neutralLight ?? "#F4F4F4";
+  const cupColor = cupTint ?? kit.scene?.cupColor ?? kit.palette.neutralLight ?? "#F4F4F4";
   // Real coffee-cup GLB (saucer + cup with handle). Tinted to the kit's
   // cupColor — the user shipped a clean GLB that takes a tint cleanly.
   const gltf = useGLTF(CUP_GLB_URL);

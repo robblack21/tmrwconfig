@@ -121,7 +121,7 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("camera.savePreset"), preset: z.string(), pos: z.tuple([z.number(), z.number(), z.number()]), target: z.tuple([z.number(), z.number(), z.number()]), fov: z.number() }),
   z.object({ type: z.literal("camera.setActivePreset"), preset: z.string() }),
 
-  z.object({ type: z.literal("colourOverride.set"), surface: z.enum(["walls", "floor", "trim", "pendant", "truss", "sofa", "counter", "vitrine", "monitor", "table", "chair", "ceiling"]), value: z.string().nullable() }),
+  z.object({ type: z.literal("colourOverride.set"), surface: z.enum(["walls", "floor", "trim", "pendant", "truss", "sofa", "counter", "vitrine", "monitor", "table", "chair", "ceiling", "cup"]), value: z.string().nullable() }),
   /** Per-kit wall-motif change via UI (e.g. long-press editor). */
   z.object({ type: z.literal("kit.setWallMotif"), kitId: z.string(), motif: z.string() }),
   /** Per-kit wall-graphic URL override via UI. */
@@ -131,6 +131,15 @@ export const Intent = z.discriminatedUnion("type", [
    *  ON for the live preview; main editor leaves it OFF for a static
    *  frame. */
   z.object({ type: z.literal("camera.setYawBreathEnabled"), value: z.boolean() }),
+
+  /** Posterboards — count + per-slot brand art. URLs may be data:
+   *  (wizard upload) or http(s). null = use the kit's primary logo. */
+  z.object({ type: z.literal("layout.setPosterboardCount"), value: z.number() }),
+  z.object({ type: z.literal("layout.setPosterboardUrls"), urls: z.array(z.string().nullable()) }),
+  /** Cube plinths — count + per-slot 3D asset (uploaded GLB or
+   *  fal.ai-generated). null = empty cube. */
+  z.object({ type: z.literal("layout.setCubeCount"), value: z.number() }),
+  z.object({ type: z.literal("layout.setCubeAssets"), assets: z.array(z.object({ url: z.string(), kind: z.enum(["uploaded", "generated"]) }).nullable()) }),
 
   z.object({ type: z.literal("scene.save"), name: z.string() }),
 ]);

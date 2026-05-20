@@ -106,6 +106,20 @@ export const meetingRoomDesignLines: WizardDesignLine[] = [
     tagline: "All-white acoustic",
     description: "Rectangular parquet, plaster walls, studio chairs in soft cream.",
   },
+  // Two new lines mix existing patches more boldly so users get more
+  // structural variety than just the warm/studio/minimal triangle.
+  {
+    id: "atelier",
+    label: "Atelier",
+    tagline: "Gallery loft",
+    description: "Herringbone parquet, studio chairs, ring pendant — soft like Warm but sharper.",
+  },
+  {
+    id: "executive",
+    label: "Executive",
+    tagline: "Power room",
+    description: "Diagonal parquet, executive chairs, squircle pendant — Studio meets Boardroom.",
+  },
 ];
 
 // ── Apply ─────────────────────────────────────────────────────────────────
@@ -148,6 +162,27 @@ const designLineEffects: Record<string, DesignLinePatch> = {
     pendantShape: "ring",
     plantCount: 0,
     wallTextureEnabled: false,
+  },
+  // Gallery-loft hybrid — Warm's herringbone + studio chairs + ring
+  // pendant. Reads as a curated showroom rather than a meeting room.
+  atelier: {
+    floorStyle: "herringbone",
+    chairVariant: "studio",
+    tableVariant: "simple",
+    pendantShape: "ring",
+    plantCount: 4,
+    wallTextureEnabled: false,
+  },
+  // Power-room — Studio's diagonal parquet + executive chairs + squircle
+  // pendant, but bumps the table variant up to presenter for a punchier
+  // boardroom-table look.
+  executive: {
+    floorStyle: "diagonal",
+    chairVariant: "executive",
+    tableVariant: "presenter",
+    pendantShape: "squircle",
+    plantCount: 1,
+    wallTextureEnabled: true,
   },
 };
 
@@ -229,9 +264,10 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
     apply({ type: "colourOverride.set", surface: "sofa",    value: carpet });
   }
 
-  // Extended colours — second row of step 3 (floor/table/chairs). Each
-  // surface flows through its own override so the scene's resolver picks
-  // them up exactly the same as a long-press edit.
+  // Extended colours — surfaces row of step 3 (floor/table/chairs/cups)
+  // + the brand-row's Pendant swatch. Each flows through its own
+  // override so the scene's resolver picks them up exactly the same as
+  // a long-press edit.
   if (!prev || prev.extendedColours.floor !== state.extendedColours.floor) {
     apply({ type: "colourOverride.set", surface: "floor", value: state.extendedColours.floor });
   }
@@ -240,6 +276,12 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   }
   if (!prev || prev.extendedColours.chairs !== state.extendedColours.chairs) {
     apply({ type: "colourOverride.set", surface: "chair", value: state.extendedColours.chairs });
+  }
+  if (!prev || prev.extendedColours.cups !== state.extendedColours.cups) {
+    apply({ type: "colourOverride.set", surface: "cup", value: state.extendedColours.cups });
+  }
+  if (!prev || prev.extendedColours.pendant !== state.extendedColours.pendant) {
+    apply({ type: "colourOverride.set", surface: "pendant", value: state.extendedColours.pendant });
   }
 
   // Environment — HDRI swap + hall toggle. When the user picks an HDRI
@@ -270,6 +312,15 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   }
   if (!prev || prev.customisation.standingDisplayCount !== state.customisation.standingDisplayCount) {
     apply({ type: "layout.setStandingDisplayCount", value: state.customisation.standingDisplayCount });
+  }
+  if (!prev || prev.customisation.posterboardCount !== state.customisation.posterboardCount) {
+    apply({ type: "layout.setPosterboardCount", value: state.customisation.posterboardCount });
+  }
+  if (!prev || prev.customisation.posterboardUrls.some((u, i) => u !== prev.customisation.posterboardUrls[i])) {
+    apply({ type: "layout.setPosterboardUrls", urls: state.customisation.posterboardUrls });
+  }
+  if (!prev || prev.customisation.cubeCount !== state.customisation.cubeCount) {
+    apply({ type: "layout.setCubeCount", value: state.customisation.cubeCount });
   }
 
   // Logo override. Measured asynchronously so the kit's effective viewBox
@@ -329,11 +380,13 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   //    floor / table / chairs from the auto-derived second row (or
   //    overrides the user made in step 3).
   const [primary, , accent] = result.colours;
-  apply({ type: "colourOverride.set", surface: "walls", value: primary });
-  apply({ type: "colourOverride.set", surface: "trim",  value: accent });
-  apply({ type: "colourOverride.set", surface: "floor", value: result.extendedColours.floor });
-  apply({ type: "colourOverride.set", surface: "table", value: result.extendedColours.table });
-  apply({ type: "colourOverride.set", surface: "chair", value: result.extendedColours.chairs });
+  apply({ type: "colourOverride.set", surface: "walls",   value: primary });
+  apply({ type: "colourOverride.set", surface: "trim",    value: accent });
+  apply({ type: "colourOverride.set", surface: "floor",   value: result.extendedColours.floor });
+  apply({ type: "colourOverride.set", surface: "table",   value: result.extendedColours.table });
+  apply({ type: "colourOverride.set", surface: "chair",   value: result.extendedColours.chairs });
+  apply({ type: "colourOverride.set", surface: "cup",     value: result.extendedColours.cups });
+  apply({ type: "colourOverride.set", surface: "pendant", value: result.extendedColours.pendant });
 
   // 4. Logo override — replaces the TMRW mark with the uploaded one. The
   //    store keeps these per-kit so the wizard's pick survives a reload.
@@ -378,6 +431,10 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   apply({ type: "layout.setPlantCount", value: result.customisation.plantCount });
   apply({ type: "layout.setSofaCount",  value: result.customisation.sofaCount });
   apply({ type: "layout.setStandingDisplayCount", value: result.customisation.standingDisplayCount });
+  apply({ type: "layout.setPosterboardCount", value: result.customisation.posterboardCount });
+  apply({ type: "layout.setPosterboardUrls",  urls:  result.customisation.posterboardUrls });
+  apply({ type: "layout.setCubeCount",  value: result.customisation.cubeCount });
+  apply({ type: "layout.setCubeAssets", assets: result.customisation.cubeAssets });
 
   // 9. Reasonable defaults for everything else the wizard didn't ask
   //    about — lights on, ceiling closed.
