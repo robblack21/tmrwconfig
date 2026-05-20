@@ -92,7 +92,7 @@ export function Wizard({
   const [dimsTouched, setDimsTouched] = useState<{ w: boolean; d: boolean; h: boolean }>({ w: false, d: false, h: false });
   const [widthM,  setWidthM]   = useState<number>(sizes[0]!.widthM);
   const [depthM,  setDepthM]   = useState<number>(sizes[0]!.depthM);
-  const [heightM, setHeightM]  = useState<number>(3.8);
+  const [heightM, setHeightM]  = useState<number>(4.5);
   const [designLineId, setDesignLineId] = useState<string>(initialDesignLineId ?? designLines[0]!.id);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [artworkUrls, setArtworkUrls] = useState<[string | null, string | null, string | null, string | null]>([null, null, null, null]);

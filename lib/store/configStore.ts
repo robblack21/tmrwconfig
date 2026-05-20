@@ -207,9 +207,13 @@ export const useConfig = create<ConfigState>((set, get) => ({
   trussTopM: 5.5,
   pendantEnabled: true,
   pendantShape: "rectangle",
-  pendantWidthM: 5.0,
-  pendantDepthM: 4.5,
-  pendantHeightM: 1.0,
+  // Pendant defaults sized for typical 4-6m rooms. Was 5×4.5×1.0 which
+  // overflowed huddle rooms and read as a low-ceiling slab on top of the
+  // table. New defaults are a refined 3×2.4×0.4 box — reads as a hanging
+  // light fixture, not a ceiling tile.
+  pendantWidthM: 3.0,
+  pendantDepthM: 2.4,
+  pendantHeightM: 0.4,
   pendantYOffsetM: 0,
   pendantRotationDeg: 0,
   pendantRingVertical: false,

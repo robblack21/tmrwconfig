@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useMemo, useEffect, useRef } from "react";
+import { Suspense, useMemo, useEffect, useRef, useState } from "react";
 import { Environment, OrbitControls, ContactShadows, RoundedBox, Html } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
@@ -645,61 +645,16 @@ export function Scene() {
         maxDistance={Math.hypot(clusterWidthM, depthM) * 0.5 + 1.5}
         maxPolarAngle={Math.PI / 2 - 0.04}
       />
-      <CameraRoomClamp widthM={clusterWidthM} depthM={depthM} wallHeightM={wallHeightM} platformHeightM={platformHeightM} />
+      {/* CameraRoomClamp was removed — it ran every frame and lerped the
+          camera back inside walls, fighting the user's drag. OrbitControls'
+          min/max distance + maxPolarAngle is sufficient containment; the
+          near plane (0.05) lets the camera get close to walls without
+          visible clipping. If the camera does slip past a wall, the user
+          can simply rotate back — better than feeling tugged. */}
       <Flycam speed={2} />
       <PerfMonitor />
     </>
   );
-}
-
-// ── Camera room clamp ──────────────────────────────────────────────────────
-// Per-frame: if the user orbits the camera past any wall, pull it back to
-// just inside the room. The previous implementation lerped at 0.35 every
-// frame — that's strong enough to feel like the camera is rubber-banding
-// back as the user drags, fighting OrbitControls' inertial damping. Now
-// we apply only a TINY 0.06 lerp, which gathers correction over a few
-// frames once the user stops dragging instead of yanking visibly during
-// the drag itself. The clamp also stays out of the way for 1.2s after a
-// preset transition (`gotoPreset`) so the cinematic move can park the
-// camera wherever it wants without us immediately fighting it.
-function CameraRoomClamp({ widthM, depthM, wallHeightM, platformHeightM }: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
-  const { camera } = useThree();
-  const cameraPreset = useConfig((s) => s.cameraPreset);
-  const cooldownRef = useRef<number>(0);
-  // Reset the cooldown whenever a preset fires so the cinematic move
-  // can fly through wall space without the clamp dragging it back.
-  useEffect(() => {
-    // 6s window — must outlast the camera-preset transition (5.5s) +
-    // a small settle. Otherwise the clamp starts pulling the camera
-    // back to room interior mid-flight and fights the cinematic move.
-    if (cameraPreset) cooldownRef.current = Date.now() + 6000;
-  }, [cameraPreset]);
-  useFrame(() => {
-    if (Date.now() < cooldownRef.current) return;
-    // Keep an 0.4m wall buffer so the camera never sits flush with the
-    // glass / panelling. Vertical buffers are looser because the polar-
-    // angle limit already protects us from flying through the ceiling.
-    const margin = 0.4;
-    const xLim = widthM / 2 - margin;
-    const zLim = depthM / 2 - margin;
-    const yMin = platformHeightM + 0.4;
-    const yMax = platformHeightM + wallHeightM - 0.2;
-    let nx = camera.position.x;
-    let nz = camera.position.z;
-    let ny = camera.position.y;
-    if (nx >  xLim) nx =  xLim;
-    if (nx < -xLim) nx = -xLim;
-    if (nz >  zLim) nz =  zLim;
-    if (nz < -zLim) nz = -zLim;
-    if (ny < yMin)  ny = yMin;
-    if (ny > yMax)  ny = yMax;
-    if (nx !== camera.position.x || nz !== camera.position.z || ny !== camera.position.y) {
-      // 0.06 = drift in over ~20 frames after the user stops dragging.
-      // Much weaker than before so it doesn't visibly fight the user.
-      camera.position.lerp(new THREE.Vector3(nx, ny, nz), 0.06);
-    }
-  });
-  return null;
 }
 
 // ── Lighting ────────────────────────────────────────────────────────────────
@@ -1905,15 +1860,14 @@ function LogoSign({
     );
   }
 
+  // Raster (PNG) fallback. The previous version wrapped the decal in a
+  // solid box backing — that backing was the "white plinth" the user
+  // didn't want. Brand PNGs ship transparent, so we now render the
+  // logo as a double-sided textured plane with full alpha + no backing
+  // box. The mark sits on the wall as-is, no plinth.
   return (
     <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[finalWidthM, targetHeightM, d]} />
-        <meshPhysicalMaterial color={sideTint} roughness={0.5} metalness={0.05} clearcoat={0.25} clearcoatRoughness={0.3} />
-      </mesh>
-      {/* Logo decal on the OUTWARD face (the face the sign is mounted to
-          face). Self-illuminates like real backlit signage. */}
-      <mesh position={[0, 0, d / 2 + 0.0008]}>
+      <mesh>
         <planeGeometry args={[finalWidthM, targetHeightM]} />
         <meshStandardMaterial
           map={tex}
@@ -1925,23 +1879,7 @@ function LogoSign({
           toneMapped={false}
           depthWrite={false}
           alphaTest={0.02}
-        />
-      </mesh>
-      {/* Second logo decal on the INWARD face of the backing box so the
-          mark is also visible through the window glass from inside the
-          room. Mirrored along X so the text reads correctly from inside. */}
-      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
-        <planeGeometry args={[finalWidthM, targetHeightM]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={emissive * 0.85}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
+          side={THREE.DoubleSide}
         />
       </mesh>
     </group>
@@ -2010,19 +1948,27 @@ function Posterboards({ count, urls, widthM, depthM, wallHeightM, platformHeight
   count: number; urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; kit: BrandKit;
 }) {
   if (count <= 0) return null;
-  // Slot ideal positions: alternate left/right side walls; back-to-front
-  // along Z (z negative = back of room, positive = front).
-  const w = 1.0;
-  const h = 1.6;
-  const wallInset = 0.08;
-  const cy = platformHeightM + wallHeightM * 0.5;
+  // Free-standing portrait boards (think easels), placed in the room
+  // facing the table. The previous implementation hugged the side
+  // walls but landed behind the windowed glass strip and was invisible
+  // from the seated POV. Standing them ~0.6m clear of the side walls
+  // and 1m clear of the table gives them their own clear sight-line
+  // back to anyone at the table. Each board: 0.9×1.5m, centre at
+  // y = platform + 0.95m so the board spans 0.2m to 1.7m above floor.
+  // Even rooms 4m wide can fit two without crashing into anything.
+  const w = 0.9;
+  const h = 1.5;
+  const cy = platformHeightM + h / 2 + 0.2;
+  const sideX = widthM / 2 - 0.6;
+  void wallHeightM;
+  // Alternate left/right; spread along Z so multiple boards on the
+  // same side don't stack.
   const slots: { pos: [number, number, number]; rot: number }[] = [];
   for (let i = 0; i < count; i++) {
     const side = i % 2 === 0 ? -1 : 1;
     const idx = Math.floor(i / 2);
-    const z = (idx === 0 ? -0.6 : -0.6 + idx * 1.8) - depthM * 0.05;
-    const x = side * (widthM / 2 - wallInset);
-    slots.push({ pos: [x, cy, z], rot: side === -1 ? Math.PI / 2 : -Math.PI / 2 });
+    const z = (idx === 0 ? -depthM * 0.15 : depthM * 0.15);
+    slots.push({ pos: [side * sideX, cy, z], rot: side === -1 ? Math.PI / 2 : -Math.PI / 2 });
   }
   return (
     <>
@@ -2069,6 +2015,8 @@ function Posterboard({ position, rotationY, w, h, url }: {
 function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
   count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit;
 }) {
+  const apply = useConfig((s) => s.apply);
+  const cubeAssets = useConfig((s) => s.cubeAssets);
   if (count <= 0) return null;
   const size = 0.6;
   const halfW = widthM / 2 - 1.4;
@@ -2081,16 +2029,117 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
     slots.push([sx * halfW, platformHeightM + size / 2, sz * halfD]);
   }
   const colour = kit.palette.accent;
+  const onUpload = (slot: number, file: File) => {
+    const r = new FileReader();
+    r.onload = () => {
+      if (typeof r.result !== "string") return;
+      const next = [...(cubeAssets ?? [])] as (typeof cubeAssets);
+      next[slot] = { url: r.result, kind: "uploaded" };
+      apply({ type: "layout.setCubeAssets", assets: next });
+    };
+    r.readAsDataURL(file);
+  };
   return (
     <>
       {slots.map((pos, i) => (
-        <mesh key={i} position={pos} castShadow receiveShadow>
-          <boxGeometry args={[size, size, size]} />
-          <meshPhysicalMaterial color={colour} roughness={0.5} metalness={0.2} clearcoat={0.4} />
-        </mesh>
+        <group key={i} position={pos}>
+          <mesh castShadow receiveShadow>
+            <boxGeometry args={[size, size, size]} />
+            <meshPhysicalMaterial color={colour} roughness={0.5} metalness={0.2} clearcoat={0.4} />
+          </mesh>
+          {/* Uploaded asset preview (3D model) — sits on top of the cube. */}
+          {cubeAssets?.[i] && (
+            <Suspense fallback={null}>
+              <CubeAsset url={cubeAssets[i]!.url} topY={size / 2 + 0.01} />
+            </Suspense>
+          )}
+          {/* Hotspot — floats above the cube; click opens a file picker
+              for a GLB. Drei's <Html> portals to the DOM so the input
+              behaves natively. */}
+          <Html position={[0, size + 0.18, 0]} center distanceFactor={6}>
+            <label
+              title="Upload a 3D object (.glb) for this plinth"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                background: cubeAssets?.[i] ? "rgba(20,22,28,0.7)" : colour,
+                color: "#fff",
+                cursor: "pointer",
+                fontSize: 14,
+                fontWeight: 600,
+                boxShadow: `0 4px 14px -4px ${colour}, 0 2px 6px rgba(0,0,0,0.3)`,
+                border: "1px solid rgba(255,255,255,0.2)",
+                userSelect: "none",
+              }}
+              aria-label={`Upload 3D object for cube ${i + 1}`}
+            >
+              {cubeAssets?.[i] ? "↻" : "＋"}
+              <input
+                type="file"
+                accept=".glb,model/gltf-binary"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onUpload(i, f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </Html>
+        </group>
       ))}
     </>
   );
+}
+
+// Loads + renders a user-uploaded GLB sitting on top of a cube plinth.
+// Normalised to 0.5m tall so the upload doesn't dwarf or vanish on the
+// cube. Loaded via three-stdlib GLTFLoader directly since useGLTF caches
+// by URL and data: URLs are huge keys; the manual loader keeps the
+// cache from blowing up.
+function CubeAsset({ url, topY }: { url: string; topY: number }) {
+  const [obj, setObj] = useState<THREE.Object3D | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("three/examples/jsm/loaders/GLTFLoader.js").then(({ GLTFLoader }) => {
+      const loader = new GLTFLoader();
+      loader.parse(
+        // GLTFLoader.parse needs an ArrayBuffer for data: URLs; fetch +
+        // arrayBuffer round-trips it cheaply (no network for data: URLs).
+        new ArrayBuffer(0),
+        "",
+        () => {},
+      );
+      fetch(url)
+        .then((r) => r.arrayBuffer())
+        .then((buf) => {
+          if (cancelled) return;
+          loader.parse(buf, "", (gltf) => {
+            if (cancelled) return;
+            const scene = gltf.scene;
+            // Normalise to 0.5m tall.
+            scene.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(scene);
+            const size = box.getSize(new THREE.Vector3());
+            const k = 0.5 / Math.max(size.y, 1e-6);
+            scene.scale.multiplyScalar(k);
+            scene.updateMatrixWorld(true);
+            const box2 = new THREE.Box3().setFromObject(scene);
+            const ctr = box2.getCenter(new THREE.Vector3());
+            scene.position.sub(new THREE.Vector3(ctr.x, box2.min.y, ctr.z));
+            setObj(scene);
+          });
+        })
+        .catch(() => { /* ignore — placeholder text on the hotspot will show */ });
+    });
+    return () => { cancelled = true; };
+  }, [url]);
+  if (!obj) return null;
+  return <primitive object={obj} position={[0, topY, 0]} />;
 }
 
 function WallExhibitionGraphics({

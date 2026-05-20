@@ -55,7 +55,7 @@ export default function Page() {
   const tierBounds = useTierBounds();
 
   const [view, setView] = useState<"home" | "wizard" | "config">("home");
-  const [chromeTheme, setChromeTheme] = useState<"day" | "night">("day");
+  const [chromeTheme, setChromeTheme] = useState<"day" | "night">("night");
   useEffect(() => {
     document.documentElement.dataset.theme = chromeTheme;
   }, [chromeTheme]);
