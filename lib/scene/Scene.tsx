@@ -14,7 +14,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
-import { ExtrudedSvgLogo, ExtrudedRasterLogo, canExtrude } from "./SvgLogo";
+import { ExtrudedSvgLogo, canExtrude } from "./SvgLogo";
 import { useCubePicker } from "./cubePickerStore";
 import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, placeOnFloor, type RoomShape } from "./placementAudit";
@@ -1814,26 +1814,29 @@ function LogoSignFlank({
       </group>
     );
   }
-  // Raster (PNG/JPG) fallback — runtime silhouette extrusion via the
-  // alpha mask / chroma-keyed luminance. Same channel-letter look as
-  // SVG marks, no plinth.
-  void tex;
+  // Raster (PNG/JPG) fallback — slab + decal (same approach as the
+  // main wall LogoSign; see comment there for why we don't trace
+  // silhouettes here).
   return (
     <group position={[x + offsetOut, y, z]} rotation-y={rotY}>
-      <Suspense fallback={null}>
-        <ExtrudedRasterLogo
-          url={url}
-          widthM={finalWidthM}
-          heightM={targetHeightM}
-          depthM={d}
-          tintHex={invert ? "#FFFFFF" : sideTint}
-          invert={invert}
-          chroma={chroma}
-          emissive={Math.max(0, emissive - 0.5)}
-          metalness={0.4}
-          roughness={0.4}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[finalWidthM, targetHeightM, d]} />
+        <meshPhysicalMaterial color={sideTint} roughness={0.45} metalness={0.35} clearcoat={0.35} />
+      </mesh>
+      <mesh position={[0, 0, d / 2 + 0.001]}>
+        <planeGeometry args={[finalWidthM, targetHeightM]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={emissive}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
         />
-      </Suspense>
+      </mesh>
     </group>
   );
 }
@@ -1904,30 +1907,42 @@ function LogoSign({
     );
   }
 
-  // Raster (PNG / JPG) fallback — extruded silhouette built at runtime
-  // from the alpha mask (or chroma-keyed luminance for JPGs). Gives the
-  // same channel-letter feel as SVGs, just with a coarser silhouette
-  // (96-px contour resolution). NO plinth: the extrusion is the logo
-  // shape itself, not a box behind it.
-  // We swallow `tex` (no longer used here) so the linter / useLogoTexture
-  // hook still runs and warm-caches the texture for any other consumer.
-  void tex;
+  // Raster (PNG/JPG) fallback — slab + decal. The slab is a thin box
+  // painted in `sideTint` (defaults to a brand-derived dark/light per
+  // caller) sitting flush with the wall plane. The logo decal sits 1mm
+  // proud on the +Z face — PNG alpha shows the slab colour through
+  // the negative space, so the mark reads as ink-on-a-3D-plinth, not
+  // a flat decal. The slab thickness is the user-driven `extrusionM`
+  // (default 0.8 m), so the logo block visibly sticks out of the wall.
+  //
+  // (Previously this path ran a marching-squares silhouette trace +
+  // ExtrudeGeometry. That blew memory at scale — 6+ instances × 96-px
+  // contour traces × tessellator → OOM. The slab approach is the
+  // simple correct compromise: 3D depth without the heavy geometry.)
   return (
     <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
-      <Suspense fallback={null}>
-        <ExtrudedRasterLogo
-          url={url}
-          widthM={finalWidthM}
-          heightM={targetHeightM}
-          depthM={d}
-          tintHex={invert ? "#FFFFFF" : sideTint}
-          invert={invert}
-          chroma={chroma}
-          emissive={Math.max(0, emissive - 0.5)}
-          metalness={0.4}
-          roughness={0.4}
+      {/* Brand-tinted slab — the box "behind" the decal. */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[finalWidthM, targetHeightM, d]} />
+        <meshPhysicalMaterial color={sideTint} roughness={0.45} metalness={0.35} clearcoat={0.35} />
+      </mesh>
+      {/* Logo decal — proud of the slab's +Z face by 1mm so it doesn't
+          z-fight, full alpha so the slab colour shows in transparent
+          areas. */}
+      <mesh position={[0, 0, d / 2 + 0.001]}>
+        <planeGeometry args={[finalWidthM, targetHeightM]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={emissive}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
         />
-      </Suspense>
+      </mesh>
     </group>
   );
 }
@@ -3701,26 +3716,30 @@ function PendantFaceLogo({
       </group>
     );
   }
-  // Raster fallback for pendant face logos — same extruded-silhouette
-  // treatment as wall signs, so PNG / JPG brand marks get real 3D
-  // depth on the pendant faces instead of reading as a flat decal.
-  void tex;
+  // Raster fallback for pendant face logos — slab + decal. The slab
+  // is much thinner here (0.6× the wall-sign depth, computed above as
+  // `d`) so the mark reads as embossed on the pendant body, not
+  // hanging off it.
   return (
     <group position={position} rotation-y={rotY}>
-      <Suspense fallback={null}>
-        <ExtrudedRasterLogo
-          url={url}
-          widthM={w}
-          heightM={h}
-          depthM={d}
-          tintHex={invert ? "#FFFFFF" : sideTint}
-          invert={invert}
-          chroma={chroma}
-          emissive={Math.max(0, glassReadable - 0.6)}
-          metalness={0.5}
-          roughness={0.35}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[w, h, d]} />
+        <meshPhysicalMaterial color={sideTint} roughness={0.4} metalness={0.45} clearcoat={0.4} />
+      </mesh>
+      <mesh position={[0, 0, d / 2 + 0.001]}>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial
+          map={tex}
+          emissiveMap={tex}
+          emissive={new THREE.Color("#ffffff")}
+          emissiveIntensity={glassReadable}
+          color="#ffffff"
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+          alphaTest={0.02}
         />
-      </Suspense>
+      </mesh>
     </group>
   );
 }
