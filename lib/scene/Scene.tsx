@@ -638,6 +638,18 @@ export function Scene() {
         rotateSpeed={1.4}
         panSpeed={1.0}
         mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN }}
+        // Explicit touch / trackpad gestures. Two-finger trackpad pinch
+        // on macOS fires `wheel` events with ctrlKey — those are
+        // handled by `enableZoom`. Touchscreen pinch fires pointer
+        // events; we force TWO-finger touch to DOLLY_PAN (zoom + pan
+        // only) instead of DOLLY_ROTATE so the user can never get
+        // rotation from a pinch gesture. ONE-finger touch still rotates.
+        touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
+        enableZoom
+        // Disabling zoom-to-cursor stops the camera position from
+        // drifting laterally during a wheel-zoom — that drift can read
+        // as rotation if the user is looking at the room from an angle.
+        zoomToCursor={false}
         minDistance={1.5}
         // Cap orbit radius so the camera can't dolly far enough back to
         // clip through the front wall. Room diagonal sets the upper
