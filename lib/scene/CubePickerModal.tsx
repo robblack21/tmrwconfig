@@ -17,7 +17,7 @@
 //      `layout.setCubeAssets` to mutate just that slot and close the
 //      picker.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useConfig } from "@/lib/store/configStore";
 import { useCubePicker } from "./cubePickerStore";
@@ -39,6 +39,11 @@ export function CubePickerModal() {
   const apply = useConfig((s) => s.apply);
   const cubeAssets = useConfig((s) => s.cubeAssets);
   const ref = useRef<HTMLDivElement | null>(null);
+  // AI 3D generation — slot-local state (declared before the early
+  // return so hook order stays stable across renders).
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Click-outside / Esc closes the picker. We listen on document so
   // taps on the canvas (which the modal sits above) also close.
@@ -87,6 +92,37 @@ export function CubePickerModal() {
     // eslint-disable-next-line no-console
     r.onerror = (e) => { console.error("[CubePickerModal] FileReader error", e); };
     r.readAsDataURL(file);
+  };
+
+  const onGenerate3D = async () => {
+    const p = aiPrompt.trim();
+    if (!p) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const { generateModel } = await import("@/lib/services/falTexture");
+      const r = await generateModel(`${p}. Single centred object, clean topology, neutral studio backdrop, suitable as a plinth display piece.`);
+      if (r.ok) {
+        // The returned GLB URL loads via CubeAsset (same path as preset
+        // GLBs). Tag kind:"generated" so the serialiser/export knows its
+        // provenance.
+        setSlot({ url: r.url, kind: "generated", label: p.slice(0, 32) });
+        close();
+      } else {
+        const lower = r.error.toLowerCase();
+        if (lower.includes("no user found") || lower.includes("unauthorized") || lower.includes("invalid") || lower.includes("forbidden")) {
+          setAiError("fal.ai key rejected. Check .env.local + rebuild.");
+        } else if (lower.includes("not found") || lower.includes("404") || lower.includes("no endpoint")) {
+          setAiError("3D model not enabled on this fal.ai account. Enable a text-to-3D model or try another.");
+        } else {
+          setAiError(r.error);
+        }
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
+    }
   };
 
   // Position the modal so its top-left lands NEAR the click point, but
@@ -192,6 +228,43 @@ export function CubePickerModal() {
           }}
         />
       </label>
+
+      {/* ✨ AI 3D generation — text-to-3D via fal.ai. Returns a GLB URL
+          that loads onto the plinth exactly like a preset. */}
+      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 }}>✨ Generate 3D · AI</div>
+        <input
+          type="text"
+          value={aiPrompt}
+          onChange={(e) => setAiPrompt(e.target.value)}
+          placeholder="A chrome trophy, a potted bonsai…"
+          style={{
+            width: "100%", padding: "7px 9px", borderRadius: 8, marginBottom: 6,
+            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)",
+            color: "#fff", fontSize: 12, outline: "none", boxSizing: "border-box",
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy && aiPrompt.trim()) { void onGenerate3D(); } }}
+        />
+        <button
+          type="button"
+          disabled={aiBusy || !aiPrompt.trim()}
+          onClick={() => void onGenerate3D()}
+          style={{
+            width: "100%", padding: "8px 10px", borderRadius: 8,
+            background: "var(--color-accent, #3d7eff)", color: "#fff",
+            border: "none", fontSize: 12, fontWeight: 600,
+            cursor: aiBusy || !aiPrompt.trim() ? "not-allowed" : "pointer",
+            opacity: aiBusy || !aiPrompt.trim() ? 0.5 : 1,
+          }}
+        >
+          {aiBusy ? "Generating 3D… (~30s)" : "Generate 3D model"}
+        </button>
+        {aiError && (
+          <div style={{ marginTop: 6, padding: "5px 7px", borderRadius: 6, background: "rgba(255,80,80,0.14)", color: "#ff8a8a", fontSize: 11, lineHeight: 1.3 }}>
+            {aiError}
+          </div>
+        )}
+      </div>
 
       {current && (
         <button

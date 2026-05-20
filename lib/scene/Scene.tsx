@@ -551,7 +551,10 @@ export function Scene() {
                 <group key={`sofa-${i}`}>
                   <Suspense fallback={null}>
                     <Sofa
-                      position={[sofaX, platformHeightM + SOFA_HEIGHT * 0.5, sofaZ]}
+                      // Floor-anchored: PropMount base-pins the GLB to
+                      // position.y, so this is the FLOOR height — NOT
+                      // floor + half-height (that floated the sofa).
+                      position={[sofaX, platformHeightM, sofaZ]}
                       rotationY={rotY}
                       heightM={SOFA_HEIGHT}
                       tintHex={sofaResolved}
@@ -2239,6 +2242,7 @@ function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallH
             heightM={s.h}
             url={urls[i] ?? kit.logos.primary.rasterUrl ?? ""}
             mounted={s.mounted}
+            slot={i}
           />
         </Suspense>
       ))}
@@ -2258,8 +2262,8 @@ function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallH
 //   2. inner backing panel (plain board colour — the bottom margin
 //      strip shows this through the alpha border of the image)
 //   3. image plane fitted into the upper portion of the inner panel
-function Posterboard({ position, rotationY, heightM, url, mounted = false }: {
-  position: [number, number, number]; rotationY: number; heightM: number; url: string; mounted?: boolean;
+function Posterboard({ position, rotationY, heightM, url, mounted = false, slot }: {
+  position: [number, number, number]; rotationY: number; heightM: number; url: string; mounted?: boolean; slot?: number;
 }) {
   const tex = useWallGraphic(url);
   // Fixed frame width — portrait 2:3 ratio. Doesn't change with image.
@@ -2296,15 +2300,22 @@ function Posterboard({ position, rotationY, heightM, url, mounted = false }: {
   if (imgH > availH) { imgH = availH; imgW = imgH * aspect; }
   // Y offset — image centred in the upper section above the margin.
   const imgY = (innerH / 2) - imgH / 2 - 0.06;
+  // When a slot index is provided this board is one of the count-driven
+  // posterboards → tag it kind:"poster" + slot so long-press opens the
+  // poster image editor (upload / AI). Tag every interactive mesh (not
+  // just the group) because the raycaster resolves the FIRST userData.kind
+  // it finds walking UP from the hit mesh — leaving inner meshes as
+  // "walls" would shadow the group's "poster".
+  const ud = slot !== undefined ? { kind: "poster", slot } : { kind: "walls" };
   return (
-    <group position={position} rotation-y={rotationY} userData={{ kind: "walls" }}>
+    <group position={position} rotation-y={rotationY} userData={ud}>
       {/* Frame */}
-      <mesh castShadow receiveShadow>
+      <mesh castShadow receiveShadow userData={ud}>
         <boxGeometry args={[frameW, heightM, 0.04]} />
         <meshPhysicalMaterial color="#0e1014" roughness={0.55} metalness={0.35} />
       </mesh>
       {/* Inner backing panel — a clean board colour shown around the image. */}
-      <mesh position={[0, 0, 0.021]} receiveShadow>
+      <mesh position={[0, 0, 0.021]} receiveShadow userData={ud}>
         <planeGeometry args={[innerW, innerH]} />
         <meshStandardMaterial color={backingColor} roughness={0.7} toneMapped={false} />
       </mesh>
@@ -2316,16 +2327,9 @@ function Posterboard({ position, rotationY, heightM, url, mounted = false }: {
           <meshPhysicalMaterial color="#0a0c10" roughness={0.45} metalness={0.55} />
         </mesh>
       )}
-      {/* Image — anchored in the upper portion of the inner panel. The
-          albedo issue last round was `<meshStandardMaterial map={tex}
-          toneMapped />` — toneMapped defaulted true so the texture got
-          darkened by the scene's tonemapping, plus there was no
-          explicit color (so the material's default white was further
-          dimmed). Fixed by setting toneMapped={false} + explicit
-          color="#ffffff" + transparent off (we want the texture solid,
-          backed by the panel behind it). */}
+      {/* Image — anchored in the upper portion of the inner panel. */}
       {url && (
-        <mesh position={[0, imgY, 0.023]} userData={{ kind: "walls" }}>
+        <mesh position={[0, imgY, 0.023]} userData={ud}>
           <planeGeometry args={[imgW, imgH]} />
           <meshStandardMaterial map={tex} color="#ffffff" toneMapped={false} />
         </mesh>

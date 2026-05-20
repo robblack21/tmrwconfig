@@ -15,7 +15,7 @@ import { generateTexture, isFalConfigured, type FalModel } from "@/lib/services/
 const LONG_PRESS_MS = 350;
 const DRAG_THRESHOLD_PX = 10;
 
-type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame";
+type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame" | "poster";
 
 const KIND_LABEL: Record<SurfaceKind, string> = {
   walls: "Walls",
@@ -26,6 +26,7 @@ const KIND_LABEL: Record<SurfaceKind, string> = {
   pendant: "Pendant",
   truss: "Truss",
   "picture-frame": "Picture frame",
+  poster: "Poster",
 };
 
 /** Inside the canvas: detects long-press, raycasts to find a meshed surface
@@ -262,11 +263,15 @@ export function LongPressModal({ kind, slot, screenX, screenY, onClose }: {
   screenY: number;
   onClose: () => void;
 }) {
-  // Picture frames have their own dedicated editor (upload + AI prompt
-  // + clear). They don't carry a base "colour" — the frame is just a
-  // photo viewer.
+  // Picture frames + posterboards share a dedicated image editor
+  // (upload + AI prompt + clear). They don't carry a base "colour" —
+  // they're photo viewers. The `target` tells the modal which store
+  // array + dispatch to use.
   if (kind === "picture-frame") {
-    return <PictureFrameModal slot={slot ?? 0} screenX={screenX} screenY={screenY} onClose={onClose} />;
+    return <ImageSlotModal target="picture-frame" slot={slot ?? 0} screenX={screenX} screenY={screenY} onClose={onClose} />;
+  }
+  if (kind === "poster") {
+    return <ImageSlotModal target="poster" slot={slot ?? 0} screenX={screenX} screenY={screenY} onClose={onClose} />;
   }
   const colourOverrides = useConfig((s) => s.colourOverrides);
   const floorStyle = useConfig((s) => s.floorStyle);
@@ -570,17 +575,20 @@ function defaultColourForKind(kind: SurfaceKind, kit: { palette: { primary: stri
     case "chair":   return kit.palette.secondary;
     case "pendant": return kit.palette.primary;
     case "truss":   return "#15171c";
-    // Picture frames have a dedicated modal (no base colour); this
-    // fallback is unused but the switch must be exhaustive.
+    // Picture frames + posters have a dedicated image modal (no base
+    // colour); these fallbacks are unused but the switch must be exhaustive.
     case "picture-frame": return "#1a1c22";
+    case "poster":        return "#1a1c22";
   }
 }
 
-// Dedicated modal for the side-wall picture frames. The frame slot
-// carries either a user-uploaded data:URL or a fal.ai-generated URL —
-// neither path needs a "colour" picker, so the modal is a small
-// upload-or-generate panel only.
-function PictureFrameModal({ slot, screenX, screenY, onClose }: {
+// Shared image-slot editor for the side-wall picture frames AND the
+// posterboards. The slot carries either a user-uploaded data:URL or a
+// fal.ai-generated URL — neither path needs a "colour" picker, so the
+// modal is a small upload-or-generate panel only. `target` selects
+// which store array + dispatch to write.
+function ImageSlotModal({ target, slot, screenX, screenY, onClose }: {
+  target: "picture-frame" | "poster";
   slot: number;
   screenX: number;
   screenY: number;
@@ -588,7 +596,22 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
 }) {
   const apply = useConfig((s) => s.apply);
   const pictureFrameUrls = useConfig((s) => s.pictureFrameUrls) ?? [null, null, null, null];
-  const current = pictureFrameUrls[slot] ?? null;
+  const posterboardUrls = useConfig((s) => s.posterboardUrls) ?? [null, null, null, null];
+  const urls = target === "poster" ? posterboardUrls : pictureFrameUrls;
+  const current = urls[slot] ?? null;
+  const label = target === "poster" ? "Poster" : "Picture frame";
+  // Write one slot. Picture frames have a single-slot intent; posters
+  // dispatch the full array (the store has no per-slot poster intent).
+  const writeSlot = (url: string | null) => {
+    if (target === "picture-frame") {
+      apply({ type: "frames.setUrl", slot, url });
+    } else {
+      const next = [...posterboardUrls] as (string | null)[];
+      while (next.length < 4) next.push(null);
+      next[slot] = url;
+      apply({ type: "layout.setPosterboardUrls", urls: next });
+    }
+  };
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -620,7 +643,7 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
     const r = new FileReader();
     r.onload = () => {
       if (typeof r.result !== "string") return;
-      apply({ type: "frames.setUrl", slot, url: r.result });
+      writeSlot(r.result);
       onClose();
     };
     r.readAsDataURL(file);
@@ -631,12 +654,18 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
     setBusy(true);
     setError(null);
     try {
-      const r = await generateTexture(`Square framed artwork for a corporate boardroom wall: ${p}. Photoreal or fine-art photography, gallery-grade composition, sharp focus, no people, no logos, no text.`, {
-        model: "fal-ai/flux/schnell",
-        image_size: "square_hd",
-      });
+      // Posters are portrait 2:3 boards; picture frames are square.
+      const r = await generateTexture(
+        target === "poster"
+          ? `Portrait poster artwork for a corporate event wall: ${p}. Bold composition, gallery-grade, sharp focus, no people, no logos, no text.`
+          : `Square framed artwork for a corporate boardroom wall: ${p}. Photoreal or fine-art photography, gallery-grade composition, sharp focus, no people, no logos, no text.`,
+        {
+          model: "fal-ai/flux/schnell",
+          image_size: target === "poster" ? "portrait_4_3" : "square_hd",
+        },
+      );
       if (r.ok) {
-        apply({ type: "frames.setUrl", slot, url: r.url });
+        writeSlot(r.url);
         onClose();
       } else {
         const lower = r.error.toLowerCase();
@@ -674,7 +703,7 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
       onPointerDown={(e) => e.stopPropagation()}
     >
       <div className="pb-2 mb-2 border-b border-[color:var(--color-border-soft)] flex items-center justify-between">
-        <span className="t-label uppercase tracking-wider">Picture frame · slot {slot + 1}</span>
+        <span className="t-label uppercase tracking-wider">{label} · slot {slot + 1}</span>
         <button
           onClick={onClose}
           className="w-6 h-6 rounded-[6px] neumorph-raised grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]"
@@ -694,8 +723,8 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={current}
-          alt={`Frame ${slot + 1}`}
-          className="w-full aspect-square object-cover rounded-[6px] mb-2.5"
+          alt={`${label} ${slot + 1}`}
+          className={"w-full object-cover rounded-[6px] mb-2.5 " + (target === "poster" ? "aspect-[2/3]" : "aspect-square")}
           style={{ border: "1px solid var(--color-border-soft)" }}
         />
       )}
@@ -749,10 +778,10 @@ function PictureFrameModal({ slot, screenX, screenY, onClose }: {
       {current && (
         <button
           type="button"
-          onClick={() => { apply({ type: "frames.setUrl", slot, url: null }); onClose(); }}
+          onClick={() => { writeSlot(null); onClose(); }}
           className="w-full mt-2 t-label text-[0.6rem] py-1 rounded-[5px] neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-accent)]"
         >
-          Clear frame
+          Clear {label.toLowerCase()}
         </button>
       )}
     </div>,

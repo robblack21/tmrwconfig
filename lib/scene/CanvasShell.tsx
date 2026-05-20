@@ -7,7 +7,7 @@ import { useConfig } from "@/lib/store/configStore";
 import { LongPressDetector, LongPressIndicator, LongPressModal, type PressProgressRef } from "./LongPressEditor";
 import { CubePickerModal } from "./CubePickerModal";
 
-type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame";
+type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame" | "poster";
 
 export default function CanvasShell() {
   const highDpr = useConfig((s) => s.highDpr);

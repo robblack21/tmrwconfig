@@ -83,6 +83,24 @@ export default function Page() {
   const [bomExpanded, setBomExpanded] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  // EXPORT — serialises the live scene to the demobot room JSON + bundles
+  // every referenced asset into a ZIP for ingest elsewhere.
+  const [exporting, setExporting] = useState<string | null>(null);
+  const onExport = async () => {
+    if (exporting) return;
+    setExporting("Starting…");
+    const { exportRoomZip } = await import("@/lib/export/exportRoom");
+    const state = useConfig.getState() as unknown as Record<string, unknown>;
+    const r = await exportRoomZip(state, (p) => setExporting(`${p.stage} ${p.total ? `(${p.done}/${p.total})` : ""}`));
+    if (!r.ok) {
+      // eslint-disable-next-line no-console
+      console.error("[export] failed", r.error);
+      setExporting(null);
+      alert(`Export failed: ${r.error}`);
+      return;
+    }
+    setExporting(null);
+  };
   // Resizable BOM dims (user can drag-resize from a handle when expanded)
   const [bomW, setBomW] = useState(420);
   const [bomH, setBomH] = useState(520);
@@ -302,6 +320,16 @@ export default function Page() {
           </NavBtn>
           <NavBtn>EN</NavBtn>
           <div className="h-5 w-px bg-[color:var(--color-border-soft)]" />
+          {/* EXPORT — bundles the room JSON + assets into a ZIP. */}
+          <button
+            onClick={onExport}
+            disabled={!!exporting}
+            title="Export the room as a demobot-format JSON + bundled assets ZIP"
+            className="h-7 px-3.5 rounded-[6px] text-[0.72rem] uppercase tracking-wider neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-accent)] transition-colors"
+            style={{ fontVariationSettings: '"wdth" 100, "wght" 600', opacity: exporting ? 0.7 : 1, cursor: exporting ? "wait" : "pointer" }}
+          >
+            {exporting ?? "Export"}
+          </button>
           <button
             className="h-7 px-3.5 rounded-[6px] text-[0.72rem] uppercase tracking-wider"
             style={{

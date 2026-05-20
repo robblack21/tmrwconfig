@@ -118,6 +118,78 @@ export async function generateTexture(
   };
 }
 
+// ── Text → 3D model ────────────────────────────────────────────────────
+// Generate a GLB from a text prompt. fal.ai's text-to-3D path is a
+// two-stage pipeline on most accounts (text→image then image→3D), but
+// several models accept a prompt directly. We try a direct text-to-3D
+// model first; the result envelope carries the GLB under `model_mesh.url`
+// (Trellis / Hunyuan3D shape) or `model_glb` / `glb.url` depending on
+// the model. Returns the GLB URL on success.
+export type FalModelResult =
+  | { ok: true; url: string; raw?: unknown }
+  | { ok: false; error: string };
+
+export async function generateModel(
+  prompt: string,
+  opts: { model?: string; signal?: AbortSignal } & Record<string, unknown> = {},
+): Promise<FalModelResult> {
+  // Default to a text-to-3D model. `fal-ai/hunyuan3d/v2` and
+  // `fal-ai/trellis` are image-to-3D; for text we use the text variant
+  // when available. The model id is overridable so the caller can pick
+  // whatever their fal account has enabled.
+  const { model = "fal-ai/hunyuan3d/v2/text-to-3d", signal, ...rest } = opts;
+  if (!FAL_KEY && !FAL_PROXY_URL) {
+    return { ok: false, error: "fal.ai not configured. Set NEXT_PUBLIC_FAL_KEY in .env.local and rebuild." };
+  }
+  const endpoint = FAL_KEY ? `https://fal.run/${model}` : FAL_PROXY_URL!;
+  try {
+    const r = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(FAL_KEY ? { Authorization: `Key ${FAL_KEY}` } : (FAL_PROXY_TOKEN ? { Authorization: `Bearer ${FAL_PROXY_TOKEN}` } : {})),
+      },
+      body: JSON.stringify(FAL_KEY ? { prompt, ...rest } : { model, prompt, ...rest }),
+      signal,
+    });
+    const text = await r.text();
+    let data: Record<string, unknown> = {};
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+    if (!r.ok) return { ok: false, error: extractError(data) ?? `fal.ai error ${r.status}` };
+    const url = extractGlbUrl(data);
+    if (!url) return { ok: false, error: "fal.ai returned no model URL" };
+    return { ok: true, url, raw: data };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+function extractGlbUrl(data: Record<string, unknown>): string | undefined {
+  const d = data as Record<string, unknown>;
+  // Common shapes across fal 3D models.
+  const candidates: (unknown)[] = [
+    (d.model_mesh as { url?: string } | undefined)?.url,
+    (d.model_glb as { url?: string } | undefined)?.url,
+    (d.glb as { url?: string } | undefined)?.url,
+    (d.mesh as { url?: string } | undefined)?.url,
+    typeof d.model_glb === "string" ? d.model_glb : undefined,
+    typeof d.url === "string" ? d.url : undefined,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && /\.glb(\?.*)?$/i.test(c)) return c;
+    if (typeof c === "string" && c.startsWith("http")) return c; // some return signed urls w/o extension
+  }
+  // Recurse into nested envelopes.
+  for (const k of ["data", "result", "output"] as const) {
+    const inner = d[k] as Record<string, unknown> | undefined;
+    if (inner) {
+      const nested = extractGlbUrl(inner);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
 function extractImageUrl(data: Record<string, unknown>): string | undefined {
   const d = data as Record<string, unknown>;
   const images = (d.images as Array<{ url?: string }> | undefined);
