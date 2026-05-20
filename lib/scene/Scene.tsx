@@ -14,7 +14,7 @@ import { TimedReveal } from "./SceneReveal";
 import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
-import { ExtrudedSvgLogo, canExtrude } from "./SvgLogo";
+import { ExtrudedSvgLogo, ExtrudedRasterLogo, canExtrude } from "./SvgLogo";
 import { useCubePicker } from "./cubePickerStore";
 import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, placeOnFloor, type RoomShape } from "./placementAudit";
@@ -1814,28 +1814,26 @@ function LogoSignFlank({
       </group>
     );
   }
-  // Raster (PNG/JPG) fallback. The previous version wrapped the decal
-  // in a solid boxGeometry — that was the "white plinth" visible behind
-  // alpha-transparent logos in the window strip. Now renders as a
-  // double-sided textured plane only, so PNG transparency carries
-  // through cleanly to both inside + outside views.
+  // Raster (PNG/JPG) fallback — runtime silhouette extrusion via the
+  // alpha mask / chroma-keyed luminance. Same channel-letter look as
+  // SVG marks, no plinth.
+  void tex;
   return (
     <group position={[x + offsetOut, y, z]} rotation-y={rotY}>
-      <mesh>
-        <planeGeometry args={[finalWidthM, targetHeightM]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={emissive}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
-          side={THREE.DoubleSide}
+      <Suspense fallback={null}>
+        <ExtrudedRasterLogo
+          url={url}
+          widthM={finalWidthM}
+          heightM={targetHeightM}
+          depthM={d}
+          tintHex={invert ? "#FFFFFF" : sideTint}
+          invert={invert}
+          chroma={chroma}
+          emissive={Math.max(0, emissive - 0.5)}
+          metalness={0.4}
+          roughness={0.4}
         />
-      </mesh>
+      </Suspense>
     </group>
   );
 }
@@ -1906,28 +1904,30 @@ function LogoSign({
     );
   }
 
-  // Raster (PNG) fallback. The previous version wrapped the decal in a
-  // solid box backing — that backing was the "white plinth" the user
-  // didn't want. Brand PNGs ship transparent, so we now render the
-  // logo as a double-sided textured plane with full alpha + no backing
-  // box. The mark sits on the wall as-is, no plinth.
+  // Raster (PNG / JPG) fallback — extruded silhouette built at runtime
+  // from the alpha mask (or chroma-keyed luminance for JPGs). Gives the
+  // same channel-letter feel as SVGs, just with a coarser silhouette
+  // (96-px contour resolution). NO plinth: the extrusion is the logo
+  // shape itself, not a box behind it.
+  // We swallow `tex` (no longer used here) so the linter / useLogoTexture
+  // hook still runs and warm-caches the texture for any other consumer.
+  void tex;
   return (
     <group position={[xOffset, y, z]} rotation-y={faceDir === -1 ? Math.PI : 0}>
-      <mesh>
-        <planeGeometry args={[finalWidthM, targetHeightM]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={emissive}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
-          side={THREE.DoubleSide}
+      <Suspense fallback={null}>
+        <ExtrudedRasterLogo
+          url={url}
+          widthM={finalWidthM}
+          heightM={targetHeightM}
+          depthM={d}
+          tintHex={invert ? "#FFFFFF" : sideTint}
+          invert={invert}
+          chroma={chroma}
+          emissive={Math.max(0, emissive - 0.5)}
+          metalness={0.4}
+          roughness={0.4}
         />
-      </mesh>
+      </Suspense>
     </group>
   );
 }
@@ -3701,28 +3701,26 @@ function PendantFaceLogo({
       </group>
     );
   }
-  // Raster fallback for pendant face logos. Was a boxGeometry backing
-  // plate (the "white plinth") + two decal planes. Now it's just a
-  // double-sided transparent decal so PNG alpha shows the pendant
-  // body through the negative space of the logo — the mark reads as
-  // an emblem ON the pendant, not as a sticker on a white card.
+  // Raster fallback for pendant face logos — same extruded-silhouette
+  // treatment as wall signs, so PNG / JPG brand marks get real 3D
+  // depth on the pendant faces instead of reading as a flat decal.
+  void tex;
   return (
     <group position={position} rotation-y={rotY}>
-      <mesh>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={glassReadable}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
-          side={THREE.DoubleSide}
+      <Suspense fallback={null}>
+        <ExtrudedRasterLogo
+          url={url}
+          widthM={w}
+          heightM={h}
+          depthM={d}
+          tintHex={invert ? "#FFFFFF" : sideTint}
+          invert={invert}
+          chroma={chroma}
+          emissive={Math.max(0, glassReadable - 0.6)}
+          metalness={0.5}
+          roughness={0.35}
         />
-      </mesh>
+      </Suspense>
     </group>
   );
 }
