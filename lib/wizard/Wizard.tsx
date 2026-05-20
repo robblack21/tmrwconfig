@@ -83,15 +83,19 @@ export function Wizard({
 
   const accent = `var(${accentVar})`;
   const [step, setStep] = useState(0);
-  const [sizeId, setSizeId] = useState<string>(initialSizeId ?? sizes[0]!.id);
+  // Default to the MIDDLE size card (Meeting Room for our preset) — the
+  // most common pick, and the most flattering visual baseline for the
+  // live 3D preview. Host can override via `initialSizeId`.
+  const defaultSize = sizes[Math.min(Math.floor(sizes.length / 2), sizes.length - 1)] ?? sizes[0]!;
+  const [sizeId, setSizeId] = useState<string>(initialSizeId ?? defaultSize.id);
   // Step 1 fine-tune sliders — width × depth × wall-height. Default to the
   // picked size card's dims, then track user edits. A "touched" flag per
   // axis stops the preset re-applying its size when the user has dialled
   // in their own number. Resets to preset values whenever the user picks
   // a different size card.
   const [dimsTouched, setDimsTouched] = useState<{ w: boolean; d: boolean; h: boolean }>({ w: false, d: false, h: false });
-  const [widthM,  setWidthM]   = useState<number>(sizes[0]!.widthM);
-  const [depthM,  setDepthM]   = useState<number>(sizes[0]!.depthM);
+  const [widthM,  setWidthM]   = useState<number>(defaultSize.widthM);
+  const [depthM,  setDepthM]   = useState<number>(defaultSize.depthM);
   const [heightM, setHeightM]  = useState<number>(4.5);
   const [designLineId, setDesignLineId] = useState<string>(initialDesignLineId ?? designLines[0]!.id);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -359,7 +363,7 @@ export function Wizard({
                     sqm / dimensions on a single line. Staggered reveal so
                     the cards cascade in rather than popping together. */}
                 <motion.div
-                  className="flex flex-col gap-3 mt-6"
+                  className="flex flex-col gap-3 mt-6 items-stretch"
                   initial="hidden"
                   animate="visible"
                   variants={{
@@ -370,6 +374,7 @@ export function Wizard({
                   {sizes.map((s) => (
                     <motion.div
                       key={s.id}
+                      className="w-full"
                       variants={{
                         hidden:  { opacity: 0, y: 10 },
                         visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 240, damping: 22 } },
@@ -502,7 +507,7 @@ export function Wizard({
                       >
                         <div className="flex items-center gap-1.5 mb-1">
                           {preview.map((c, i) => (
-                            <span key={i} className="h-3 w-3 rounded-[3px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+                            <span key={i} className="h-[30px] w-[30px] rounded-[8px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
                           ))}
                         </div>
                         <div className="text-[0.68rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600', color: harmony === h.id ? accent : "currentColor" }}>{h.label}</div>
@@ -642,7 +647,7 @@ function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; acti
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
       transition={{ type: "spring", stiffness: 320, damping: 26 }}
-      className="text-left rounded-[16px] backdrop-blur-md transition-all flex items-center gap-4 px-4 py-3.5"
+      className="w-full text-left rounded-[16px] backdrop-blur-md transition-all flex items-center gap-4 px-4 py-3.5"
       style={{
         background: active ? `color-mix(in srgb, ${accent} 14%, var(--color-surface))` : "color-mix(in srgb, var(--color-surface) 80%, transparent)",
         border: active ? `2px solid ${accent}` : "1px solid color-mix(in srgb, var(--color-text) 8%, transparent)",

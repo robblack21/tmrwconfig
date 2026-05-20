@@ -114,6 +114,7 @@ export function Scene() {
   const posterboardCount = useConfig((s) => s.posterboardCount);
   const posterboardUrls = useConfig((s) => s.posterboardUrls);
   const cubeCount = useConfig((s) => s.cubeCount);
+  const heroArtworkUrls = useConfig((s) => s.heroArtworkUrls);
   const platformHeightM = useConfig((s) => s.platformHeightM);
   const windowsEnabled = useConfig((s) => s.windowsEnabled);
   const ceilingEnabled = useConfig((s) => s.ceilingEnabled);
@@ -472,6 +473,7 @@ export function Scene() {
                   count={chairCount}
                   tableLengthM={tableLengthM}
                   tableWidthM={tableWidthM}
+                  tableVariant={tableVariant}
                   chairVariant={chairVariant}
                   position={[0, platformHeightM, 0]}
                   tintHex={chairResolved}
@@ -482,6 +484,7 @@ export function Scene() {
                     count={chairCount}
                     tableLengthM={tableLengthM}
                     tableWidthM={tableWidthM}
+                    tableVariant={tableVariant}
                     position={[0, platformHeightM, 0]}
                     kit={kit}
                     cupTint={colourOverrides.cup ?? undefined}
@@ -605,6 +608,19 @@ export function Scene() {
               depthM={depthM}
               platformHeightM={platformHeightM}
               kit={kit}
+            />
+
+            {/* Multi-panel hero artwork distributed across the back wall.
+                Each non-null heroArtworkUrls slot becomes a full-wall-
+                height panel; widths split evenly so N artworks tile the
+                wall side-by-side. Mounted just in front of the back
+                wall surface; reads as a gallery hang. */}
+            <BackWallArtworks
+              urls={heroArtworkUrls}
+              widthM={widthM}
+              depthM={depthM}
+              wallHeightM={wallHeightM}
+              platformHeightM={platformHeightM}
             />
           </>
         )}
@@ -1943,6 +1959,84 @@ function StandingDisplays({
 // thin dark box; artwork is a planeGeometry slightly proud of the
 // frame's inner face to avoid z-fight.
 
+// ── Back-wall hero artworks ────────────────────────────────────────────
+// Distributes up to 4 hero artwork panels across the back wall at FULL
+// wall height. With one URL the single panel spans the full back-wall
+// width minus a small margin; with N URLs the back-wall width is split
+// into N equal columns with thin gaps. Each panel honours the image's
+// own aspect ratio inside the column (fills width, anchored to top of
+// the wall, image scales to fit without distortion).
+
+function BackWallArtworks({ urls, widthM, depthM, wallHeightM, platformHeightM }: {
+  urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
+}) {
+  const active = (urls ?? []).filter((u): u is string => !!u);
+  if (active.length === 0) return null;
+  // Mount just in front of the back wall's inner face (wall thickness
+  // 0.08m, plus a 5mm proud offset so we don't z-fight).
+  const z = -depthM / 2 + 0.08 + 0.006;
+  const margin = 0.25;                       // wall-edge breathing room
+  const gap = active.length > 1 ? 0.15 : 0;  // gap between panels
+  const totalGap = gap * (active.length - 1);
+  const usableW = widthM - margin * 2 - totalGap;
+  const colW = usableW / active.length;
+  const colH = wallHeightM - margin * 2;
+  const cy = platformHeightM + margin + colH / 2;
+  return (
+    <>
+      {active.map((url, i) => {
+        const cx = -widthM / 2 + margin + colW / 2 + i * (colW + gap);
+        return (
+          <Suspense key={i} fallback={null}>
+            <BackWallArtwork
+              url={url}
+              position={[cx, cy, z]}
+              w={colW}
+              h={colH}
+            />
+          </Suspense>
+        );
+      })}
+    </>
+  );
+}
+
+function BackWallArtwork({ url, position, w, h }: { url: string; position: [number, number, number]; w: number; h: number }) {
+  const tex = useWallGraphic(url);
+  const [aspect, setAspect] = useState(1.0);
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      setAspect((img.naturalWidth || 1) / (img.naturalHeight || 1));
+    };
+    img.src = url;
+    return () => { cancelled = true; };
+  }, [url]);
+  // Fit the image inside the column. Width fills; height scales to image.
+  let imgW = w;
+  let imgH = imgW / aspect;
+  if (imgH > h) { imgH = h; imgW = imgH * aspect; }
+  return (
+    <group position={position} userData={{ kind: "walls" }}>
+      {/* Thin dark backing panel so any unused column space reads as
+          mount, not raw wall. */}
+      <mesh>
+        <planeGeometry args={[w, h]} />
+        <meshStandardMaterial color="#0e1014" roughness={0.6} toneMapped={false} />
+      </mesh>
+      {/* Image — proud of the backing by 1mm to avoid z-fight. */}
+      <mesh position={[0, 0, 0.001]}>
+        <planeGeometry args={[imgW, imgH]} />
+        <meshStandardMaterial map={tex} color="#ffffff" toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallHeightM }: {
   count: number; urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; kit: BrandKit;
 }) {
@@ -1989,15 +2083,32 @@ function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallH
   );
 }
 
-// Free-standing portrait board. Width is derived from the image's
-// intrinsic aspect ratio so we never squash the artwork — square logos
-// render square, 4:5 photos render 4:5, etc. Bounded so a very wide
-// image doesn't run into walls.
+// Free-standing portrait board. The FRAME is fixed-size (standard
+// posterboard geometry) — the IMAGE fits inside proportionately,
+// preserving its own aspect ratio. The image is anchored toward the
+// TOP of the frame so there's room at the BOTTOM for a margin /
+// signature strip (per spec: "image placed proportionately within the
+// posterboard with margins at the bottom").
+//
+// Three layers stacked along Z:
+//   1. dark frame (boxGeometry, slightly bigger than the inner panel)
+//   2. inner backing panel (plain board colour — the bottom margin
+//      strip shows this through the alpha border of the image)
+//   3. image plane fitted into the upper portion of the inner panel
 function Posterboard({ position, rotationY, heightM, url }: {
   position: [number, number, number]; rotationY: number; heightM: number; url: string;
 }) {
   const tex = useWallGraphic(url);
-  const [aspect, setAspect] = useState(0.7); // portrait default until image loads
+  // Fixed frame width — portrait 2:3 ratio. Doesn't change with image.
+  const frameW = heightM * (2 / 3);
+  const innerW = frameW - 0.10;       // 50mm inner margin per side
+  const innerH = heightM - 0.10;
+  // Inner panel "wall" colour — pale enough to read as backboard.
+  const backingColor = "#e8e6df";
+  // Per-image aspect — derived from the upload's intrinsic dims so we
+  // never squash the artwork. Defaults to a square if the URL is
+  // still loading.
+  const [aspect, setAspect] = useState(1.0);
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
@@ -2006,31 +2117,53 @@ function Posterboard({ position, rotationY, heightM, url }: {
     img.onload = () => {
       if (cancelled) return;
       const a = (img.naturalWidth || 1) / (img.naturalHeight || 1);
-      // Cap aspect to a reasonable portrait/landscape range so a
-      // ridiculously wide banner doesn't span the room.
-      setAspect(Math.max(0.3, Math.min(1.6, a)));
+      setAspect(Math.max(0.1, Math.min(10, a)));
     };
     img.src = url;
     return () => { cancelled = true; };
   }, [url]);
-  const w = heightM * aspect;
+  // Fit the image inside the upper-2/3 of the inner panel. Bottom 1/3
+  // is the margin/signature strip. The image scales to fill the
+  // available area without exceeding either axis.
+  const bottomMargin = innerH * 0.18;                          // strip height for breathing room
+  const availW = innerW * 0.92;
+  const availH = innerH - bottomMargin - 0.08;
+  let imgW = availW;
+  let imgH = imgW / aspect;
+  if (imgH > availH) { imgH = availH; imgW = imgH * aspect; }
+  // Y offset — image centred in the upper section above the margin.
+  const imgY = (innerH / 2) - imgH / 2 - 0.06;
   return (
     <group position={position} rotation-y={rotationY} userData={{ kind: "walls" }}>
-      {/* Frame — slightly proud of the artwork. */}
+      {/* Frame */}
       <mesh castShadow receiveShadow>
-        <boxGeometry args={[w + 0.05, heightM + 0.05, 0.03]} />
+        <boxGeometry args={[frameW, heightM, 0.04]} />
         <meshPhysicalMaterial color="#0e1014" roughness={0.55} metalness={0.35} />
+      </mesh>
+      {/* Inner backing panel — a clean board colour shown around the image. */}
+      <mesh position={[0, 0, 0.021]} receiveShadow>
+        <planeGeometry args={[innerW, innerH]} />
+        <meshStandardMaterial color={backingColor} roughness={0.7} toneMapped={false} />
       </mesh>
       {/* Foot plate so the board reads as standing, not floating. */}
       <mesh position={[0, -heightM / 2 - 0.03, 0]} castShadow receiveShadow>
-        <boxGeometry args={[Math.max(0.3, w * 0.6), 0.04, 0.18]} />
+        <boxGeometry args={[Math.max(0.3, frameW * 0.6), 0.04, 0.18]} />
         <meshPhysicalMaterial color="#0a0c10" roughness={0.45} metalness={0.55} />
       </mesh>
-      {/* Artwork — slightly proud of the frame's inner face. */}
-      <mesh position={[0, 0, 0.018]}>
-        <planeGeometry args={[w, heightM]} />
-        <meshStandardMaterial map={tex} toneMapped />
-      </mesh>
+      {/* Image — anchored in the upper portion of the inner panel. The
+          albedo issue last round was `<meshStandardMaterial map={tex}
+          toneMapped />` — toneMapped defaulted true so the texture got
+          darkened by the scene's tonemapping, plus there was no
+          explicit color (so the material's default white was further
+          dimmed). Fixed by setting toneMapped={false} + explicit
+          color="#ffffff" + transparent off (we want the texture solid,
+          backed by the panel behind it). */}
+      {url && (
+        <mesh position={[0, imgY, 0.023]} userData={{ kind: "walls" }}>
+          <planeGeometry args={[imgW, imgH]} />
+          <meshStandardMaterial map={tex} color="#ffffff" toneMapped={false} />
+        </mesh>
+      )}
     </group>
   );
 }
@@ -2351,15 +2484,20 @@ function LedWall({
   kit: BrandKit; backWallZ: number; widthM: number; heightM: number;
   roomWidthM: number; roomHeightM: number; platformHeightM: number; brightness: number;
 }) {
-  // Fill the back wall — clamp width to roomWidth - 0.5m margin and height
-  // to wallHeight - 0.5m. We DON'T enforce 16:9 anymore because the matrix
-  // is meant to span the wall regardless of aspect; the YouTube iframe is
-  // cropped top+bottom inside its parent so the video still reads.
+  // 16:9 lock + 90% wall-height cap. The wall assembly is rendered at
+  // a strict 16:9 aspect ratio (a cinema-feel video wall, not a strip).
+  // Height is capped at 90% of the wall height so it never crowds the
+  // ceiling; width is derived from height × 16/9 and clamped to room
+  // width − 0.5m margin. Whatever the user dialled in via the sliders
+  // is treated as a SUGGESTED height; we enforce the lock here so the
+  // assembly is always proportionate.
+  const maxH = roomHeightM * 0.9;
   const maxW = roomWidthM - 0.5;
-  const maxH = roomHeightM - 0.5;
-  const w169 = Math.min(widthM, maxW);
-  const h169 = Math.min(heightM, maxH);
-  const bezelD = 0.12;                       // slimmer bezel — the matrix is the focal point
+  // Honour the user's requested height (heightM) but clamp + lock 16:9.
+  let h169 = Math.min(heightM, maxH);
+  let w169 = h169 * (16 / 9);
+  if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
+  const bezelD = 0.16;                       // slightly deeper so the wall reads as extruded
   const cols = useConfig((s) => s.videoMatrixCols);
   const rows = useConfig((s) => s.videoMatrixRows);
   const cells = useConfig((s) => s.videoMatrixCells);

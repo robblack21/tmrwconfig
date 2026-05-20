@@ -120,6 +120,10 @@ export type ConfigState = {
   standingDisplayCount: number;      // 0..4 — angled standing displays around the room (suppressed when kit opts out via noDefaultDressing)
   posterboardCount: number;          // 0..4 — upright portrait frames against the side walls
   posterboardUrls: (string | null)[]; // one image per posterboard slot; null = brand logo fallback
+  /** Back-wall hero artwork URLs (up to 4). When set, panels are
+   *  distributed across the back wall at full wall height instead of
+   *  the single full-bleed `kit.scene.wallGraphic`. */
+  heroArtworkUrls: (string | null)[];
   cubeCount: number;                 // 0..4 — centre-of-room cube plinths with upload/generate hotspots
   cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
   platformHeightM: number;           // 0.10..0.30 — raised platform thickness
@@ -207,13 +211,14 @@ export const useConfig = create<ConfigState>((set, get) => ({
   trussTopM: 5.5,
   pendantEnabled: true,
   pendantShape: "rectangle",
-  // Pendant defaults sized for typical 4-6m rooms. Was 5×4.5×1.0 which
-  // overflowed huddle rooms and read as a low-ceiling slab on top of the
-  // table. New defaults are a refined 3×2.4×0.4 box — reads as a hanging
-  // light fixture, not a ceiling tile.
+  // Pendant defaults sized for typical 4-6m rooms. Height is just the
+  // pendant body's vertical thickness — a slim 0.2m reads as a real
+  // hanging fixture (was 0.4m which still read as a slab). Width +
+  // depth stay configurable so kits can opt into chunkier rectangle /
+  // ring / squircle silhouettes via the Pendant shape picker.
   pendantWidthM: 3.0,
   pendantDepthM: 2.4,
-  pendantHeightM: 0.4,
+  pendantHeightM: 0.2,
   pendantYOffsetM: 0,
   pendantRotationDeg: 0,
   pendantRingVertical: false,
@@ -288,6 +293,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   standingDisplayCount: 2,
   posterboardCount: 0,
   posterboardUrls: [null, null, null, null],
+  heroArtworkUrls: [null, null, null, null],
   cubeCount: 0,
   cubeAssets: [null, null, null, null],
   platformHeightM: 0.20,
@@ -436,28 +442,26 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "ledWall.setWidth": {
-        // Clamp to room dimensions — the LED panel never wants to push past
-        // 85% of the wall width (leaves room for flanking monitors), and is
-        // bounded below at 1.5m so the slider isn't useless on tight rooms.
-        const maxW = Math.max(2, Math.min(s.widthM * 0.85, 12));
+        // 16:9 lock + 90%-of-wall-height cap. Width is the user's main
+        // dial; height is derived from width × 9/16, then clamped to
+        // 90% of wall height. If that height cap forces the assembly
+        // smaller, we recompute width DOWN to keep 16:9.
+        const maxW = Math.max(2, Math.min(s.widthM * 0.95, 20));
+        const wallCap = s.wallHeightM * 0.9;
         const w = clamp(intent.value, 1.5, maxW);
-        // Lock 16:9 — if the new width pushes height past the wall, scale
-        // down together so we never produce a "cinema screen" overshoot.
-        const wallCap = Math.max(1.0, s.wallHeightM - 1.0);
         const h169 = w * 9 / 16;
-        const finalW = h169 > wallCap ? wallCap * 16 / 9 : w;
         const finalH = Math.min(h169, wallCap);
+        const finalW = finalH * 16 / 9;
         set({ ledWallWidthM: finalW, ledWallHeightM: finalH });
         break;
       }
       case "ledWall.setHeight": {
-        const wallCap = Math.max(1.0, s.wallHeightM - 1.0);
+        const wallCap = s.wallHeightM * 0.9;
+        const maxW = Math.max(2, Math.min(s.widthM * 0.95, 20));
         const h = clamp(intent.value, 1.0, wallCap);
-        // Lock 16:9 the other way too — height drives width.
-        const maxW = Math.max(2, Math.min(s.widthM * 0.85, 12));
         const w169 = h * 16 / 9;
-        const finalH = w169 > maxW ? maxW * 9 / 16 : h;
         const finalW = Math.min(w169, maxW);
+        const finalH = finalW * 9 / 16;
         set({ ledWallHeightM: finalH, ledWallWidthM: finalW });
         break;
       }
@@ -702,6 +706,10 @@ export const useConfig = create<ConfigState>((set, get) => ({
       }
       case "layout.setPosterboardUrls": {
         set({ posterboardUrls: intent.urls.slice(0, 4) });
+        break;
+      }
+      case "layout.setHeroArtworkUrls": {
+        set({ heroArtworkUrls: intent.urls.slice(0, 4) });
         break;
       }
       case "layout.setCubeCount": {

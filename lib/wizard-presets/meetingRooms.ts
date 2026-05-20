@@ -335,11 +335,14 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
     apply({ type: "kit.clearLogoOverride", kitId: tmrwBlank.id });
   }
 
-  // Hero artwork on the back wall.
-  if (state.artworkUrl && (!prev || prev.artworkUrl !== state.artworkUrl)) {
-    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: state.artworkUrl });
-  } else if (!state.artworkUrl && prev?.artworkUrl) {
-    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: null });
+  // Hero artwork on the back wall. The wizard collects up to 4 slots —
+  // we dispatch the full array so the scene can distribute panels
+  // evenly across the wall (full wall height, width split per slot).
+  // The legacy kit.setWallGraphic intent stays in sync with slot 0 for
+  // any consumer that still reads the single full-bleed graphic.
+  if (!prev || prev.artworkUrls.some((u, i) => u !== state.artworkUrls[i])) {
+    apply({ type: "layout.setHeroArtworkUrls", urls: state.artworkUrls });
+    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: state.artworkUrls[0] ?? null });
   }
 
   // Design line — refresh the scene defaults when the user picks a new one.
@@ -402,8 +405,11 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   // 5. Back-wall hero artwork — drops the user's image into the kit's
   //    wallGraphic slot so the LED wall + ExhibitionGraphics stack
   //    picks it up.
-  if (result.artworkUrl) {
-    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: result.artworkUrl });
+  // Hero artwork — dispatch the full 4-slot array AND keep
+  // kit.setWallGraphic in sync with slot 0 (legacy single-bleed path).
+  apply({ type: "layout.setHeroArtworkUrls", urls: result.artworkUrls });
+  if (result.artworkUrls[0]) {
+    apply({ type: "kit.setWallGraphic", kitId: tmrwBlank.id, url: result.artworkUrls[0] });
   }
 
   // 6. Design-line scene defaults.

@@ -128,14 +128,16 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     // lift if the lowest visible point still dips below the intended
     // base. Catches plants whose saucer / pot mesh is literally named
     // "floor" / "ground" etc and got filtered out of the measurement
-    // pass — left plant variants were embedding in the floor by ~10cm
-    // for exactly this reason. Cap the lift at 0.5m so we don't paper
-    // over a far-away stray helper (those should be removed, not lifted).
+    // pass. Lift cap bumped 0.5m → 1.5m because some plant GLBs ship
+    // with deep pots (>0.5m) that were exceeding the previous cap and
+    // failing silently — left the plant embedded by ~0.6m. 1.5m is a
+    // generous ceiling that still rules out far-away stray helpers
+    // (those are typically tens of metres off in skinned GLBs).
     scene.updateMatrixWorld(true);
     const fullBox = new THREE.Box3().setFromObject(scene, true);
     if (isFinite(fullBox.min.y) && fullBox.min.y < yLift) {
       const dip = yLift - fullBox.min.y;
-      if (dip < 0.5) scene.position.y += dip;
+      if (dip < 1.5) scene.position.y += dip;
     }
     return scene;
   }, [gltf, targetHeightM, tintHex, yLift]);

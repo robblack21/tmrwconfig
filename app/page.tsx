@@ -708,7 +708,7 @@ export default function Page() {
                   cinema screen" outcome by never letting the slider push past
                   what fits. The reducer also locks 16:9 on both axes. */}
               <Slider label="Width"      value={ledWallWidthM}     onChange={(v) => apply({ type: "ledWall.setWidth",      value: v })} min={1.5} max={Math.min(widthM * 0.95, 20)} step={0.25} unit="m" />
-              <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.0} max={Math.max(1.0, wallHeightM - 1.0)} step={0.25} unit="m" />
+              <Slider label="Height"     value={ledWallHeightM}    onChange={(v) => apply({ type: "ledWall.setHeight",     value: v })} min={1.0} max={Math.max(1.0, wallHeightM * 0.9)} step={0.25} unit="m" />
               <Slider label="Brightness" value={ledWallBrightness} onChange={(v) => apply({ type: "ledWall.setBrightness", value: v })} min={0}   max={2.5} step={0.05} />
               <Slider label="Volume"     value={videoVolume}       onChange={(v) => apply({ type: "video.setVolume", value: v })} min={0} max={100} step={1} />
               {/* NxN matrix — splits the LED wall into a grid of cells.

@@ -48,6 +48,17 @@ const CHAIR_FACE_OFFSETS: Record<ChairVariant, number> = {
   presenter: 0,
 };
 
+/** Per-variant shape flag — oval tables curve their chairs / cups inward
+ *  along an ellipse; rectangular tables keep them on straight lines.
+ *  The ny_studio mains are visibly oval; the presenter + simple variants
+ *  are oblong rectangles. */
+export const TABLE_IS_OVAL: Record<TableVariant, boolean> = {
+  main:      true,
+  secondary: true,
+  presenter: false,
+  simple:    false,
+};
+
 // ── Table ────────────────────────────────────────────────────────────────────
 // Non-parametric resize: the GLB is recentred, its base pinned to the floor,
 // its longer horizontal axis oriented along the room depth, then scaled to the
@@ -285,9 +296,13 @@ function TableTopCentreDecal({ kit, url, tableLengthM, tableWidthM }: { kit: Bra
 // chair offset off the table edge and rotated to face the table centre.
 
 export function ChairsAroundTable({
-  count, tableLengthM, tableWidthM, chairVariant, position, tintHex, kit,
+  count, tableLengthM, tableWidthM, tableVariant, chairVariant, position, tintHex, kit,
 }: {
   count: number; tableLengthM: number; tableWidthM: number;
+  /** Drives oval-vs-rectangular layout. Oval: chairs/cups curve along
+   *  the ellipse offset; rectangular: chairs sit on straight perpendicular
+   *  lines (Atelier-style oblong). Default rectangular for safety. */
+  tableVariant: TableVariant;
   chairVariant: ChairVariant; position: [number, number, number]; tintHex?: string;
   kit?: BrandKit;
 }) {
@@ -320,38 +335,63 @@ export function ChairsAroundTable({
     const leftN = Math.min(sideCapacity, Math.ceil(sideTotal / 2));
     const rightN = Math.min(sideCapacity, sideTotal - leftN);
     const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
-    // Oval-table chair tilt — chairs nearest the rounded ends rotate
-    // inward toward the head/foot so they "follow" the table's curve.
-    // Middle-of-side chairs face the table directly (perpendicular).
-    // End chairs face the table along the long axis.
+    // Oval vs rectangular branching.
     //
-    // For each side chair we compute t = z_pos / (spanZ/2): t = -1 at
-    // the head-end of the side, t = +1 at the foot-end. The chair's
-    // rotation is the middle-of-side angle plus t × MAX_TILT, where
-    // MAX_TILT = 60°.
-    //   LEFT side  (middle rot =  π/2): rot = π/2 + t·(π/3)
-    //   RIGHT side (middle rot = -π/2): rot = -π/2 − t·(π/3)
-    // That puts the chair at the head end of the LEFT side at 30° (so
-    // its +Z-local "forward" faces +X+Z toward the table centre) and
-    // the chair at the foot end at 150°. Symmetric on the right side.
-    const MAX_TILT = Math.PI / 3;                      // 60° max inward tilt
-    const tilt = (n: number, i: number) => {
-      if (n <= 1) return 0;
-      // Normalised position along the side, t ∈ [-1, +1].
-      const t = (-spanZ / 2 + (i * spanZ) / (n - 1)) / (spanZ / 2);
-      return t * MAX_TILT;
+    // Oval: chairs sit on the ELLIPSE offset by `gap`. At each z_pos
+    //   along the side, x is derived from the ellipse equation so the
+    //   chair hugs the table's curve. Rotation = outward-normal angle,
+    //   so the chair always points at the table centre. Net effect:
+    //   chairs near the rounded ends pull inward AND rotate to face
+    //   the head/foot, matching the curve naturally.
+    //
+    // Rectangular: chairs sit at fixed x = ±sideX with rotation locked
+    //   to the perpendicular (±π/2) — clean straight lines along the
+    //   table sides, matching an Atelier-style oblong table.
+    const isOval = TABLE_IS_OVAL[tableVariant] ?? false;
+    // Ellipse semi-axes for the chair-pivot offset curve.
+    const aX = sideX;                    // along X
+    const bZ = endZ;                     // along Z
+    const placeOval = (n: number, i: number) => {
+      const z = place(n, i);
+      // x from ellipse: x = aX × √(1 − (z/bZ)²)
+      const norm = Math.max(0, 1 - (z / bZ) ** 2);
+      const x = aX * Math.sqrt(norm);
+      // Outward normal of the ellipse at (x, z) is (x/a², z/b²).
+      // Chair faces INWARD (toward origin), so its forward = -normal.
+      // In three.js, rotation-y = atan2(forward.x, forward.z) gives
+      // the angle that rotates +Z local to (forward.x, forward.z).
+      const nx = x / (aX * aX);
+      const nz = z / (bZ * bZ);
+      const facingX = -nx;
+      const facingZ = -nz;
+      return { x, z, rot: Math.atan2(facingX, facingZ) };
     };
-    // Left side faces +X, right side faces -X, ends face the centre along Z.
-    for (let i = 0; i < leftN; i++) {
-      out.push({ pos: [-sideX, 0, place(leftN, i)],  rot:  Math.PI / 2 + tilt(leftN, i) });
+    if (isOval) {
+      // Left side: chair x is negative (mirror the ellipse).
+      for (let i = 0; i < leftN; i++) {
+        const p = placeOval(leftN, i);
+        out.push({ pos: [-p.x, 0, p.z], rot: -p.rot });
+      }
+      for (let i = 0; i < rightN; i++) {
+        const p = placeOval(rightN, i);
+        out.push({ pos: [p.x, 0, p.z], rot: p.rot });
+      }
+      // End chairs at the ellipse's TOP and BOTTOM (z = ±bZ, x = 0).
+      if (endN >= 1) out.push({ pos: [0, 0, -bZ], rot: 0 });
+      if (endN >= 2) out.push({ pos: [0, 0,  bZ], rot: Math.PI });
+    } else {
+      // Rectangular — flat straight lines, no tilt.
+      for (let i = 0; i < leftN; i++) {
+        out.push({ pos: [-sideX, 0, place(leftN, i)],  rot:  Math.PI / 2 });
+      }
+      for (let i = 0; i < rightN; i++) {
+        out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+      }
+      if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
+      if (endN >= 2) out.push({ pos: [0, 0,  endZ], rot: Math.PI });
     }
-    for (let i = 0; i < rightN; i++) {
-      out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 - tilt(rightN, i) });
-    }
-    if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
-    if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
     return out;
-  }, [count, tableLengthM, tableWidthM]);
+  }, [count, tableLengthM, tableWidthM, tableVariant]);
   return (
     <group position={position}>
       {slots.map((s, i) => (
@@ -377,9 +417,12 @@ const CUP_GLB_URL = asset("/glb/props/coffeecup.glb");
 useGLTF.preload(CUP_GLB_URL);
 
 export function BrandedCupsOnTable({
-  count, tableLengthM, tableWidthM, position, kit, cupTint,
+  count, tableLengthM, tableWidthM, tableVariant, position, kit, cupTint,
 }: {
   count: number; tableLengthM: number; tableWidthM: number;
+  /** Drives oval-vs-rectangular cup placement. Oval: cups follow the
+   *  inner ellipse offset; rectangular: cups sit on straight lines. */
+  tableVariant: TableVariant;
   position: [number, number, number]; kit: BrandKit;
   /** Override cup body colour — when set, wins over kit.scene.cupColor.
    *  Used by long-press editor's "cup" surface override + the wizard's
@@ -406,12 +449,34 @@ export function BrandedCupsOnTable({
     const rightN = sideTotal - leftN;
     const spanZ = Math.max(0.01, tableLengthM - 0.8);
     const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
-    for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
-    for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+    const isOval = TABLE_IS_OVAL[tableVariant] ?? false;
+    // Oval: cups sit on an INNER ellipse offset from the table edge.
+    // At each chair's z, the cup's x snaps to the ellipse at that
+    // z — pulling cups inward at the head/foot ends to match the
+    // chair curve. Rectangular: cups sit on straight lines.
+    const placeOvalCup = (n: number, i: number) => {
+      const z = place(n, i);
+      const norm = Math.max(0, 1 - (z / endZ) ** 2);
+      const x = sideX * Math.sqrt(norm);
+      return { x, z };
+    };
+    if (isOval) {
+      for (let i = 0; i < leftN; i++) {
+        const p = placeOvalCup(leftN, i);
+        out.push({ pos: [-p.x, 0, p.z], rot: Math.PI / 2 });
+      }
+      for (let i = 0; i < rightN; i++) {
+        const p = placeOvalCup(rightN, i);
+        out.push({ pos: [p.x, 0, p.z], rot: -Math.PI / 2 });
+      }
+    } else {
+      for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
+      for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+    }
     if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
     if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
     return out;
-  }, [count, tableLengthM, tableWidthM]);
+  }, [count, tableLengthM, tableWidthM, tableVariant]);
 
   // Sit cups on the table surface with a 1mm float to avoid z-fighting.
   // We used to sink the parent 4cm to hide the saucer (treating it as a

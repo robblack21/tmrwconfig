@@ -136,6 +136,9 @@ export const Intent = z.discriminatedUnion("type", [
    *  (wizard upload) or http(s). null = use the kit's primary logo. */
   z.object({ type: z.literal("layout.setPosterboardCount"), value: z.number() }),
   z.object({ type: z.literal("layout.setPosterboardUrls"), urls: z.array(z.string().nullable()) }),
+  /** Back-wall hero artwork URLs (up to 4). Distributed across the
+   *  back wall at full wall height. */
+  z.object({ type: z.literal("layout.setHeroArtworkUrls"), urls: z.array(z.string().nullable()) }),
   /** Cube plinths — count + per-slot 3D asset (uploaded GLB or
    *  fal.ai-generated). null = empty cube. */
   z.object({ type: z.literal("layout.setCubeCount"), value: z.number() }),
