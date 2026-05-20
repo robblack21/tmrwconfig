@@ -3,6 +3,7 @@ import { Suspense, useMemo, useEffect, useRef, useState } from "react";
 import { Environment, OrbitControls, ContactShadows, RoundedBox, Html } from "@react-three/drei";
 import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { useConfig, useBrandKit, type VideoCell } from "@/lib/store/configStore";
 import type { PendantShape, FootprintShape } from "@/lib/schemas";
 import { Sofa, CoffeeTable, Plant } from "./Props";
@@ -2030,12 +2031,26 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
   }
   const colour = kit.palette.accent;
   const onUpload = (slot: number, file: File) => {
+    // eslint-disable-next-line no-console
+    console.info(`[CubePlinths] upload received for slot ${slot + 1}`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
     const r = new FileReader();
     r.onload = () => {
-      if (typeof r.result !== "string") return;
-      const next = [...(cubeAssets ?? [])] as (typeof cubeAssets);
+      if (typeof r.result !== "string") {
+        // eslint-disable-next-line no-console
+        console.warn("[CubePlinths] FileReader returned non-string");
+        return;
+      }
+      const next = [null, null, null, null] as (typeof cubeAssets);
+      const cur = cubeAssets ?? [];
+      for (let j = 0; j < 4; j++) next[j] = cur[j] ?? null;
       next[slot] = { url: r.result, kind: "uploaded" };
+      // eslint-disable-next-line no-console
+      console.info(`[CubePlinths] dispatching layout.setCubeAssets for slot ${slot + 1} (data URL ${r.result.length} chars)`);
       apply({ type: "layout.setCubeAssets", assets: next });
+    };
+    r.onerror = (e) => {
+      // eslint-disable-next-line no-console
+      console.error("[CubePlinths] FileReader error", e);
     };
     r.readAsDataURL(file);
   };
@@ -2054,37 +2069,53 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
             </Suspense>
           )}
           {/* Hotspot — floats above the cube; click opens a file picker
-              for a GLB. Drei's <Html> portals to the DOM so the input
-              behaves natively. */}
-          <Html position={[0, size + 0.18, 0]} center distanceFactor={6}>
+              for a GLB. Drei's <Html> portals to the DOM. Critical:
+              `wrapperClass` + `zIndexRange` keep it above the canvas
+              event layer, and stopPropagation on the label prevents
+              OrbitControls from eating the click before the file
+              dialog opens. */}
+          <Html
+            position={[0, size + 0.4, 0]}
+            center
+            distanceFactor={4}
+            zIndexRange={[100, 0]}
+            style={{ pointerEvents: "auto" }}
+          >
             <label
               title="Upload a 3D object (.glb) for this plinth"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                background: cubeAssets?.[i] ? "rgba(20,22,28,0.7)" : colour,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                background: cubeAssets?.[i] ? "rgba(20,22,28,0.8)" : colour,
                 color: "#fff",
                 cursor: "pointer",
-                fontSize: 14,
-                fontWeight: 600,
-                boxShadow: `0 4px 14px -4px ${colour}, 0 2px 6px rgba(0,0,0,0.3)`,
-                border: "1px solid rgba(255,255,255,0.2)",
+                fontSize: 18,
+                fontWeight: 700,
+                boxShadow: `0 6px 18px -4px ${colour}, 0 2px 6px rgba(0,0,0,0.4)`,
+                border: "1px solid rgba(255,255,255,0.25)",
                 userSelect: "none",
+                pointerEvents: "auto",
               }}
               aria-label={`Upload 3D object for cube ${i + 1}`}
             >
               {cubeAssets?.[i] ? "↻" : "＋"}
               <input
                 type="file"
-                accept=".glb,model/gltf-binary"
+                accept=".glb,model/gltf-binary,application/octet-stream"
                 style={{ display: "none" }}
                 onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) onUpload(i, f);
+                  else {
+                    // eslint-disable-next-line no-console
+                    console.warn("[CubePlinths] file input fired but no file selected");
+                  }
                   e.currentTarget.value = "";
                 }}
               />
@@ -2101,41 +2132,59 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
 // cube. Loaded via three-stdlib GLTFLoader directly since useGLTF caches
 // by URL and data: URLs are huge keys; the manual loader keeps the
 // cache from blowing up.
+// Loads + renders an uploaded GLB on top of a cube plinth. Normalised
+// to 0.5m tall so any input scale lands at a consistent size. Errors are
+// logged loudly so users can diagnose bad files via the console.
 function CubeAsset({ url, topY }: { url: string; topY: number }) {
   const [obj, setObj] = useState<THREE.Object3D | null>(null);
   useEffect(() => {
+    if (!url) return;
     let cancelled = false;
-    import("three/examples/jsm/loaders/GLTFLoader.js").then(({ GLTFLoader }) => {
-      const loader = new GLTFLoader();
-      loader.parse(
-        // GLTFLoader.parse needs an ArrayBuffer for data: URLs; fetch +
-        // arrayBuffer round-trips it cheaply (no network for data: URLs).
-        new ArrayBuffer(0),
-        "",
-        () => {},
-      );
-      fetch(url)
-        .then((r) => r.arrayBuffer())
-        .then((buf) => {
-          if (cancelled) return;
-          loader.parse(buf, "", (gltf) => {
-            if (cancelled) return;
-            const scene = gltf.scene;
-            // Normalise to 0.5m tall.
-            scene.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(scene);
-            const size = box.getSize(new THREE.Vector3());
-            const k = 0.5 / Math.max(size.y, 1e-6);
-            scene.scale.multiplyScalar(k);
-            scene.updateMatrixWorld(true);
-            const box2 = new THREE.Box3().setFromObject(scene);
-            const ctr = box2.getCenter(new THREE.Vector3());
-            scene.position.sub(new THREE.Vector3(ctr.x, box2.min.y, ctr.z));
-            setObj(scene);
-          });
-        })
-        .catch(() => { /* ignore — placeholder text on the hotspot will show */ });
-    });
+    const loader = new GLTFLoader();
+    // eslint-disable-next-line no-console
+    console.info("[CubeAsset] loading GLB", url.slice(0, 60) + (url.length > 60 ? "…" : ""));
+    fetch(url)
+      .then((r) => {
+        if (!r.ok) throw new Error(`fetch failed: ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then((buf) => new Promise<THREE.Object3D>((resolve, reject) => {
+        loader.parse(
+          buf,
+          "",
+          (gltf) => resolve(gltf.scene),
+          (err) => reject(err),
+        );
+      }))
+      .then((scene) => {
+        if (cancelled) return;
+        // Normalise to 0.5m tall.
+        scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(scene);
+        const size = box.getSize(new THREE.Vector3());
+        if (!isFinite(size.y) || size.y < 1e-4) {
+          // eslint-disable-next-line no-console
+          console.warn("[CubeAsset] GLB has empty/invalid bbox; rendering at intrinsic scale");
+        } else {
+          const k = 0.5 / Math.max(size.y, 1e-6);
+          scene.scale.multiplyScalar(k);
+          scene.updateMatrixWorld(true);
+          const box2 = new THREE.Box3().setFromObject(scene);
+          const ctr = box2.getCenter(new THREE.Vector3());
+          scene.position.sub(new THREE.Vector3(ctr.x, box2.min.y, ctr.z));
+        }
+        scene.traverse((o) => {
+          const m = o as THREE.Mesh;
+          if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; }
+        });
+        // eslint-disable-next-line no-console
+        console.info("[CubeAsset] GLB loaded; placing on plinth");
+        setObj(scene);
+      })
+      .catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error("[CubeAsset] failed to load/parse GLB", e);
+      });
     return () => { cancelled = true; };
   }, [url]);
   if (!obj) return null;
