@@ -2356,21 +2356,43 @@ function SideWallPictureFrames({
   widthM, depthM, wallHeightM, platformHeightM,
 }: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
   const pictureFrameUrls = useConfig((s) => s.pictureFrameUrls) ?? [null, null, null, null];
+  const windowsEnabled = useConfig((s) => s.windowsEnabled);
+  const windowSillM = useConfig((s) => s.windowSillM);
   const kit = useBrandKit();
-  // Square frame size — scales with wall height but capped so it reads as
-  // a picture frame, not a billboard. ~0.9 m on a 4.5 m wall.
-  const size = Math.min(1.0, wallHeightM * 0.22);
-  // Y centre — user eye-level-ish, biased slightly above so the frame
-  // doesn't sit at chair-back height.
-  const cy = platformHeightM + wallHeightM * 0.58;
-  // Z positions for the two frames per side — both at the DOOR END so they
-  // sit visibly when entering the room.
-  const zNear = depthM / 2 - 1.0;                // ~1 m inside the door
-  const zMid  = depthM / 2 - 1.0 - size - 0.6;   // 0.6 m gap behind it
-  // X mount — flush against the wall, frame back sits ~0.05 proud of the
-  // inner face. Wall is 0.08 m thick.
-  const xLeft  = -widthM / 2 + 0.08 + 0.025;
-  const xRight =  widthM / 2 - 0.08 - 0.025;
+  // The side walls are RIBBON-WINDOWED: solid sill band [0..sillM], glass
+  // band [sillM..sillM+winH], solid header above. Mounting frames at eye
+  // height put them OVER the glass — they read as "on the window / the
+  // other side of the glass". So when windows are on we drop the frames
+  // onto the SOLID SILL band below the glazing; with windows off we use
+  // eye height on the now-solid wall.
+  let size: number;
+  let cyLocal: number;          // frame centre height ABOVE the platform
+  if (windowsEnabled) {
+    // Fit the frame inside the solid sill band with a small top + bottom
+    // margin. If the sill is too shallow for a sensible frame, fall back
+    // to a modest size and let it sit just under the glass line.
+    const usable = Math.max(0.3, windowSillM - 0.18);
+    size = Math.min(0.8, wallHeightM * 0.2, usable);
+    cyLocal = Math.max(size / 2 + 0.08, (windowSillM - 0.1) - size / 2);
+  } else {
+    size = Math.min(1.0, wallHeightM * 0.22);
+    cyLocal = wallHeightM * 0.52;
+  }
+  const cy = platformHeightM + cyLocal;
+  // X mount — proud of the INNER wall face so the panel clearly sits
+  // INSIDE the room (casts a shadow on the wall, never reads as exterior).
+  // Wall is centred on ±widthM/2 with thickness 0.08 → inner face at
+  // ±(widthM/2 - 0.04). Sit the frame back ~0.05 m proud of that.
+  const innerFaceOff = widthM / 2 - 0.04;
+  const proud = 0.05 + 0.025;   // gap off wall + half the frame depth
+  const xLeft  = -(innerFaceOff) + proud;
+  const xRight =  (innerFaceOff) - proud;
+  // Z positions for the two frames per side — at the DOOR END, but
+  // CLAMPED so the panel (half-width = size/2) never bleeds past the
+  // front (door) or back walls.
+  const zMax = depthM / 2 - 0.3 - size / 2;
+  const zNear = Math.min(depthM / 2 - 1.0, zMax);
+  const zMid  = Math.min(depthM / 2 - 1.0 - size - 0.6, zMax - size - 0.6);
   // Define the four slots (slot index → world placement + rotation).
   const slots: { slot: number; pos: [number, number, number]; rotY: number }[] = [
     { slot: 0, pos: [xLeft,  cy, zNear], rotY:  Math.PI / 2 },  // left wall, near door (face → +X)
