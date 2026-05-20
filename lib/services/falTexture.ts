@@ -213,8 +213,21 @@ function extractError(data: Record<string, unknown>): string | undefined {
   const detail = data.detail;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail) && detail.length > 0) {
-    const first = detail[0] as { msg?: string; message?: string };
-    return first.msg ?? first.message ?? JSON.stringify(detail);
+    // fal.ai validation errors are FastAPI-style:
+    //   { detail: [{ loc: ["body","image_url"], msg: "field required", type }] }
+    // Previously we returned just `msg` ("field required") which dropped
+    // the field name — the user saw a useless "it needed a field". Now we
+    // append the offending field path from `loc` so the message is
+    // actionable, e.g. "field required: image_url".
+    const parts = detail.map((d) => {
+      const e = d as { loc?: unknown[]; msg?: string; message?: string };
+      const field = Array.isArray(e.loc)
+        ? e.loc.filter((x) => x !== "body" && typeof x === "string").join(".")
+        : "";
+      const msg = e.msg ?? e.message ?? "invalid";
+      return field ? `${msg}: ${field}` : msg;
+    });
+    return parts.join("; ");
   }
   if (typeof data.message === "string") return data.message;
   return undefined;

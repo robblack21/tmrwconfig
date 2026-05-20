@@ -463,7 +463,14 @@ export function LongPressModal({ kind, slot, screenX, screenY, onClose }: {
 function FalTextureSection({ kitId }: { kitId: string }) {
   const apply = useConfig((s) => s.apply);
   const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState<FalModel>("fal-ai/patina");
+  // Default to flux/schnell — a pure TEXT-to-image model that only needs
+  // a `prompt`. The old default was fal-ai/patina, an image-to-image
+  // model that REQUIRES an `image_url`, so it errored "field required:
+  // image_url" the moment you hit Generate. (gpt-image-1 BYOK was also
+  // offered — it needs your own `openai_api_key` and errored the same
+  // way.) Both removed in favour of flux variants that work with the
+  // bundled fal key + a prompt alone.
+  const [model, setModel] = useState<FalModel>("fal-ai/flux/schnell");
   const [status, setStatus] = useState<"idle" | "loading" | "error" | "done">("idle");
   const [err, setErr] = useState<string | null>(null);
   const configured = isFalConfigured();
@@ -479,9 +486,8 @@ function FalTextureSection({ kitId }: { kitId: string }) {
         <>
           <div className="flex gap-1 mb-1.5">
             {([
-              { id: "fal-ai/patina",                            label: "patina" },
-              { id: "fal-ai/gpt-image-1/text-to-image/byok",    label: "gpt-image" },
-              { id: "fal-ai/flux/schnell",                      label: "flux" },
+              { id: "fal-ai/flux/schnell",                      label: "flux · fast" },
+              { id: "fal-ai/flux/dev",                          label: "flux · hi-q" },
             ] as const).map((m) => {
               const selected = model === m.id;
               return (
@@ -504,7 +510,7 @@ function FalTextureSection({ kitId }: { kitId: string }) {
             disabled={!prompt.trim() || status === "loading"}
             onClick={async () => {
               setStatus("loading"); setErr(null);
-              const result = await generateTexture(prompt.trim(), { model });
+              const result = await generateTexture(prompt.trim(), { model, image_size: "square_hd" });
               if (!result.ok) {
                 setErr(result.error); setStatus("error"); return;
               }
