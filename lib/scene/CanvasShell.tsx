@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { Scene } from "./Scene";
 import { useConfig } from "@/lib/store/configStore";
 import { LongPressDetector, LongPressIndicator, LongPressModal, type PressProgressRef } from "./LongPressEditor";
+import { CubePickerModal } from "./CubePickerModal";
 
 type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss";
 
@@ -56,6 +57,36 @@ export default function CanvasShell() {
           if ("transmissionResolutionScale" in state.gl) {
             (state.gl as unknown as { transmissionResolutionScale: number }).transmissionResolutionScale = 1.0;
           }
+          // ── Trackpad-pinch fix ──
+          // macOS two-finger trackpad pinch fires a `wheel` event with
+          // ctrlKey=true. OrbitControls treats this as dolly, BUT three's
+          // event ordering can let some rotation bleed in before the
+          // dolly settles — the user kept reporting "pinch rotates the
+          // camera". Intercept ctrlKey wheel events at the CAPTURE phase
+          // on the canvas element so they never reach OrbitControls;
+          // implement the dolly ourselves by directly mutating the
+          // camera-to-target distance.
+          const canvasEl = state.gl.domElement;
+          const camera = state.camera as THREE.PerspectiveCamera;
+          const ctrlWheel = (e: WheelEvent) => {
+            if (!e.ctrlKey) return; // normal wheel — let OrbitControls do its thing
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            // Direct dolly along the camera→target vector. We can pull
+            // the target from drei's OrbitControls instance via the
+            // r3f state (set when makeDefault).
+            const ctrl = state.controls as unknown as { target: THREE.Vector3; minDistance: number; maxDistance: number; update: () => void } | null;
+            const target = ctrl?.target ?? new THREE.Vector3();
+            // wheel deltaY positive = scroll down = zoom OUT
+            // negative = scroll up = zoom IN. Scale modestly so the gesture feels natural.
+            const factor = Math.pow(1.0015, e.deltaY);
+            const offset = camera.position.clone().sub(target);
+            const newLen = THREE.MathUtils.clamp(offset.length() * factor, ctrl?.minDistance ?? 1.0, ctrl?.maxDistance ?? 50);
+            offset.setLength(newLen);
+            camera.position.copy(target).add(offset);
+            ctrl?.update();
+          };
+          canvasEl.addEventListener("wheel", ctrlWheel, { capture: true, passive: false });
         }}
         camera={{ position: [10.5, 4.2, 13.5], fov: 75, near: 0.05, far: 200 }}
         style={{ width: "100%", height: "100%" }}
@@ -72,6 +103,10 @@ export default function CanvasShell() {
           onClose={() => setEditor(null)}
         />
       )}
+      {/* Cube-plinth picker — DOM-portal modal opened by the in-canvas
+          "+" hotspot. Lives outside the canvas so its menu reads as a
+          flat 2D editor menu instead of a webgl-scaled in-scene panel. */}
+      <CubePickerModal />
     </>
   );
 }

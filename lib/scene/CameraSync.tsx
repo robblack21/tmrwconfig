@@ -226,20 +226,26 @@ export function CameraSync() {
       // The anchor is captured the first frame after a settle. Without
       // it, the very first breathe would jump because we'd be comparing
       // a fresh phase to no prior position.
+      // 60s period → 2π / 60 rad/s. Amplitude ±10° (0.1745 rad).
+      const PERIOD_S = 60;
+      const omega = (2 * Math.PI) / PERIOD_S;
+      const amp = (10 * Math.PI) / 180;
+      const phase = (Date.now() % (PERIOD_S * 1000)) / 1000;
+      const yaw = Math.sin(phase * omega) * amp;
       if (!anchorRef.current && ctrl?.target) {
         anchorRef.current = {
           pos: cam.position.clone(),
           target: ctrl.target.clone(),
         };
-        lastYawDeltaRef.current = 0;
+        // CRITICAL — initialise lastYawDeltaRef to the CURRENT phase yaw
+        // so the very next dYaw computation lands at 0. Previously this
+        // was set to 0 unconditionally, which made the first frame after
+        // any user interaction apply the full current phase yaw (up to
+        // ±10°) as a single-frame rotation — read as the camera
+        // "spinning" the moment you mouse-wheel-zoomed.
+        lastYawDeltaRef.current = yaw;
       }
       if (anchorRef.current && ctrl?.target) {
-        // 60s period → 2π / 60 rad/s. Amplitude ±10° (0.1745 rad).
-        const PERIOD_S = 60;
-        const omega = (2 * Math.PI) / PERIOD_S;
-        const amp = (10 * Math.PI) / 180;
-        const phase = (Date.now() % (PERIOD_S * 1000)) / 1000;
-        const yaw = Math.sin(phase * omega) * amp;
         const dYaw = yaw - lastYawDeltaRef.current;
         lastYawDeltaRef.current = yaw;
         if (Math.abs(dYaw) > 1e-5) {

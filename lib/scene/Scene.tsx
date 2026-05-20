@@ -15,6 +15,7 @@ import { CameraSync } from "./CameraSync";
 import { HallContext } from "./HallContext";
 import { KitProps } from "./KitProps";
 import { ExtrudedSvgLogo, canExtrude } from "./SvgLogo";
+import { useCubePicker } from "./cubePickerStore";
 import { BoardroomTable, ChairsAroundTable, BrandedCupsOnTable, TableTopBrandDecals } from "./Boardroom";
 import { PROP_RADIUS_M, safeInsetForKind, placeOnFloor, type RoomShape } from "./placementAudit";
 import { Flycam } from "./Flycam";
@@ -73,6 +74,7 @@ export function Scene() {
   const trussTopM = useConfig((s) => s.trussTopM);
   const hallMode = useConfig((s) => s.hallMode);
   const hdriIdOverride = useConfig((s) => s.hdriId);
+  const customEnvironmentUrl = useConfig((s) => s.customEnvironmentUrl);
   const hallVisible = useConfig((s) => s.hallVisible);
   const hdrIntensity = useConfig((s) => s.hdrIntensity);
   const hdrBgIntensity = useConfig((s) => s.hdrBgIntensity);
@@ -206,9 +208,14 @@ export function Scene() {
   return (
     <>
       <Suspense fallback={<ambientLight intensity={0.6} />}>
+        {/* HDR pipeline runs ALWAYS — it's what lights the room (IBL).
+            When a customEnvironmentUrl is set, we keep the .hdr for
+            lighting but hide its visible background and overlay a
+            skydome with the AI image on top. That way the room stays
+            lit correctly while the user sees the brand-relevant view. */}
         <Environment
           files={asset(`/hdri/${hdriIdOverride || HDRI_BY_MODE[hallMode]}.hdr`)}
-          background
+          background={!customEnvironmentUrl}
           // Sliders for blur + rotation now drive these directly. Default
           // hdrBlur is 0.05 (almost sharp); warehouse mode adds a baseline
           // blur of 0.5 on top so the hall geometry stays primary.
@@ -219,6 +226,12 @@ export function Scene() {
           environmentIntensity={hdrIntensity * (isDark ? 1.2 : 1.4)}
         />
       </Suspense>
+
+      {customEnvironmentUrl && (
+        <Suspense fallback={null}>
+          <CustomEnvironmentSkydome url={customEnvironmentUrl} rotationDeg={hdrRotationDeg} />
+        </Suspense>
+      )}
 
       {/* Hall glb context — sits AROUND the stand for scale + context. */}
       {hallVisible && (
@@ -517,13 +530,23 @@ export function Scene() {
               const SOFA_HEIGHT = 1.0;
               // i=0 → right wall, i=1 → left wall.
               const side = i === 0 ? 1 : -1;
-              const sofaX = side * (widthM / 2 - 0.55);  // centre 0.55m off the wall
-              const sofaZ = 0;                            // centred along Z
-              const rotY = side === 1 ? -Math.PI / 2 : Math.PI / 2; // face inward
-              // Nespresso counter — 0.6m wide, sat on the BACK-wall side
-              // of the sofa (z < 0). Stays on the same side as the sofa.
-              const counterX = side * (widthM / 2 - 0.45);
-              const counterZ = -1.3;
+              // SOFA — long axis ALONG the side wall (parallel to window),
+              // back to the window. Rotated 90° CW from the previous
+              // "facing inward" orientation:
+              //   right wall (side=+1): rotY = -π   (long axis along X+Z)
+              //   left wall  (side=-1): rotY =  0   (long axis along X-Z)
+              // Sat right up against the window (0.45m off the wall) and
+              // SHIFTED FORWARD along Z so it sits in the front half of
+              // the room — leaves the back half free for the nespresso
+              // counter without overlap.
+              const sofaX = side * (widthM / 2 - 0.45);
+              const sofaZ = depthM * 0.20;
+              const rotY = side === 1 ? -Math.PI : 0;
+              // Counter — closer to the back wall (toward video wall),
+              // separated from the sofa by ~1.4m so they don't crowd.
+              const counterX = side * (widthM / 2 - 0.30);
+              const counterZ = -depthM * 0.30;
+              const counterRotY = side === 1 ? -Math.PI / 2 : Math.PI / 2;
               return (
                 <group key={`sofa-${i}`}>
                   <Suspense fallback={null}>
@@ -537,7 +560,7 @@ export function Scene() {
                   <Suspense fallback={null}>
                     <NespressoCounter
                       position={[counterX, platformHeightM, counterZ]}
-                      rotationY={rotY}
+                      rotationY={counterRotY}
                       accentHex={kit.palette.accent}
                     />
                   </Suspense>
@@ -1470,12 +1493,26 @@ function WallPanelPlaster({ w, h, d, pos, color }: { w: number; h: number; d: nu
  *  isn't crushed by saturated brand colours). */
 function WallPanelQuadrated({ w, h, d, pos, color }: { w: number; h: number; d: number; pos: [number, number, number]; color: string }) {
   const { map, normalMap, roughnessMap, aoMap } = useQuadratedWallTextures();
-  // Lerp the brand colour 60% toward white so the texture's mid-tones
-  // survive the multiply — otherwise dark brand colours (Rolex green,
-  // Apple near-black) crush the relief to a flat dark surface.
+  // ADAPTIVE TINT — the panelling texture's diffuse map is mid-grey, so
+  // multiplying it by the brand colour gives a darker result than the
+  // user picked. Previously we lerped the brand colour 60% toward white
+  // to compensate, but that washed dark brand colours (Apple charcoal,
+  // Rolex green) into pastels — the user (correctly) reported their
+  // brand colour wasn't applied to the door wall.
+  //
+  // New behaviour: lerp toward white ONLY by enough to compensate for
+  // the map's average luminance (~0.55). For a dark brand colour we lerp
+  // ~25% toward white (just enough to keep the relief visible); for a
+  // light brand colour we lerp <10% (it would otherwise blow out). Light-
+  // adaptive so the picked hex actually reads on the wall.
   const tint = useMemo(() => {
     const c = new THREE.Color(color);
-    return c.lerp(new THREE.Color("#ffffff"), 0.6).getStyle();
+    // Perceived luminance. For a near-black colour we need MORE lift to
+    // keep the texture's mid-tones visible; for a near-white colour we
+    // need almost no lift.
+    const lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    const lift = THREE.MathUtils.clamp(0.35 - lum * 0.3, 0.05, 0.35);
+    return c.clone().lerp(new THREE.Color("#ffffff"), lift).getStyle();
   }, [color]);
   return (
     <group userData={{ kind: "walls" }}>
@@ -1953,19 +1990,34 @@ function StandingDisplays({
 
 function BackWallArtworks({ urls, widthM, depthM, wallHeightM, platformHeightM, videoWallWidthM }: {
   urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
-  /** Width of the centred video wall — artwork columns flow AROUND it
-   *  (left + right side strips). 0 = no video wall, artwork spans the
-   *  whole back wall. */
+  /** UNUSED — kept for back-compat. The actual rendered video-wall
+   *  container width is recomputed inline below (matches LedWall's
+   *  active-first formula). Previously this came from the user's
+   *  ledWallWidthM slider (default 18.26 m), which was way larger than
+   *  the actually-rendered container — making centreReserve enormous,
+   *  pushing artwork columns off both sides of the room. */
   videoWallWidthM: number;
 }) {
+  void videoWallWidthM;
   const active = (urls ?? []).filter((u): u is string => !!u);
   // Mount just in front of the back wall's inner face (wall thickness
   // 0.08m, plus a 6mm proud offset so we don't z-fight).
   const z = -depthM / 2 + 0.08 + 0.006;
   const margin = 0.25;                       // wall-edge breathing room
-  // Centre gap reserves room for the video wall (with a small bezel
-  // buffer either side so the artworks don't touch the LED panel).
-  const centreReserve = videoWallWidthM > 0 ? videoWallWidthM + 0.4 : 0;
+  // Recompute the video-wall container width the same way LedWall does
+  // — active-first: active height = 90% wallH × 16:9, container = active
+  // + 5% wallH bezel each side, shrunk to fit `widthM − 0.4 m`.
+  const bezelM = wallHeightM * 0.05;
+  let actW = (wallHeightM * 0.9) * (16 / 9);
+  let containerW = actW + 2 * bezelM;
+  const maxContainerW = widthM - 0.4;
+  if (containerW > maxContainerW) {
+    containerW = Math.max(1.6, maxContainerW);
+    actW = containerW - 2 * bezelM;
+  }
+  // Centre gap reserves room for the video wall plus a small breathing
+  // buffer either side so the artworks don't touch the bezel.
+  const centreReserve = containerW + 0.4;
   const colH = wallHeightM - margin * 2;
   const cy = platformHeightM + margin + colH / 2;
   // Glossy black backplane filling the whole back wall — sits behind
@@ -1979,38 +2031,42 @@ function BackWallArtworks({ urls, widthM, depthM, wallHeightM, platformHeightM, 
     </mesh>
   );
   if (active.length === 0) return bg;
-  // Compute side-strip widths. If videoWallWidth is 0 or there's no
-  // centre reserve, artworks span the entire wall.
-  const sideStripW = (widthM - centreReserve - margin * 2) / 2;
-  // Distribute artworks between left and right strips. Even split:
-  // - 1 artwork: right side, centred in its strip
-  // - 2: one each side, centred in their strip
-  // - 3: 1 left + 2 right (split bigger half)
-  // - 4: 2 each side
+  // Side-strip width per side (left of container; right of container).
+  // Floor at 0 — if the container fills the wall, just skip artworks.
+  const sideStripW = Math.max(0, (widthM - centreReserve - margin * 2) / 2);
+  if (sideStripW < 0.4) return bg;             // no usable strip → no artworks
   const leftCount  = Math.floor(active.length / 2);
   const rightCount = active.length - leftCount;
-  const stripsW = sideStripW;
   const gap = 0.15;
-  // If no video wall, fall back to full-width even distribution.
-  const fullSpan = centreReserve === 0;
-  const colW = fullSpan
-    ? (widthM - margin * 2 - gap * (active.length - 1)) / active.length
-    : (stripsW - gap * Math.max(0, Math.max(leftCount, rightCount) - 1)) / Math.max(1, Math.max(leftCount, rightCount));
+  // Column width fits as many panels as needed into the strip width.
+  // Clamped so a single very-wide panel doesn't blow out of the strip.
+  const colW = Math.min(
+    sideStripW,
+    (sideStripW - gap * Math.max(0, Math.max(leftCount, rightCount) - 1)) / Math.max(1, Math.max(leftCount, rightCount)),
+  );
+  // Safety check — if colW is < 0.2 m the artwork would be invisible.
+  // Skip rather than render slivers.
+  if (colW < 0.2) return bg;
   return (
     <>
       {bg}
       {active.map((url, i) => {
-        let cx: number;
-        if (fullSpan) {
-          cx = -widthM / 2 + margin + colW / 2 + i * (colW + gap);
-        } else {
-          const isLeft = i < leftCount;
-          const local = isLeft ? i : i - leftCount;
-          const count = isLeft ? leftCount : rightCount;
-          const stripCx = isLeft ? (-centreReserve / 2 - stripsW / 2) : (centreReserve / 2 + stripsW / 2);
-          const stripStartX = stripCx - (count * colW + (count - 1) * gap) / 2;
-          cx = stripStartX + colW / 2 + local * (colW + gap);
-        }
+        const isLeft = i < leftCount;
+        const local = isLeft ? i : i - leftCount;
+        const count = isLeft ? leftCount : rightCount;
+        // Strip centre — sits halfway between the video wall edge and the
+        // room corner.
+        const stripCx = isLeft ? (-centreReserve / 2 - sideStripW / 2) : (centreReserve / 2 + sideStripW / 2);
+        // Distribute `count` columns across the strip, gap-separated.
+        const stripStartX = stripCx - (count * colW + (count - 1) * gap) / 2;
+        let cx = stripStartX + colW / 2 + local * (colW + gap);
+        // CLAMP — final defence. The column edge must not poke past the
+        // side wall. With a 0.25 m wall-edge margin we keep the column's
+        // far edge ≥ 0.25 m from the wall.
+        const halfCol = colW / 2;
+        const minCx = -widthM / 2 + margin + halfCol;
+        const maxCx =  widthM / 2 - margin - halfCol;
+        cx = Math.max(minCx, Math.min(maxCx, cx));
         return (
           <Suspense key={i} fallback={null}>
             <BackWallArtwork
@@ -2066,41 +2122,98 @@ function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallH
   count: number; urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; kit: BrandKit;
 }) {
   if (count <= 0) return null;
-  // Free-standing portrait boards stood in the FOUR CORNERS, each rotated
-  // 45° toward the centre of the room. Twice as tall as before (3m vs
-  // the original 1.5m) so they read as gallery panels, not picture
-  // frames. Aspect ratio is respected per-board via the Posterboard's
-  // own image-load logic (see Posterboard component).
+  // POSTERS LIVE ON THE DOOR-ADJACENT WALL ONLY.
+  // Back-wall flanks dropped — they kept getting squished tiny because
+  // the video wall container takes up most of the back wall. Now every
+  // poster sits on the front (door) wall, with floor-standing 45°
+  // greeters as overflow:
+  //   Slot 1+2 → front wall, INNER flanks (just beside the door, nearer
+  //              the centre — primary visible-from-table positions)
+  //   Slot 3+4 → front wall, OUTER flanks (further toward the corners,
+  //              secondary positions)
+  //   Slot 5+6 → 45° angled floor-standing greeters either side of the
+  //              door, inside the room, so they greet visitors
   //
-  // Corner mapping for the first four slots: back-left, back-right,
-  // front-left, front-right. Each posterboard sits ~0.5m clear of both
-  // walls (along the diagonal into the corner) and rotates 45° so its
-  // face presents toward the table.
-  const cornerInsetX = widthM / 2 - 0.7;
-  const cornerInsetZ = depthM / 2 - 0.7;
-  const targetH = 3.0;
-  // Cap the height so it never punches through the ceiling.
-  const h = Math.min(targetH, wallHeightM - 0.2);
-  const cy = platformHeightM + h / 2 + 0.05;
-  // Corner positions + their inward-facing rotations (rotation-y around
-  // origin makes 0 face +Z, so back corners need to face +Z+towards-x
-  // direction, front corners need -Z toward x direction).
-  const corners: { pos: [number, number, number]; rot: number }[] = [
-    { pos: [-cornerInsetX, cy, -cornerInsetZ], rot:  Math.PI / 4 },        //  back-left → face +x +z (toward room centre)
-    { pos: [ cornerInsetX, cy, -cornerInsetZ], rot: -Math.PI / 4 },        //  back-right
-    { pos: [-cornerInsetX, cy,  cornerInsetZ], rot:  Math.PI * 3 / 4 },    //  front-left
-    { pos: [ cornerInsetX, cy,  cornerInsetZ], rot: -Math.PI * 3 / 4 },    //  front-right
-  ];
-  const slots = corners.slice(0, count);
+  // Poster height scales to the available wall strip so each poster
+  // gets ~equal space — no more "squished tiny" panels.
+  const wallH = wallHeightM;
+  const targetH = Math.min(3.0, wallH - 0.4);
+  // Front wall — door clearance + side-wall margins define usable strip.
+  const doorClearM = 2.2;
+  // Per-side strip width available for posters on the door wall.
+  const sideStripW = Math.max(0, (widthM - doorClearM) / 2 - 0.4);
+  // If the wall is too narrow for any front-wall posters, fall through
+  // to greeters only.
+  const wallPosterCount = sideStripW > 0.6 ? Math.min(count, 4) : 0;
+  // How many posters per side? Even split, left-heavy on odd counts.
+  const wallLeft = Math.ceil(wallPosterCount / 2);
+  const wallRight = wallPosterCount - wallLeft;
+  // Poster width per side, gap-separated. Height scales so the poster
+  // stays portrait (2:3) and the available strip is used.
+  const gap = 0.18;
+  const widthPerSide = (side: number) =>
+    side > 0
+      ? Math.min(targetH * (2 / 3), (sideStripW - gap * (side - 1)) / side)
+      : 0;
+  const leftFrameW  = widthPerSide(wallLeft);
+  const rightFrameW = widthPerSide(wallRight);
+  // Poster HEIGHT — re-derive from frameW (2:3) so portrait ratio holds.
+  const leftFrameH  = leftFrameW  > 0 ? Math.min(targetH, leftFrameW  * 1.5) : targetH;
+  const rightFrameH = rightFrameW > 0 ? Math.min(targetH, rightFrameW * 1.5) : targetH;
+  // Y centre — base sits ~0.1m above floor for breathing room.
+  const cyFor = (h: number) => platformHeightM + h / 2 + 0.1;
+  // Inset from the wall plane — sit ~0.05 proud of the inner face.
+  const frontZ =  depthM / 2 - 0.08 - 0.05;
+  // Greeters — drop ~1.1 m into the room from the door wall, angled
+  // 45° inward so they greet visitors as the door swings open. Width-
+  // aware so they don't push into the side wall.
+  const greeterH = targetH;
+  const greeterFrameW = greeterH * (2 / 3);
+  const greeterCy = cyFor(greeterH);
+  const greeterZ = depthM / 2 - 1.1;
+  const greeterX = Math.min(doorClearM / 2 + 0.4, widthM / 2 - greeterFrameW / 2 - 0.4);
+
+  // Build the slot list in PRIORITY ORDER.
+  const slots: { pos: [number, number, number]; rot: number; mounted: boolean; w: number; h: number }[] = [];
+  // Helper to push a front-wall poster at a specific x.
+  const pushFrontPoster = (x: number, fw: number, fh: number) => {
+    slots.push({ pos: [x, cyFor(fh), frontZ], rot: Math.PI, mounted: true, w: fw, h: fh });
+  };
+  // Distribute LEFT-side posters across the left strip.
+  if (wallLeft > 0) {
+    const stripCx = -(doorClearM / 2 + sideStripW / 2);     // centre of left strip
+    const totalW = wallLeft * leftFrameW + (wallLeft - 1) * gap;
+    const startX = stripCx - totalW / 2 + leftFrameW / 2;
+    for (let j = 0; j < wallLeft; j++) {
+      const x = startX + j * (leftFrameW + gap);
+      pushFrontPoster(x, leftFrameW, leftFrameH);
+    }
+  }
+  // Same for RIGHT side.
+  if (wallRight > 0) {
+    const stripCx = (doorClearM / 2 + sideStripW / 2);
+    const totalW = wallRight * rightFrameW + (wallRight - 1) * gap;
+    const startX = stripCx - totalW / 2 + rightFrameW / 2;
+    for (let j = 0; j < wallRight; j++) {
+      const x = startX + j * (rightFrameW + gap);
+      pushFrontPoster(x, rightFrameW, rightFrameH);
+    }
+  }
+  // Greeters — always available for overflow.
+  slots.push({ pos: [-greeterX, greeterCy, greeterZ], rot: -Math.PI * 3 / 4, mounted: false, w: greeterFrameW, h: greeterH });
+  slots.push({ pos: [ greeterX, greeterCy, greeterZ], rot:  Math.PI * 3 / 4, mounted: false, w: greeterFrameW, h: greeterH });
+
+  const chosen = slots.slice(0, count);
   return (
     <>
-      {slots.map((s, i) => (
+      {chosen.map((s, i) => (
         <Suspense key={i} fallback={null}>
           <Posterboard
             position={s.pos}
             rotationY={s.rot}
-            heightM={h}
+            heightM={s.h}
             url={urls[i] ?? kit.logos.primary.rasterUrl ?? ""}
+            mounted={s.mounted}
           />
         </Suspense>
       ))}
@@ -2120,8 +2233,8 @@ function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallH
 //   2. inner backing panel (plain board colour — the bottom margin
 //      strip shows this through the alpha border of the image)
 //   3. image plane fitted into the upper portion of the inner panel
-function Posterboard({ position, rotationY, heightM, url }: {
-  position: [number, number, number]; rotationY: number; heightM: number; url: string;
+function Posterboard({ position, rotationY, heightM, url, mounted = false }: {
+  position: [number, number, number]; rotationY: number; heightM: number; url: string; mounted?: boolean;
 }) {
   const tex = useWallGraphic(url);
   // Fixed frame width — portrait 2:3 ratio. Doesn't change with image.
@@ -2170,11 +2283,14 @@ function Posterboard({ position, rotationY, heightM, url }: {
         <planeGeometry args={[innerW, innerH]} />
         <meshStandardMaterial color={backingColor} roughness={0.7} toneMapped={false} />
       </mesh>
-      {/* Foot plate so the board reads as standing, not floating. */}
-      <mesh position={[0, -heightM / 2 - 0.03, 0]} castShadow receiveShadow>
-        <boxGeometry args={[Math.max(0.3, frameW * 0.6), 0.04, 0.18]} />
-        <meshPhysicalMaterial color="#0a0c10" roughness={0.45} metalness={0.55} />
-      </mesh>
+      {/* Foot plate — only for free-standing boards. Wall-mounted ones
+          hang on the wall directly so no foot is needed. */}
+      {!mounted && (
+        <mesh position={[0, -heightM / 2 - 0.03, 0]} castShadow receiveShadow>
+          <boxGeometry args={[Math.max(0.3, frameW * 0.6), 0.04, 0.18]} />
+          <meshPhysicalMaterial color="#0a0c10" roughness={0.45} metalness={0.55} />
+        </mesh>
+      )}
       {/* Image — anchored in the upper portion of the inner panel. The
           albedo issue last round was `<meshStandardMaterial map={tex}
           toneMapped />` — toneMapped defaulted true so the texture got
@@ -2265,8 +2381,12 @@ function NespressoMachine({ position }: { position: [number, number, number] }) 
 function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
   count: number; widthM: number; depthM: number; platformHeightM: number; kit: BrandKit;
 }) {
-  const apply = useConfig((s) => s.apply);
   const cubeAssets = useConfig((s) => s.cubeAssets);
+  // Opening the picker just records the click position into a tiny
+  // separate store; the modal itself lives OUTSIDE the canvas (rendered
+  // by CanvasShell) so it reads as a flat 2D DOM menu, not a webgl-
+  // scaled in-scene widget.
+  const openPicker = useCubePicker((s) => s.openAt);
   if (count <= 0) return null;
   const size = 0.6;
   const halfW = widthM / 2 - 1.4;
@@ -2279,30 +2399,6 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
     slots.push([sx * halfW, platformHeightM + size / 2, sz * halfD]);
   }
   const colour = kit.palette.accent;
-  const onUpload = (slot: number, file: File) => {
-    // eslint-disable-next-line no-console
-    console.info(`[CubePlinths] upload received for slot ${slot + 1}`, file.name, `${(file.size / 1024).toFixed(1)} KB`);
-    const r = new FileReader();
-    r.onload = () => {
-      if (typeof r.result !== "string") {
-        // eslint-disable-next-line no-console
-        console.warn("[CubePlinths] FileReader returned non-string");
-        return;
-      }
-      const next = [null, null, null, null] as (typeof cubeAssets);
-      const cur = cubeAssets ?? [];
-      for (let j = 0; j < 4; j++) next[j] = cur[j] ?? null;
-      next[slot] = { url: r.result, kind: "uploaded" };
-      // eslint-disable-next-line no-console
-      console.info(`[CubePlinths] dispatching layout.setCubeAssets for slot ${slot + 1} (data URL ${r.result.length} chars)`);
-      apply({ type: "layout.setCubeAssets", assets: next });
-    };
-    r.onerror = (e) => {
-      // eslint-disable-next-line no-console
-      console.error("[CubePlinths] FileReader error", e);
-    };
-    r.readAsDataURL(file);
-  };
   return (
     <>
       {slots.map((pos, i) => (
@@ -2317,12 +2413,13 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
               <CubeAsset url={cubeAssets[i]!.url} topY={size / 2 + 0.01} />
             </Suspense>
           )}
-          {/* Hotspot — floats above the cube; click opens a file picker
-              for a GLB. Drei's <Html> portals to the DOM. Critical:
-              `wrapperClass` + `zIndexRange` keep it above the canvas
-              event layer, and stopPropagation on the label prevents
-              OrbitControls from eating the click before the file
-              dialog opens. */}
+          {/* "+" hotspot — a small drei <Html> marker that scales with
+              camera distance. Clicking it RECORDS the click's screen
+              coords into the cube-picker store; the actual menu is
+              rendered by <CubePickerModal /> as a DOM portal outside
+              the canvas, positioned at those coords. That way the menu
+              reads as a regular flat editor menu, not a 3D-positioned
+              widget that grows/shrinks with the camera. */}
           <Html
             position={[0, size + 0.4, 0]}
             center
@@ -2330,10 +2427,15 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
             zIndexRange={[100, 0]}
             style={{ pointerEvents: "auto" }}
           >
-            <label
-              title="Upload a 3D object (.glb) for this plinth"
+            <button
+              type="button"
+              data-no-long-press
+              title={cubeAssets?.[i] ? "Change object" : "Add 3D object"}
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPicker(i, e.clientX, e.clientY);
+              }}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -2341,7 +2443,7 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
                 width: 36,
                 height: 36,
                 borderRadius: 18,
-                background: cubeAssets?.[i] ? "rgba(20,22,28,0.8)" : colour,
+                background: cubeAssets?.[i] ? "rgba(20,22,28,0.85)" : colour,
                 color: "#fff",
                 cursor: "pointer",
                 fontSize: 18,
@@ -2351,24 +2453,10 @@ function CubePlinths({ count, widthM, depthM, platformHeightM, kit }: {
                 userSelect: "none",
                 pointerEvents: "auto",
               }}
-              aria-label={`Upload 3D object for cube ${i + 1}`}
+              aria-label={`Pick 3D object for cube ${i + 1}`}
             >
               {cubeAssets?.[i] ? "↻" : "＋"}
-              <input
-                type="file"
-                accept=".glb,model/gltf-binary,application/octet-stream"
-                style={{ display: "none" }}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onUpload(i, f);
-                  else {
-                    // eslint-disable-next-line no-console
-                    console.warn("[CubePlinths] file input fired but no file selected");
-                  }
-                  e.currentTarget.value = "";
-                }}
-              />
-            </label>
+            </button>
           </Html>
         </group>
       ))}
@@ -2437,7 +2525,68 @@ function CubeAsset({ url, topY }: { url: string; topY: number }) {
     return () => { cancelled = true; };
   }, [url]);
   if (!obj) return null;
-  return <primitive object={obj} position={[0, topY, 0]} />;
+  // Wrap in a group so the topY offset is applied AFTER our internal
+  // base-pinning of the GLB. Previously we set `scene.position.sub(...)`
+  // inside the effect to centre + bottom-pin, then rendered the scene as
+  // `<primitive object={obj} position={[0, topY, 0]} />` — but R3F sets
+  // the primitive's `position` directly on the object, wiping out the
+  // offset we computed. The GLB ended up centred at topY with parts
+  // BELOW the cube top, which the user (correctly) reported as "low on
+  // the plinth". Group + primitive sequences the transforms: the
+  // primitive keeps its self-offset, the group raises the whole thing
+  // to topY.
+  return (
+    <group position={[0, topY, 0]}>
+      <primitive object={obj} />
+    </group>
+  );
+}
+
+// Giant inverted-sphere skydome that wraps an AI-generated LDR image
+// as the visible environment. NOT used for lighting — the .hdr in the
+// drei <Environment> still drives IBL. This is purely visual: gives the
+// scene a brand-relevant backdrop without the cost of a full HDR pipeline.
+//
+// The image is square (fal.ai default), not equirectangular, so we use
+// a sphere geometry with `mapping = EquirectangularReflectionMapping`
+// then scale to a small azimuth band — the visible portion through
+// windows is small, and the user accepts (per the wizard copy) that
+// this is indicative, not panoramic-accurate.
+function CustomEnvironmentSkydome({ url, rotationDeg }: { url: string; rotationDeg: number }) {
+  const [tex, setTex] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!url) { setTex(null); return; }
+    let cancelled = false;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      url,
+      (t) => {
+        if (cancelled) return;
+        t.mapping = THREE.EquirectangularReflectionMapping;
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.needsUpdate = true;
+        setTex(t);
+      },
+      undefined,
+      (e) => {
+        // eslint-disable-next-line no-console
+        console.error("[CustomEnvironmentSkydome] failed to load", e);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [url]);
+  if (!tex) return null;
+  // Inverted sphere — material rendered on the inside (BackSide). Big
+  // enough to clear the room + hall geometry but inside the camera's
+  // far plane (200). Rotation lets the user spin the backdrop with the
+  // existing HDR rotation slider so it pairs naturally with the rest.
+  return (
+    <mesh rotation={[0, (rotationDeg * Math.PI) / 180, 0]} renderOrder={-1}>
+      <sphereGeometry args={[120, 64, 32]} />
+      <meshBasicMaterial map={tex} side={THREE.BackSide} toneMapped={false} depthWrite={false} />
+    </mesh>
+  );
 }
 
 function WallExhibitionGraphics({
@@ -2573,28 +2722,49 @@ function LedWall({
   kit: BrandKit; backWallZ: number; widthM: number; heightM: number;
   roomWidthM: number; roomHeightM: number; platformHeightM: number; brightness: number;
 }) {
-  // 16:9 lock + 90% wall-height cap. The wall assembly is rendered at
-  // a strict 16:9 aspect ratio (a cinema-feel video wall, not a strip).
-  // Height is capped at 90% of the wall height so it never crowds the
-  // ceiling; width is derived from height × 16/9 and clamped to room
-  // width − 0.5m margin. Whatever the user dialled in via the sliders
-  // is treated as a SUGGESTED height; we enforce the lock here so the
-  // assembly is always proportionate.
-  const maxH = roomHeightM * 0.9;
-  const maxW = roomWidthM - 0.5;
-  // Honour the user's requested height (heightM) but clamp + lock 16:9.
-  let h169 = Math.min(heightM, maxH);
-  let w169 = h169 * (16 / 9);
-  if (w169 > maxW) { w169 = maxW; h169 = w169 * (9 / 16); }
+  // VIDEO WALL SIZING — ACTIVE-FIRST.
+  // Spec, in order of priority:
+  //   1. Active screen height = 90% of wall height (a real cinematic slab)
+  //   2. Active is 16:9
+  //   3. Container = active + 5% wall-height bezel on every side
+  //   4. If active 16:9 wouldn't fit (very narrow rooms), shrink active
+  //      keeping 16:9. Bezel margin stays proportional to wall height.
+  //
+  // Previously the container was independently 16:9 of the wall height,
+  // which made it 8 m wide on a 4.5 m wall — too wide, pushing posters
+  // into the side walls. Active-first means the container is whatever
+  // size the active needs + bezel, NOT a 16:9 slab.
+  const wallH = roomHeightM;
+  const bezelM = wallH * 0.05;               // 5% of wall height per bezel side
+  // Active dims — locked to spec.
+  let finalActiveH = wallH * 0.9;
+  let finalActiveW = finalActiveH * (16 / 9);
+  // Container fits the active + bezel snugly.
+  let containerW = finalActiveW + 2 * bezelM;
+  let containerH = finalActiveH + 2 * bezelM;
+  // Don't let the container poke past the side walls. Leave a tiny 0.2 m
+  // safety margin so the container doesn't visibly graze the corner
+  // joinery — posters do their own collision check downstream.
+  const maxContainerW = roomWidthM - 0.4;
+  if (containerW > maxContainerW) {
+    containerW = Math.max(1.6, maxContainerW);
+    finalActiveW = containerW - 2 * bezelM;
+    finalActiveH = finalActiveW * (9 / 16);
+    containerH = finalActiveH + 2 * bezelM;
+  }
   const bezelD = 0.16;                       // slightly deeper so the wall reads as extruded
+  // `heightM` (the user-driven slider) is ignored here — we lock the
+  // sizing so the wall always reads proportionally. Honouring it would
+  // re-introduce the "too small" complaint when the slider was dialled
+  // low for the previous heuristic.
+  void heightM;
   const cols = useConfig((s) => s.videoMatrixCols);
   const rows = useConfig((s) => s.videoMatrixRows);
   const cells = useConfig((s) => s.videoMatrixCells);
   // Sit just in front of the back wall's inner face (wall thickness 0.08),
-  // proud of it by the bezel's half-depth. Anchored ~0.25m off the floor so
-  // a full-span wall reaches near to the floor.
+  // proud of it by the bezel's half-depth. Centred vertically on the wall.
   const z = backWallZ + 0.08 + bezelD / 2 + 0.015;
-  const cy = platformHeightM + 0.25 + h169 / 2;
+  const cy = platformHeightM + containerH / 2;
   // The matrix uses a "shared iframe" treatment: when EVERY cell is default
   // and the kit has a youtubeId, one big iframe spans the whole wall (the
   // video crops top+bottom to fit). Any per-cell override falls back to
@@ -2603,14 +2773,29 @@ function LedWall({
   const youtubeId = kit.scene?.youtubeId ?? "";
   const showSharedVideo = allDefault && !!youtubeId;
   const gutter = cols * rows > 1 ? 0.025 : 0;
-  const cellW = (w169 - gutter * (cols + 1)) / cols;
-  const cellH = (h169 - gutter * (rows + 1)) / rows;
+  // Cells distribute across the ACTIVE area (not the container) so the
+  // bezel stays uniform around the matrix.
+  const cellW = (finalActiveW - gutter * (cols + 1)) / cols;
+  const cellH = (finalActiveH - gutter * (rows + 1)) / rows;
+  // For downstream code that still refers to w169/h169, alias the active
+  // area dimensions — every existing consumer expects the EMISSIVE plane,
+  // which is now the active area, not the container.
+  const w169 = finalActiveW;
+  const h169 = finalActiveH;
   return (
     <group position={[0, cy, z]}>
-      {/* Outer dark bezel frame */}
-      <mesh receiveShadow castShadow>
-        <boxGeometry args={[w169, h169, bezelD]} />
-        <meshPhysicalMaterial color="#0a0c10" roughness={0.4} metalness={0.6} clearcoat={0.3} />
+      {/* Outer reflective container — extends beyond the active area by
+          the bezel margin on every side. Sits behind the emissive plane
+          so the active screen visibly floats on top of it. */}
+      <mesh receiveShadow castShadow position={[0, 0, -0.002]}>
+        <boxGeometry args={[containerW, containerH, bezelD]} />
+        <meshPhysicalMaterial color="#0a0c10" roughness={0.35} metalness={0.7} clearcoat={0.5} clearcoatRoughness={0.3} />
+      </mesh>
+      {/* Inner active backplane — the black behind the cells. Slightly
+          proud of the container so the bezel reads as a frame around it. */}
+      <mesh receiveShadow position={[0, 0, bezelD / 2 + 0.001]}>
+        <boxGeometry args={[finalActiveW, finalActiveH, 0.01]} />
+        <meshStandardMaterial color="#050608" roughness={0.9} metalness={0.0} />
       </mesh>
 
       {/* Shared video — one iframe spanning the whole wall, with the

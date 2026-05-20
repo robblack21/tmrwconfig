@@ -33,7 +33,7 @@ export type ConfigState = {
   pendantShape: PendantShape;
   pendantWidthM: number;        // 1.0..8.0
   pendantDepthM: number;        // 1.0..6.0
-  pendantHeightM: number;       // 0.3..1.0 (vertical thickness)
+  pendantHeightM: number;       // 0.3..3.5 (vertical thickness — generous so brand-room pendants read sculpted not slab-like)
   pendantYOffsetM: number;      // -1.5..+1.5 — moves pendant up/down from default (which is trussTop - 1.2)
   pendantRotationDeg: number;   // 0..90 — applied as rotation-Y on the pendant group (45° → diamond)
   pendantRingVertical: boolean; // ring shape: true = stands vertically (faces camera), false = horizontal halo
@@ -78,6 +78,11 @@ export type ConfigState = {
   // scene
   hallMode: HallMode;
   hdriId: string;                   // explicit selection (empty = auto from hallMode)
+  /** AI-generated environment image URL (LDR, not true HDR). When set,
+   *  the scene wraps it as a giant inverted-sphere skydome instead of
+   *  using the .hdr in `hdriId`. The user trades real lighting for an
+   *  on-demand brand-relevant backdrop. Null = use the .hdr pipeline. */
+  customEnvironmentUrl: string | null;
   hallVisible: boolean;             // toggle the 3D hall context glb
   hdrIntensity: number;             // 0..2 — env-lighting multiplier
   hdrBgIntensity: number;           // 0..2 — visible-background multiplier
@@ -125,7 +130,7 @@ export type ConfigState = {
    *  the single full-bleed `kit.scene.wallGraphic`. */
   heroArtworkUrls: (string | null)[];
   cubeCount: number;                 // 0..4 — centre-of-room cube plinths with upload/generate hotspots
-  cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
+  cubeAssets: ({ url: string; kind: "uploaded" | "generated" | "preset"; label?: string } | null)[];
   platformHeightM: number;           // 0.10..0.30 — raised platform thickness
   cameraFov: number;                 // 20..90
   cameraPreset: string;              // last requested preset id ('' = no command)
@@ -218,7 +223,9 @@ export const useConfig = create<ConfigState>((set, get) => ({
   // ring / squircle silhouettes via the Pendant shape picker.
   pendantWidthM: 3.0,
   pendantDepthM: 2.4,
-  pendantHeightM: 0.2,
+  // Pendant default vertical thickness — 3× the previous "tall" default
+  // so it reads as a real sculpted ceiling fixture, not a flat tile.
+  pendantHeightM: 1.8,
   pendantYOffsetM: 0,
   pendantRotationDeg: 0,
   pendantRingVertical: false,
@@ -261,6 +268,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   videoMatrixCells: [],
   hallMode: "warehouse.dark",
   hdriId: "",
+  customEnvironmentUrl: null,
   hallVisible: true,
   hdrIntensity: 0.20,
   hdrBgIntensity: 0.20,
@@ -286,7 +294,9 @@ export const useConfig = create<ConfigState>((set, get) => ({
   logoOverrideAspects: {},
   plantCount: 3,
   logoGlow: 2.1,
-  logoExtrusionM: 0.5,
+  // Default extrusion is generous so the brand mark reads as a sculpted
+  // sign, not a flat decal. User can dial it down for subtler kits.
+  logoExtrusionM: 0.8,
   logoEmissive: 1.2,
   sofaCount: 0,
   coffeeTableVariant: "avarta",
@@ -369,7 +379,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "pendant.setHeight": {
-        set({ pendantHeightM: clamp(intent.value, 0.3, 1.0) });
+        set({ pendantHeightM: clamp(intent.value, 0.3, 3.5) });
         break;
       }
       case "pendant.setYOffset": {
@@ -591,6 +601,10 @@ export const useConfig = create<ConfigState>((set, get) => ({
         set({ hdriId: intent.hdriId });
         break;
       }
+      case "scene.setCustomEnvironment": {
+        set({ customEnvironmentUrl: intent.url });
+        break;
+      }
       case "scene.setHallVisible": {
         set({ hallVisible: intent.value });
         break;
@@ -636,7 +650,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
           wallHeightM: 5.0,
           trussTopM: 5.5,
           platformHeightM: 0.2,
-          pendantHeightM: 1.0,
+          pendantHeightM: 1.8,
           windowsEnabled: true,
           ceilingEnabled: true,
           windowSillM: 0.95,

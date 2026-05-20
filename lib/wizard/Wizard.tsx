@@ -1,8 +1,9 @@
 "use client";
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { extractDominantColours, harmonise, type HarmonyRule } from "./colour";
 import type { WizardProps, WizardResult, WizardSize, WizardDesignLine, WizardExtendedColours, WizardCustomisation, WizardEnvironment } from "./types";
+import type { PendantShape } from "@/lib/schemas";
 
 const HARMONY_RULES: { id: HarmonyRule; label: string; description: string }[] = [
   { id: "complementary",      label: "Complementary",      description: "Brand + its opposite for high contrast" },
@@ -120,6 +121,7 @@ export function Wizard({
     posterboardUrls: [null, null, null, null],
     cubeCount: 0,
     cubeAssets: [null, null, null, null],
+    pendantShape: undefined,
   });
   // Anthracite dark-mode toggle. Applies only to the wizard chrome —
   // swaps a small set of CSS vars on the wizard's own root element so
@@ -128,6 +130,14 @@ export function Wizard({
   // HDRI environment id picked in step 5. Null = keep the host's
   // current default (warehouse interior).
   const [environmentId, setEnvironmentId] = useState<string | null>(null);
+  // AI-generated environment URL — when the user types a prompt in
+  // step 5 and the fal.ai call returns, we store the URL here. The
+  // host applies it as a skydome via `scene.setCustomEnvironment`. Null
+  // = no AI environment, fall back to the HDRI pipeline.
+  const [customEnvironmentUrl, setCustomEnvironmentUrl] = useState<string | null>(null);
+  const [envPrompt, setEnvPrompt] = useState("");
+  const [envGenerating, setEnvGenerating] = useState(false);
+  const [envError, setEnvError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
 
   const sizeBase = sizes.find((s) => s.id === sizeId) ?? sizes[0]!;
@@ -150,11 +160,36 @@ export function Wizard({
   }, [sizeBase.id, sizeBase.widthM, sizeBase.depthM]);
   const designLine = designLines.find((d) => d.id === designLineId) ?? designLines[0]!;
 
+  // Active harmony rule for the swatch palette. Declared before the
+  // derive useEffect so that effect can read it. When the user picks
+  // a rule we re-derive the FULL 8-colour palette (brand row + surface
+  // row); subsequently editing the primary swatch keeps the rule active
+  // and re-derives. Editing any other swatch drops the rule.
+  const [harmony, setHarmony] = useState<HarmonyRule | null>(null);
+
   // Whenever the user edits the primary swatches, re-derive any extended
   // swatches they HAVEN'T manually touched. Keeps the second-line palette
   // tracking the first-line unless the user has explicitly overridden.
+  //
+  // Harmony-aware: when a harmony rule is active, the EXTENDED swatches
+  // come from positions [4..7] of `harmonise` (which produces a true
+  // 8-colour palette spanning every paintable surface). Without a rule,
+  // we fall back to the perceptual `deriveExtendedColours` blender.
   useEffect(() => {
-    const derived = deriveExtendedColours(colours);
+    let derived;
+    if (harmony) {
+      const eight = harmonise(colours[0], harmony);
+      const fallback = deriveExtendedColours(colours);
+      derived = {
+        floor:   eight[4],
+        table:   eight[5],
+        chairs:  eight[6],
+        cups:    fallback.cups,                 // cups stay branded white/cream
+        pendant: eight[7],
+      };
+    } else {
+      derived = deriveExtendedColours(colours);
+    }
     setExtendedColours((prev) => ({
       floor:   extendedTouched.floor   ? prev.floor   : derived.floor,
       table:   extendedTouched.table   ? prev.table   : derived.table,
@@ -162,14 +197,14 @@ export function Wizard({
       cups:    extendedTouched.cups    ? prev.cups    : derived.cups,
       pendant: extendedTouched.pendant ? prev.pendant : derived.pendant,
     }));
-  }, [colours, extendedTouched]);
+  }, [colours, extendedTouched, harmony]);
 
   // Live state pulse — fires whenever any selection changes so the host
   // can build a scene in lock-step with the user's progress.
   useEffect(() => {
     if (!onState) return;
-    onState({ step, size, wallHeightM: heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId });
-  }, [onState, step, size, heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId]);
+    onState({ step, size, wallHeightM: heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId, customEnvironmentUrl });
+  }, [onState, step, size, heightM, designLine, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, customisation, environmentId, customEnvironmentUrl]);
 
   // Auto-run colour extraction whenever the logo changes.
   useEffect(() => {
@@ -220,20 +255,29 @@ export function Wizard({
   }, []);
 
   const submit = () => {
-    const result: WizardResult = { size, wallHeightM: heightM, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, designLine, customisation, environmentId };
+    const result: WizardResult = { size, wallHeightM: heightM, logoUrl, artworkUrl, artworkUrls, colours, extendedColours, designLine, customisation, environmentId, customEnvironmentUrl };
     onComplete(result);
   };
 
   const labels = copy.coloursStep?.labels ?? ["Primary", "Carpet", "Accent", "Highlight"];
 
-  // Active harmony rule for the swatch trio. When the user picks a rule
-  // we DERIVE secondary + accent from primary; subsequently editing the
-  // primary swatch keeps the rule active and re-derives the rest.
-  // Editing secondary / accent directly drops the rule (manual mode).
-  const [harmony, setHarmony] = useState<HarmonyRule | null>(null);
   const applyHarmony = (rule: HarmonyRule) => {
     setHarmony(rule);
-    setColours(harmonise(colours[0], rule));
+    const eight = harmonise(colours[0], rule);
+    // First 4 → brand row (walls / trim / accent / highlight).
+    setColours([eight[0], eight[1], eight[2], eight[3]]);
+    // Last 4 → surface row (floor / table / chairs / pendant). Cups stays
+    // auto-derived (white/cream brand standard). All five "touched" flags
+    // get RESET because the user picked a harmony rule, which is an
+    // explicit instruction to re-derive the whole palette.
+    setExtendedColours((prev) => ({
+      floor:   eight[4],
+      table:   eight[5],
+      chairs:  eight[6],
+      cups:    prev.cups,                       // keep cup colour as-is
+      pendant: eight[7],
+    }));
+    setExtendedTouched({ floor: false, table: false, chairs: false, cups: false, pendant: false });
   };
 
   // Three layouts:
@@ -269,6 +313,9 @@ export function Wizard({
 
   return (
     <div
+      // data-wizard-overlay: tells the long-press detector to bail when
+      // the user is interacting with the wizard UI on top of the canvas.
+      data-wizard-overlay
       className={outerClass}
       style={{
         zIndex: 70,
@@ -407,6 +454,17 @@ export function Wizard({
                     accent={accent}
                   />
                 </div>
+                {/* Compact pendant shape picker. Lives on step 1 because
+                    the silhouette decision pairs naturally with the
+                    other room-form choices (W/D/H). Tiny SVG glyphs +
+                    a row of square buttons so the whole row fits in
+                    one breath inside the 420px squircle column. */}
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Pendant shape</div>
+                <PendantShapeRow
+                  value={customisation.pendantShape}
+                  onChange={(s) => setCustomisation((c) => ({ ...c, pendantShape: s }))}
+                  accent={accent}
+                />
               </StepHeader>
             )}
 
@@ -460,16 +518,32 @@ export function Wizard({
                       key={i} compact
                       label={labels[i]!}
                       value={colours[i]}
-                      onChange={(v) => setColours((c) => {
-                        const n = [...c] as [string, string, string, string];
-                        n[i] = v;
-                        // Edit primary → re-derive the trio from the
-                        // active harmony rule. Editing secondary/accent
-                        // drops the rule (manual mode).
-                        if (i === 0 && harmony) return harmonise(v, harmony);
+                      onChange={(v) => {
+                        // Edit primary while a harmony is active → re-derive
+                        // the WHOLE 8-colour palette (brand + surface). This
+                        // gives the user a "drag the primary, watch the room
+                        // recolour everything" interaction. Editing any other
+                        // swatch drops the rule (manual mode).
+                        if (i === 0 && harmony) {
+                          const eight = harmonise(v, harmony);
+                          setColours([eight[0], eight[1], eight[2], eight[3]]);
+                          setExtendedColours((prev) => ({
+                            floor:   eight[4],
+                            table:   eight[5],
+                            chairs:  eight[6],
+                            cups:    prev.cups,
+                            pendant: eight[7],
+                          }));
+                          setExtendedTouched({ floor: false, table: false, chairs: false, cups: false, pendant: false });
+                          return;
+                        }
                         if (i !== 0) setHarmony(null);
-                        return n;
-                      })}
+                        setColours((c) => {
+                          const n = [...c] as [string, string, string, string];
+                          n[i] = v;
+                          return n;
+                        });
+                      }}
                     />
                   ))}
                 </div>
@@ -511,10 +585,22 @@ export function Wizard({
                             : undefined,
                         }}
                       >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          {preview.map((c, i) => (
-                            <span key={i} className="h-[26px] w-[26px] rounded-[7px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
-                          ))}
+                        {/* Two rows of four swatches — top row = brand
+                            (walls / trim / accent / highlight), bottom
+                            row = surfaces (floor / table / chairs /
+                            pendant). The user sees every surface a
+                            harmony rule will touch before clicking. */}
+                        <div className="flex flex-col gap-1 mb-1">
+                          <div className="flex items-center gap-1">
+                            {preview.slice(0, 4).map((c, i) => (
+                              <span key={i} className="h-[20px] w-[20px] rounded-[6px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {preview.slice(4, 8).map((c, i) => (
+                              <span key={i} className="h-[20px] w-[20px] rounded-[6px]" style={{ background: c, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.18)" }} />
+                            ))}
+                          </div>
                         </div>
                         <div className="text-[0.68rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>{h.label}</div>
                       </button>
@@ -544,13 +630,75 @@ export function Wizard({
                 title={copy.environmentStep?.title ?? "Environment"}
                 subtitle={copy.environmentStep?.subtitle ?? "Pick a setting outside the room. Disables the warehouse hall behind the windows."}
               >
-                <div className="grid grid-cols-2 gap-3 mt-6">
+                {/* AI generator — top-left of the step. Click to expand a
+                    prompt input, then call fal.ai. The returned URL is
+                    applied as a skydome (LDR, not true HDR). User can
+                    clear it to fall back to a stock HDRI. */}
+                <div className="mt-5 mb-4">
+                  <EnvironmentGenerator
+                    customUrl={customEnvironmentUrl}
+                    prompt={envPrompt}
+                    setPrompt={setEnvPrompt}
+                    generating={envGenerating}
+                    error={envError}
+                    accent={accent}
+                    onGenerate={async () => {
+                      const p = envPrompt.trim();
+                      if (!p) return;
+                      setEnvGenerating(true);
+                      setEnvError(null);
+                      try {
+                        const { generateTexture } = await import("@/lib/services/falTexture");
+                        // Use flux/schnell — fast (4 steps, ~3s) and the
+                        // free-tier-friendly default. Generation quality is
+                        // plenty for a skydome backdrop. Falls back to a
+                        // helpful auth-error message if the FAL key is
+                        // missing or rejected.
+                        const r = await generateTexture(`Wide cinematic landscape view through floor-to-ceiling glass: ${p}. Photoreal, soft daylight, deep horizon, no people, no logos, no text.`, {
+                          model: "fal-ai/flux/schnell",
+                          image_size: "landscape_16_9",
+                        });
+                        if (r.ok) {
+                          setCustomEnvironmentUrl(r.url);
+                          // Clear the HDRI pick — they're mutually exclusive
+                          // and "Auto / AI" reads cleanly.
+                          setEnvironmentId(null);
+                        } else {
+                          // Translate fal.ai's machine-speak into actionable
+                          // advice. The most common failure is an invalid
+                          // key (revoked / wrong format / never valid).
+                          const lower = r.error.toLowerCase();
+                          if (lower.includes("no user found") || lower.includes("unauthorized") || lower.includes("invalid") || lower.includes("forbidden")) {
+                            setEnvError("fal.ai key rejected. Open .env.local, paste a fresh key from https://fal.ai/dashboard/keys, then rebuild.");
+                          } else {
+                            setEnvError(r.error);
+                          }
+                        }
+                      } catch (e) {
+                        setEnvError(e instanceof Error ? e.message : String(e));
+                      } finally {
+                        setEnvGenerating(false);
+                      }
+                    }}
+                    onClear={() => {
+                      setCustomEnvironmentUrl(null);
+                      setEnvError(null);
+                    }}
+                  />
+                </div>
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mb-2">Or pick a preset</div>
+                <div className="grid grid-cols-2 gap-3">
                   {environments.map((env) => (
                     <EnvironmentCard
                       key={env.id}
                       env={env}
                       active={environmentId === env.id}
-                      onClick={() => setEnvironmentId(env.id === environmentId ? null : env.id)}
+                      onClick={() => {
+                        // Picking a preset clears any AI-generated env so
+                        // the two paths don't fight for the visible backdrop.
+                        setCustomEnvironmentUrl(null);
+                        setEnvironmentId(env.id === environmentId ? null : env.id);
+                      }}
                       accent={accent}
                     />
                   ))}
@@ -966,6 +1114,98 @@ function SummaryCard({
 // cheap; the mood colours come from `env.thumb` (set per-environment in
 // the host's preset list).
 
+// AI environment generator block. Lives at the top of step 5. The
+// generation is intentionally async + non-blocking — the user can
+// switch to a stock HDRI preset while the call is in flight and the
+// returned URL just sits in state until they pick the AI card.
+function EnvironmentGenerator({
+  customUrl, prompt, setPrompt, generating, error, accent, onGenerate, onClear,
+}: {
+  customUrl: string | null;
+  prompt: string;
+  setPrompt: (s: string) => void;
+  generating: boolean;
+  error: string | null;
+  accent: string;
+  onGenerate: () => void | Promise<void>;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      className="rounded-[14px] p-3 flex flex-col gap-3"
+      style={{
+        background: `color-mix(in srgb, ${accent} 8%, var(--color-surface))`,
+        border: `1px solid color-mix(in srgb, ${accent} 28%, transparent)`,
+      }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[1rem]">✨</span>
+          <span className="text-[0.78rem]" style={{ fontVariationSettings: '"wdth" 100, "wght" 600' }}>Generate an environment</span>
+        </div>
+        {customUrl && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[0.65rem] opacity-70 hover:opacity-100 underline"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+      {/* Preview tile — appears when the user has a generated URL. Tiny
+          16:9 thumbnail so the user can confirm what's applied. */}
+      {customUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={customUrl}
+          alt="Generated environment"
+          className="w-full aspect-[16/10] object-cover rounded-[10px]"
+          style={{ border: "1px solid color-mix(in srgb, var(--color-text) 12%, transparent)" }}
+        />
+      )}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Tokyo dusk skyline through floor-to-ceiling glass…"
+          className="flex-1 px-2.5 py-1.5 rounded-[8px] text-[0.78rem] outline-none"
+          style={{
+            background: "color-mix(in srgb, var(--color-surface) 70%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--color-text) 12%, transparent)",
+            color: "var(--color-text)",
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && !generating && prompt.trim()) { void onGenerate(); } }}
+        />
+        <button
+          type="button"
+          disabled={generating || !prompt.trim()}
+          onClick={() => void onGenerate()}
+          className="px-3 py-1.5 rounded-[8px] text-[0.74rem] transition-opacity"
+          style={{
+            background: accent,
+            color: "#fff",
+            opacity: generating || !prompt.trim() ? 0.5 : 1,
+            cursor: generating || !prompt.trim() ? "not-allowed" : "pointer",
+            fontVariationSettings: '"wdth" 100, "wght" 600',
+          }}
+        >
+          {generating ? "Generating…" : customUrl ? "Regenerate" : "Generate"}
+        </button>
+      </div>
+      <div className="text-[0.6rem] opacity-60 leading-snug">
+        Wraps a generated image as a skydome — indicative only, not true HDR lighting.
+      </div>
+      {error && (
+        <div className="text-[0.65rem] px-2 py-1 rounded-[6px]" style={{ background: "rgba(255,80,80,0.12)", color: "#ff7878" }}>
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EnvironmentCard({ env, active, onClick, accent }: {
   env: { id: string; label: string; thumb: [string, string] };
   active: boolean;
@@ -1045,6 +1285,74 @@ function WizardSlider({
       <span className="text-[0.72rem] w-[58px] text-right tabular-nums opacity-70">
         {value.toFixed(step < 1 ? 1 : 0)}{unit ?? ""}
       </span>
+    </div>
+  );
+}
+
+// Compact pendant shape row used on step 1. SVG glyphs are intentionally
+// tiny (18×12) so the seven options + an "Auto" reset fit in a single
+// 420px column without wrapping awkwardly. Each glyph is a stylised
+// silhouette of the pendant body — not a literal projection, but enough
+// for the user to recognise rectangle vs ring vs hexagon.
+const PENDANT_SHAPES: { id: PendantShape; label: string; glyph: ReactNode }[] = [
+  { id: "rectangle",   label: "Bar",      glyph: <rect  x="3" y="6" width="18" height="4" rx="1" /> },
+  { id: "squircle",    label: "Squircle", glyph: <rect  x="4" y="5" width="16" height="6" rx="3" /> },
+  { id: "ring",        label: "Ring",     glyph: <circle cx="12" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" /> },
+  { id: "hexagon",     label: "Hexagon",  glyph: <polygon points="6,8 9,4 15,4 18,8 15,12 9,12" fill="none" stroke="currentColor" strokeWidth="1.4" /> },
+  { id: "triangle",    label: "Triangle", glyph: <polygon points="12,3 21,13 3,13" /> },
+  { id: "innerCurve",  label: "Curve",    glyph: <path  d="M3 11 Q 12 3, 21 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /> },
+  { id: "wedge",       label: "Wedge",    glyph: <polygon points="3,12 21,4 21,12" /> },
+];
+
+function PendantShapeRow({
+  value, onChange, accent,
+}: {
+  value: PendantShape | undefined;
+  onChange: (v: PendantShape | undefined) => void;
+  accent: string;
+}) {
+  return (
+    <div className="grid grid-cols-4 gap-1.5">
+      {/* "Auto" tile — clears the override so the design-line default
+          flows in. First tile so the visual flow reads "let the line
+          decide, or pick a silhouette". */}
+      <button
+        type="button"
+        onClick={() => onChange(undefined)}
+        className="flex flex-col items-center justify-center gap-1 rounded-[10px] py-2 text-[0.6rem] transition-colors"
+        style={{
+          background: value === undefined ? accent : "color-mix(in srgb, var(--color-surface) 70%, transparent)",
+          color: value === undefined ? "#fff" : "var(--color-text)",
+          border: `1px solid ${value === undefined ? accent : "color-mix(in srgb, var(--color-text) 12%, transparent)"}`,
+        }}
+        aria-pressed={value === undefined}
+      >
+        <span className="text-[1rem] leading-none">⟳</span>
+        <span className="opacity-80">Auto</span>
+      </button>
+      {PENDANT_SHAPES.map((s) => {
+        const active = value === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            className="flex flex-col items-center justify-center gap-1 rounded-[10px] py-2 text-[0.6rem] transition-colors"
+            style={{
+              background: active ? accent : "color-mix(in srgb, var(--color-surface) 70%, transparent)",
+              color: active ? "#fff" : "var(--color-text)",
+              border: `1px solid ${active ? accent : "color-mix(in srgb, var(--color-text) 12%, transparent)"}`,
+            }}
+            aria-pressed={active}
+            title={s.label}
+          >
+            <svg width="22" height="14" viewBox="0 0 24 16" fill="currentColor">
+              {s.glyph}
+            </svg>
+            <span className="opacity-80">{s.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

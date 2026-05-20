@@ -96,6 +96,13 @@ export function LongPressDetector({ onOpen, onPressProgress }: {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return; // primary button only
+      // Bail if the user is interacting with the wizard panel (or any
+      // other UI overlay marked with `data-wizard-overlay`). Without
+      // this, holding on a wizard control inside the wizard's
+      // bounding box could trigger a long-press on whatever sits
+      // BEHIND the wizard in 3D — surprising and unwanted.
+      const target = e.target as Element | null;
+      if (target && target.closest?.("[data-wizard-overlay], [data-no-long-press]")) return;
       // Shift+Click — immediate alternative to long-press.
       if (e.shiftKey) {
         if (doRaycast(e.clientX, e.clientY)) {

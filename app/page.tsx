@@ -102,10 +102,14 @@ export default function Page() {
             // the logo + colours + design line and dispatches them all
             // before transitioning into the configurator.
             if (kitId === "brand.new") {
-              // Wizard view gets the cinematic ±10° yaw breath around the
-              // orbit; main editor (config view) stays static so users
-              // can frame their work without the camera moving.
-              apply({ type: "camera.setYawBreathEnabled", value: true });
+              // Yaw breath disabled — it was the source of the
+              // "mouse-wheel-zoom rotates the camera" bug. After any user
+              // interaction the breath captured a fresh anchor and
+              // applied its full current phase yaw (up to ±10°) as a
+              // single-frame rotation, reading as a sudden camera spin.
+              // Without breath the camera is rock-solid; OrbitControls is
+              // the sole writer of cam.position.
+              apply({ type: "camera.setYawBreathEnabled", value: false });
               setView("wizard");
               return;
             }

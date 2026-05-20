@@ -83,6 +83,13 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     // Box3 from visible meshes only, using `precise=true` so skinned + morph
     // meshes are measured against actual vertex positions instead of their
     // bind-pose bounding box (which is often way larger).
+    // Removed the helper-name regex filter. It was excluding actual pot
+    // / saucer meshes whose names happened to match (e.g. "shadow_pot"
+    // or "floor_round" in some plant GLBs) — those got dropped from the
+    // bbox measurement, base-pinning the plant's leaves to y=0 while
+    // its pot sat below the floor. The upstream stray-mesh distance
+    // pruning (lines 60-81) already handles real helpers; this regex
+    // was redundant defence that did more harm than good.
     scene.updateMatrixWorld(true);
     const box = new THREE.Box3();
     box.makeEmpty();
@@ -90,7 +97,6 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     scene.traverseVisible((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || !m.geometry) return;
-      if (/(helper|debug|bound|collider|navmesh|shadowproxy|shadow|ground|floor|plane_floor|backdrop)/i.test(m.name)) return;
       tmp.setFromObject(m, true);
       if (isFinite(tmp.min.x)) box.union(tmp);
     });
@@ -117,7 +123,6 @@ function useNormalizedScene(url: string, targetHeightM: number, tintHex?: string
     scene.traverseVisible((o) => {
       const m = o as THREE.Mesh;
       if (!m.isMesh || !m.geometry) return;
-      if (/(helper|debug|bound|collider|navmesh|shadowproxy|shadow|ground|floor|plane_floor|backdrop)/i.test(m.name)) return;
       tmp2.setFromObject(m, true);
       if (isFinite(tmp2.min.x)) box2.union(tmp2);
     });
@@ -160,9 +165,24 @@ function PropMount({
   yLift?: number;
 }) {
   const obj = useNormalizedScene(url, heightM, tintHex, yLift);
+  // WRAP IN A GROUP — critical. `useNormalizedScene` mutates the cloned
+  // scene's `position` to base-pin the GLB to y = yLift (i.e. so the
+  // bottom of the model sits at floor-level within the model's own
+  // local frame). If we then render `<primitive object={obj}
+  // position={position} />`, R3F sets obj.position directly from the
+  // prop, OVERWRITING the base-pin offset — every plant / sofa / table
+  // ends up centred at the parent position with its bottom buried
+  // below the floor. This was the recurring "plants embedded" bug.
+  //
+  // Group + primitive sequences the transforms cleanly: the group
+  // applies the caller's world placement; the primitive keeps its own
+  // base-pin offset because nothing now writes to obj.position after
+  // useNormalizedScene set it.
   return (
     <Suspense fallback={null}>
-      <primitive object={obj} position={position} rotation-y={rotationY} />
+      <group position={position} rotation-y={rotationY}>
+        <primitive object={obj} />
+      </group>
     </Suspense>
   );
 }

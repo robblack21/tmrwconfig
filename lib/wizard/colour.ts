@@ -103,49 +103,85 @@ function rgbToHex([r, g, b]: [number, number, number]): string {
 }
 
 // ── Colour harmony ─────────────────────────────────────────────────────
-// Given a single primary hex, derive a [primary, secondary, accent] trio
-// via classical colour-wheel relationships. Used in the wizard's brand
-// colour step so the user can switch between harmony schemes without
-// re-uploading their logo.
+// Given a single primary hex, derive a full surface palette via classical
+// colour-wheel relationships. Used in the wizard's brand colour step so
+// the user can switch between harmony schemes without re-uploading their
+// logo.
+//
+// Returns EIGHT colours, mapping to every paintable surface in the
+// room. The 4-tuple variant is kept (`harmoniseBrand`) for callers that
+// only need the brand swatches.
+//
+// Surface mapping (consumer convention):
+//   0  walls   (primary)
+//   1  trim    (sibling 1)
+//   2  accent  (sibling 2)
+//   3  highlight (sibling 3, deepened)
+//   4  floor   (primary, much darker)
+//   5  table   (sibling 1, desaturated mid)
+//   6  chairs  (sibling 2, mid lightness)
+//   7  pendant (sibling 3, brightened metal-ish)
 
 export type HarmonyRule = "complementary" | "triadic" | "splitComplementary" | "analogous";
 
-export function harmonise(primaryHex: string, rule: HarmonyRule): [string, string, string, string] {
+export type HarmonyEight = [string, string, string, string, string, string, string, string];
+
+export function harmonise(primaryHex: string, rule: HarmonyRule): HarmonyEight {
   const [h, s, l] = hexToHsl(primaryHex);
-  // Returns FOUR colours per scheme: primary + three siblings. Wizard
-  // step 4 renders these as a row of four equal swatches; the fourth
-  // slot ("highlight") deepens the family for accent-on-accent uses.
-  switch (rule) {
-    case "complementary":
-      return [
-        primaryHex,
-        rotateHue(h, 180, s, l),
-        rotateHue(h, 180, s, Math.max(0.25, l * 0.7)),
-        rotateHue(h, 0, Math.max(0.1, s * 0.5), Math.max(0.18, l * 0.55)),
-      ];
-    case "triadic":
-      return [
-        primaryHex,
-        rotateHue(h, 120, s, l),
-        rotateHue(h, 240, s, l),
-        rotateHue(h, 0, s, Math.max(0.18, l * 0.55)),
-      ];
-    case "splitComplementary":
-      return [
-        primaryHex,
-        rotateHue(h, 150, s, l),
-        rotateHue(h, 210, s, l),
-        rotateHue(h, 180, s, Math.max(0.2, l * 0.6)),
-      ];
-    case "analogous":
-      return [
-        primaryHex,
-        rotateHue(h, 30, s, l),
-        rotateHue(h, -30, s, l),
-        rotateHue(h, 60, s, Math.max(0.22, l * 0.75)),
-      ];
+  // Hue offsets for the 4 base sibling families per rule.
+  const base = (() => {
+    switch (rule) {
+      case "complementary":      return [0, 180, 180,   0];
+      case "triadic":            return [0, 120, 240,   0];
+      case "splitComplementary": return [0, 150, 210, 180];
+      case "analogous":          return [0,  30, -30,  60];
+    }
+  })();
+  // Brand-row lightness variants (existing behaviour kept stable so
+  // brand swatches don't drift when callers upgrade).
+  const brandL = [l, l, Math.max(0.25, l * 0.7), Math.max(0.18, l * 0.55)];
+  const brandS = [s, s, s, Math.max(0.1, s * 0.5)];
+  // Surface-row variants — derive room surfaces from the same hue
+  // families but lean towards plausible material readings:
+  //   floor: very dark + desaturated (concrete / parquet feel)
+  //   table: neutral mid-lightness, half-saturated
+  //   chairs: brand-ish mid (slightly darker than brand)
+  //   pendant: light + low saturation (metal / cream)
+  const surfaceL = [
+    Math.max(0.10, l * 0.35),                 // floor
+    clamp01(l * 0.6 + 0.18),                  // table
+    Math.max(0.22, l * 0.55),                 // chairs
+    Math.min(0.82, l + 0.25),                 // pendant
+  ];
+  const surfaceS = [
+    Math.max(0.05, s * 0.4),                  // floor
+    Math.max(0.08, s * 0.45),                 // table
+    Math.max(0.15, s * 0.7),                  // chairs
+    Math.max(0.04, s * 0.25),                 // pendant
+  ];
+  // Build the 8-tuple. First 4 use brand variants; last 4 use surface
+  // variants applied to the SAME hue families.
+  const out: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    if (i === 0 && rule !== "complementary" && rule !== "triadic") {
+      // Keep the exact user hex for the primary in rules that don't
+      // explicitly transform it; otherwise rotateHue at 0° + the user's
+      // s/l roundtrip would re-encode and possibly drift by ~1 unit.
+      out.push(primaryHex);
+    } else if (i === 0) {
+      out.push(primaryHex);                   // primary stays exact
+    } else {
+      out.push(rotateHue(h, base[i]!, brandS[i]!, brandL[i]!));
+    }
   }
+  for (let i = 0; i < 4; i++) {
+    out.push(rotateHue(h, base[i]!, surfaceS[i]!, surfaceL[i]!));
+  }
+  return out as HarmonyEight;
 }
+
+// Clamp value into [0,1].
+function clamp01(n: number): number { return Math.max(0, Math.min(1, n)); }
 
 function rotateHue(h: number, deltaDeg: number, s: number, l: number): string {
   const h2 = ((h + deltaDeg) % 360 + 360) % 360;

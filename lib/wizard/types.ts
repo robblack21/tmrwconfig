@@ -7,6 +7,7 @@
 // dispatches whatever intents make sense in its world.
 
 import type { ReactNode } from "react";
+import type { PendantShape } from "@/lib/schemas";
 
 /** One size option offered in step 1. The cards render label / sqm / dims
  *  / description. */
@@ -69,7 +70,11 @@ export type WizardCustomisation = {
    *  user clicks to upload or generate a hero 3D object. (Hotspot UI is
    *  the next iteration; the count + cubeAssets array is plumbed now.) */
   cubeCount: number;
-  cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
+  cubeAssets: ({ url: string; kind: "uploaded" | "generated" | "preset"; label?: string } | null)[];
+  /** Pendant body shape. Picked compactly in step 1 so the user gets a
+   *  silhouette decision before brand + colour choices. Optional — when
+   *  undefined the design-line's default applies. */
+  pendantShape?: PendantShape;
 };
 
 /** Returned to the host's `onComplete` callback. The host wires this into
@@ -98,6 +103,9 @@ export type WizardResult = {
   customisation: WizardCustomisation;
   /** HDRI id chosen in the Environment step (or null for the host's default). */
   environmentId: string | null;
+  /** AI-generated environment image URL (LDR). When set, the host wraps
+   *  it as a skydome around the room. Null = use the HDRI pipeline. */
+  customEnvironmentUrl: string | null;
 };
 
 /** Optional copy overrides — every field has a sensible default. */
@@ -134,6 +142,10 @@ export type WizardState = {
   extendedColours: WizardExtendedColours;
   customisation: WizardCustomisation;
   environmentId: string | null;
+  /** AI-generated environment image URL (LDR), or null. Tracked in the
+   *  live state so the host can apply it (as a skydome) the moment the
+   *  user generates it — no need to wait for onComplete. */
+  customEnvironmentUrl: string | null;
 };
 
 /** One HDRI environment option offered in the new Environment step. */

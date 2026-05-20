@@ -22,32 +22,37 @@ import { measureImageDims } from "@/lib/util/measureImage";
 // existing standardSizeTiers (S / M / L tier bounds in lib/schemas) so
 // the configurator doesn't have to bump a tier when the result is applied.
 //
-//   small  → 12 m²   4 × 3   — huddle room, 4-up
-//   medium → 25 m²   5 × 5   — main meeting room, 8-up + video
-//   large  → 40 m²   8 × 5   — boardroom, 16-up + all-hands
+//   small  → 27 m²   6 × 4.5   — huddle room, 4-up
+//   medium → 56 m²   7.5 × 7.5 — main meeting room, 8-up + video
+//   large  → 90 m²  12 × 7.5   — boardroom, 16-up + all-hands
+// Sizes scaled up ~50% across the board to give the video wall +
+// hero-artwork + posterboards breathing room without crowding the
+// side windows. Earlier defaults were boardroom-table-shaped (the
+// room felt no larger than the table); these new defaults read as
+// real rooms.
 export const meetingRoomSizes: WizardSize[] = [
   {
     id: "small",
     label: "Huddle",
-    sqm: 12,
-    widthM: 4,
-    depthM: 3,
+    sqm: 27,
+    widthM: 6,
+    depthM: 4.5,
     description: "4 people · hot-desk syncs",
   },
   {
     id: "medium",
     label: "Meeting room",
-    sqm: 25,
-    widthM: 5,
-    depthM: 5,
+    sqm: 56,
+    widthM: 7.5,
+    depthM: 7.5,
     description: "8 people · video conf + screen",
   },
   {
     id: "large",
     label: "Boardroom",
-    sqm: 40,
-    widthM: 8,
-    depthM: 5,
+    sqm: 90,
+    widthM: 12,
+    depthM: 7.5,
     description: "12 people · all-hands · presentation",
   },
 ];
@@ -64,9 +69,11 @@ const meetingRoomTableMeta: Record<string, { tableLengthM: number; tableWidthM: 
   // Boardroom's 8m width gets silently clamped to whatever the M tier max
   // is (~6m). The tier is set first; the explicit widthM/depthM dispatch
   // then lands cleanly within the tier's range.
-  small:  { tableLengthM: 1.8, tableWidthM: 1.0, chairCount: 4,  tier: "S" },
-  medium: { tableLengthM: 3.0, tableWidthM: 1.4, chairCount: 8,  tier: "M" },
-  large:  { tableLengthM: 5.0, tableWidthM: 1.8, chairCount: 12, tier: "L" },
+  // Tables scaled up to match the +50% rooms — the proportions stay
+  // sensible (~25% of room width for the small, ~40% for the boardroom).
+  small:  { tableLengthM: 2.7, tableWidthM: 1.2, chairCount: 4,  tier: "S" },
+  medium: { tableLengthM: 4.5, tableWidthM: 1.6, chairCount: 8,  tier: "M" },
+  large:  { tableLengthM: 7.5, tableWidthM: 2.2, chairCount: 12, tier: "L" },
 };
 
 // ── Design lines ──────────────────────────────────────────────────────────
@@ -200,7 +207,10 @@ const designLineEffects: Record<string, DesignLinePatch> = {
 // Step-indexed camera presets. Each step in the wizard frames a different
 // part of the room so the user sees the consequence of their selection.
 const CAMERA_BY_STEP: Record<number, string> = {
-  0: "top",      // Size — looks down on the empty platform; the walls grow in
+  0: "hero",     // Size — wide hero shot so user sees the WHOLE room
+                 // including the video wall from the first second. The
+                 // previous "top" preset looked straight down at the
+                 // empty platform, making the video wall feel "AWOL".
   1: "pendant",  // Logo — pulled into the room so the pendant + side-wall signs read
   2: "front",    // Artwork — frames the back-wall video matrix
   3: "side",     // Colours — wall-on-wall view so the recolour reads
@@ -298,6 +308,17 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
       apply({ type: "scene.setHallVisible", value: true });
     }
   }
+  // AI-generated environment — overrides the HDRI's visible background
+  // with a skydome. Hall hides too so the AI image is the dominant
+  // outside-the-room context. Clearing the URL restores the HDRI path.
+  if (!prev || prev.customEnvironmentUrl !== state.customEnvironmentUrl) {
+    apply({ type: "scene.setCustomEnvironment", url: state.customEnvironmentUrl });
+    if (state.customEnvironmentUrl) {
+      apply({ type: "scene.setHallVisible", value: false });
+    } else if (!state.environmentId) {
+      apply({ type: "scene.setHallVisible", value: true });
+    }
+  }
 
   // Customisation — cups / plants / sofas / displays. Dispatched only on
   // change; each maps to an existing config intent the configurator UI
@@ -322,6 +343,12 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   }
   if (!prev || prev.customisation.cubeCount !== state.customisation.cubeCount) {
     apply({ type: "layout.setCubeCount", value: state.customisation.cubeCount });
+  }
+  // Pendant shape — if the user picked one in step 1, it overrides the
+  // design-line default. Undefined = "Auto", so we don't dispatch
+  // anything; the design-line patch downstream wins.
+  if (state.customisation.pendantShape && (!prev || prev.customisation.pendantShape !== state.customisation.pendantShape)) {
+    apply({ type: "pendant.setShape", shape: state.customisation.pendantShape });
   }
 
   // Logo override. Measured asynchronously so the kit's effective viewBox
@@ -418,20 +445,26 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   apply({ type: "scene.setFloorStyle", value: patch.floorStyle });
   apply({ type: "boardroom.setChairVariant", value: patch.chairVariant });
   apply({ type: "boardroom.setTableVariant", value: patch.tableVariant });
-  apply({ type: "pendant.setShape", shape: patch.pendantShape });
+  // Pendant shape: user-picked from step 1 wins over the design-line
+  // default. Falls back to the design-line's choice when the user left
+  // it on "Auto".
+  apply({ type: "pendant.setShape", shape: result.customisation.pendantShape ?? patch.pendantShape });
   apply({ type: "layout.setPlantCount", value: patch.plantCount });
   apply({ type: "room.setWallTextureEnabled", value: patch.wallTextureEnabled });
 
   // 7. Environment — HDRI + hall toggle. Picking an environment in step 5
   //    swaps the HDRI and disables the warehouse hall so the brand room
-  //    reads as being IN that environment.
+  //    reads as being IN that environment. AI-generated URL (if set)
+  //    wraps as a skydome on top; takes priority over the HDRI for the
+  //    visible backdrop while the HDRI keeps doing IBL.
   if (result.environmentId) {
     apply({ type: "scene.setHdri", hdriId: result.environmentId });
     apply({ type: "scene.setHallVisible", value: false });
   } else {
     apply({ type: "scene.setHdri", hdriId: "" });
-    apply({ type: "scene.setHallVisible", value: true });
+    apply({ type: "scene.setHallVisible", value: !result.customEnvironmentUrl });
   }
+  apply({ type: "scene.setCustomEnvironment", url: result.customEnvironmentUrl });
 
   // 8. Customisation flourishes (step 6) — cups / plants / sofas / displays.
   apply({ type: "merch.setCupsEnabled", value: result.customisation.cupsEnabled });

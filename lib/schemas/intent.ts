@@ -73,6 +73,7 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("camera.gotoShot"), shotId: z.string() }),
   z.object({ type: z.literal("scene.setMode"), hall: z.enum(["gallery.light", "warehouse.dark"]) }),
   z.object({ type: z.literal("scene.setHdri"), hdriId: z.string() }),
+  z.object({ type: z.literal("scene.setCustomEnvironment"), url: z.string().nullable() }),
   z.object({ type: z.literal("scene.setHallVisible"), value: z.boolean() }),
   z.object({ type: z.literal("scene.setHdrIntensity"), value: z.number() }),
   z.object({ type: z.literal("scene.setHdrBgIntensity"), value: z.number() }),
@@ -142,7 +143,7 @@ export const Intent = z.discriminatedUnion("type", [
   /** Cube plinths — count + per-slot 3D asset (uploaded GLB or
    *  fal.ai-generated). null = empty cube. */
   z.object({ type: z.literal("layout.setCubeCount"), value: z.number() }),
-  z.object({ type: z.literal("layout.setCubeAssets"), assets: z.array(z.object({ url: z.string(), kind: z.enum(["uploaded", "generated"]) }).nullable()) }),
+  z.object({ type: z.literal("layout.setCubeAssets"), assets: z.array(z.object({ url: z.string(), kind: z.enum(["uploaded", "generated", "preset"]), label: z.string().optional() }).nullable()) }),
 
   z.object({ type: z.literal("scene.save"), name: z.string() }),
 ]);
