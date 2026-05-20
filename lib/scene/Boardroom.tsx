@@ -320,9 +320,34 @@ export function ChairsAroundTable({
     const leftN = Math.min(sideCapacity, Math.ceil(sideTotal / 2));
     const rightN = Math.min(sideCapacity, sideTotal - leftN);
     const place = (n: number, i: number) => (n <= 1 ? 0 : -spanZ / 2 + (i * spanZ) / (n - 1));
+    // Oval-table chair tilt — chairs nearest the rounded ends rotate
+    // inward toward the head/foot so they "follow" the table's curve.
+    // Middle-of-side chairs face the table directly (perpendicular).
+    // End chairs face the table along the long axis.
+    //
+    // For each side chair we compute t = z_pos / (spanZ/2): t = -1 at
+    // the head-end of the side, t = +1 at the foot-end. The chair's
+    // rotation is the middle-of-side angle plus t × MAX_TILT, where
+    // MAX_TILT = 60°.
+    //   LEFT side  (middle rot =  π/2): rot = π/2 + t·(π/3)
+    //   RIGHT side (middle rot = -π/2): rot = -π/2 − t·(π/3)
+    // That puts the chair at the head end of the LEFT side at 30° (so
+    // its +Z-local "forward" faces +X+Z toward the table centre) and
+    // the chair at the foot end at 150°. Symmetric on the right side.
+    const MAX_TILT = Math.PI / 3;                      // 60° max inward tilt
+    const tilt = (n: number, i: number) => {
+      if (n <= 1) return 0;
+      // Normalised position along the side, t ∈ [-1, +1].
+      const t = (-spanZ / 2 + (i * spanZ) / (n - 1)) / (spanZ / 2);
+      return t * MAX_TILT;
+    };
     // Left side faces +X, right side faces -X, ends face the centre along Z.
-    for (let i = 0; i < leftN; i++)  out.push({ pos: [-sideX, 0, place(leftN, i)],  rot: Math.PI / 2 });
-    for (let i = 0; i < rightN; i++) out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 });
+    for (let i = 0; i < leftN; i++) {
+      out.push({ pos: [-sideX, 0, place(leftN, i)],  rot:  Math.PI / 2 + tilt(leftN, i) });
+    }
+    for (let i = 0; i < rightN; i++) {
+      out.push({ pos: [sideX, 0, place(rightN, i)],  rot: -Math.PI / 2 - tilt(rightN, i) });
+    }
     if (endN >= 1) out.push({ pos: [0, 0, -endZ], rot: 0 });
     if (endN >= 2) out.push({ pos: [0, 0, endZ], rot: Math.PI });
     return out;

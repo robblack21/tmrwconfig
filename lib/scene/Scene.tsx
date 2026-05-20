@@ -1767,13 +1767,14 @@ function LogoSignFlank({
       </group>
     );
   }
+  // Raster (PNG/JPG) fallback. The previous version wrapped the decal
+  // in a solid boxGeometry — that was the "white plinth" visible behind
+  // alpha-transparent logos in the window strip. Now renders as a
+  // double-sided textured plane only, so PNG transparency carries
+  // through cleanly to both inside + outside views.
   return (
     <group position={[x + offsetOut, y, z]} rotation-y={rotY}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[finalWidthM, targetHeightM, d]} />
-        <meshPhysicalMaterial color={sideTint} roughness={0.5} metalness={0.05} clearcoat={0.25} clearcoatRoughness={0.3} />
-      </mesh>
-      <mesh position={[0, 0, d / 2 + 0.0008]}>
+      <mesh>
         <planeGeometry args={[finalWidthM, targetHeightM]} />
         <meshStandardMaterial
           map={tex}
@@ -1785,22 +1786,7 @@ function LogoSignFlank({
           toneMapped={false}
           depthWrite={false}
           alphaTest={0.02}
-        />
-      </mesh>
-      {/* Mirrored back-face decal so the brand reads through the glass
-          when looking out from inside the room. */}
-      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
-        <planeGeometry args={[finalWidthM, targetHeightM]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={emissive * 0.85}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
+          side={THREE.DoubleSide}
         />
       </mesh>
     </group>
@@ -1957,32 +1943,36 @@ function StandingDisplays({
 // thin dark box; artwork is a planeGeometry slightly proud of the
 // frame's inner face to avoid z-fight.
 
-function Posterboards({ count, urls, widthM, depthM, wallHeightM, platformHeightM, kit }: {
+function Posterboards({ count, urls, widthM, depthM, platformHeightM, kit, wallHeightM }: {
   count: number; urls: (string | null)[]; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number; kit: BrandKit;
 }) {
   if (count <= 0) return null;
-  // Free-standing portrait boards (think easels), placed in the room
-  // facing the table. The previous implementation hugged the side
-  // walls but landed behind the windowed glass strip and was invisible
-  // from the seated POV. Standing them ~0.6m clear of the side walls
-  // and 1m clear of the table gives them their own clear sight-line
-  // back to anyone at the table. Each board: 0.9×1.5m, centre at
-  // y = platform + 0.95m so the board spans 0.2m to 1.7m above floor.
-  // Even rooms 4m wide can fit two without crashing into anything.
-  const w = 0.9;
-  const h = 1.5;
-  const cy = platformHeightM + h / 2 + 0.2;
-  const sideX = widthM / 2 - 0.6;
-  void wallHeightM;
-  // Alternate left/right; spread along Z so multiple boards on the
-  // same side don't stack.
-  const slots: { pos: [number, number, number]; rot: number }[] = [];
-  for (let i = 0; i < count; i++) {
-    const side = i % 2 === 0 ? -1 : 1;
-    const idx = Math.floor(i / 2);
-    const z = (idx === 0 ? -depthM * 0.15 : depthM * 0.15);
-    slots.push({ pos: [side * sideX, cy, z], rot: side === -1 ? Math.PI / 2 : -Math.PI / 2 });
-  }
+  // Free-standing portrait boards stood in the FOUR CORNERS, each rotated
+  // 45° toward the centre of the room. Twice as tall as before (3m vs
+  // the original 1.5m) so they read as gallery panels, not picture
+  // frames. Aspect ratio is respected per-board via the Posterboard's
+  // own image-load logic (see Posterboard component).
+  //
+  // Corner mapping for the first four slots: back-left, back-right,
+  // front-left, front-right. Each posterboard sits ~0.5m clear of both
+  // walls (along the diagonal into the corner) and rotates 45° so its
+  // face presents toward the table.
+  const cornerInsetX = widthM / 2 - 0.7;
+  const cornerInsetZ = depthM / 2 - 0.7;
+  const targetH = 3.0;
+  // Cap the height so it never punches through the ceiling.
+  const h = Math.min(targetH, wallHeightM - 0.2);
+  const cy = platformHeightM + h / 2 + 0.05;
+  // Corner positions + their inward-facing rotations (rotation-y around
+  // origin makes 0 face +Z, so back corners need to face +Z+towards-x
+  // direction, front corners need -Z toward x direction).
+  const corners: { pos: [number, number, number]; rot: number }[] = [
+    { pos: [-cornerInsetX, cy, -cornerInsetZ], rot:  Math.PI / 4 },        //  back-left → face +x +z (toward room centre)
+    { pos: [ cornerInsetX, cy, -cornerInsetZ], rot: -Math.PI / 4 },        //  back-right
+    { pos: [-cornerInsetX, cy,  cornerInsetZ], rot:  Math.PI * 3 / 4 },    //  front-left
+    { pos: [ cornerInsetX, cy,  cornerInsetZ], rot: -Math.PI * 3 / 4 },    //  front-right
+  ];
+  const slots = corners.slice(0, count);
   return (
     <>
       {slots.map((s, i) => (
@@ -1990,8 +1980,7 @@ function Posterboards({ count, urls, widthM, depthM, wallHeightM, platformHeight
           <Posterboard
             position={s.pos}
             rotationY={s.rot}
-            w={w}
-            h={h}
+            heightM={h}
             url={urls[i] ?? kit.logos.primary.rasterUrl ?? ""}
           />
         </Suspense>
@@ -2000,20 +1989,46 @@ function Posterboards({ count, urls, widthM, depthM, wallHeightM, platformHeight
   );
 }
 
-function Posterboard({ position, rotationY, w, h, url }: {
-  position: [number, number, number]; rotationY: number; w: number; h: number; url: string;
+// Free-standing portrait board. Width is derived from the image's
+// intrinsic aspect ratio so we never squash the artwork — square logos
+// render square, 4:5 photos render 4:5, etc. Bounded so a very wide
+// image doesn't run into walls.
+function Posterboard({ position, rotationY, heightM, url }: {
+  position: [number, number, number]; rotationY: number; heightM: number; url: string;
 }) {
   const tex = useWallGraphic(url);
+  const [aspect, setAspect] = useState(0.7); // portrait default until image loads
+  useEffect(() => {
+    if (!url) return;
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      const a = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+      // Cap aspect to a reasonable portrait/landscape range so a
+      // ridiculously wide banner doesn't span the room.
+      setAspect(Math.max(0.3, Math.min(1.6, a)));
+    };
+    img.src = url;
+    return () => { cancelled = true; };
+  }, [url]);
+  const w = heightM * aspect;
   return (
     <group position={position} rotation-y={rotationY} userData={{ kind: "walls" }}>
-      {/* Frame */}
+      {/* Frame — slightly proud of the artwork. */}
       <mesh castShadow receiveShadow>
-        <boxGeometry args={[w + 0.06, h + 0.06, 0.03]} />
+        <boxGeometry args={[w + 0.05, heightM + 0.05, 0.03]} />
         <meshPhysicalMaterial color="#0e1014" roughness={0.55} metalness={0.35} />
+      </mesh>
+      {/* Foot plate so the board reads as standing, not floating. */}
+      <mesh position={[0, -heightM / 2 - 0.03, 0]} castShadow receiveShadow>
+        <boxGeometry args={[Math.max(0.3, w * 0.6), 0.04, 0.18]} />
+        <meshPhysicalMaterial color="#0a0c10" roughness={0.45} metalness={0.55} />
       </mesh>
       {/* Artwork — slightly proud of the frame's inner face. */}
       <mesh position={[0, 0, 0.018]}>
-        <planeGeometry args={[w, h]} />
+        <planeGeometry args={[w, heightM]} />
         <meshStandardMaterial map={tex} toneMapped />
       </mesh>
     </group>
@@ -3149,39 +3164,20 @@ function PendantFaceLogo({
       </group>
     );
   }
+  // Raster fallback for pendant face logos. Was a boxGeometry backing
+  // plate (the "white plinth") + two decal planes. Now it's just a
+  // double-sided transparent decal so PNG alpha shows the pendant
+  // body through the negative space of the logo — the mark reads as
+  // an emblem ON the pendant, not as a sticker on a white card.
   return (
     <group position={position} rotation-y={rotY}>
-      <mesh castShadow>
-        <boxGeometry args={[w, h, d]} />
-        <meshPhysicalMaterial color={sideTint} roughness={0.45} metalness={0.05} clearcoat={0.3} />
-      </mesh>
-      {/* Front-face decal */}
-      <mesh position={[0, 0, d / 2 + 0.0008]}>
+      <mesh>
         <planeGeometry args={[w, h]} />
         <meshStandardMaterial
           map={tex}
           emissiveMap={tex}
           emissive={new THREE.Color("#ffffff")}
           emissiveIntensity={glassReadable}
-          color="#ffffff"
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-          alphaTest={0.02}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Back-face decal mirrored 180° around Y so when a camera looks at the
-          pendant from the OPPOSITE side of this face (through the room's
-          opposing glass wall), it still sees the brand. Slightly dimmer than
-          the front so the front still feels primary. */}
-      <mesh position={[0, 0, -(d / 2 + 0.0008)]} rotation-y={Math.PI}>
-        <planeGeometry args={[w, h]} />
-        <meshStandardMaterial
-          map={tex}
-          emissiveMap={tex}
-          emissive={new THREE.Color("#ffffff")}
-          emissiveIntensity={glassReadable * 0.8}
           color="#ffffff"
           transparent
           toneMapped={false}

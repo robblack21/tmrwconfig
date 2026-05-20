@@ -102,42 +102,59 @@ function CreateNewTile({ onClick }: { onClick: () => void }) {
           filter: "blur(8px)",
         }}
       />
-      {/* "Start" pill — anchored top-right, reads as a clear CTA badge. */}
-      <div
-        className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-[0.6rem] uppercase tracking-wider"
-        style={{
-          background: "rgba(255,255,255,0.18)",
-          color: "#fff",
-          backdropFilter: "blur(6px)",
-          fontVariationSettings: '"wdth" 100, "wght" 600',
-        }}
-      >
-        Start
-      </div>
-      <div className="absolute inset-0 grid place-items-center">
-        <div className="text-center px-6">
-          <motion.div
-            className="w-16 h-16 mx-auto rounded-full mb-4 grid place-items-center"
-            style={{
-              background: "rgba(255,255,255,0.16)",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 14px -6px rgba(0,0,0,0.3)",
-              backdropFilter: "blur(4px)",
-            }}
-            animate={{ y: [0, -2, 0] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d="M12 4v16M4 12h16" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
-            </svg>
-          </motion.div>
-          <div className="text-[1.05rem] mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 700' }}>
-            Create new brand
-          </div>
-          <div className="text-[0.7rem] opacity-85">
-            From a blank TMRW room
-          </div>
+      {/* Headline + sub at the top half. */}
+      <div className="absolute inset-x-0 top-0 pt-10 px-6 text-center">
+        <motion.div
+          className="w-14 h-14 mx-auto rounded-full mb-3 grid place-items-center"
+          style={{
+            background: "rgba(255,255,255,0.16)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 14px -6px rgba(0,0,0,0.3)",
+            backdropFilter: "blur(4px)",
+          }}
+          animate={{ y: [0, -2, 0] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            <path d="M11 3v15M3.5 10.5h15" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
+        </motion.div>
+        <div className="text-[1.1rem] mb-1" style={{ fontVariationSettings: '"wdth" 100, "wght" 700' }}>
+          Create new brand
+        </div>
+        <div className="text-[0.7rem] opacity-85">
+          From a blank TMRW room
         </div>
       </div>
+      {/* Large "Start" pill — anchored bottom-centre, glowing. Reads as
+          the unmistakable CTA on the homepage. */}
+      <motion.div
+        className="absolute left-1/2 -translate-x-1/2 px-7 py-3 rounded-full text-[0.85rem] uppercase tracking-wider flex items-center gap-1.5"
+        style={{
+          bottom: 28,
+          background: "#fff",
+          color: "var(--color-accent)",
+          fontVariationSettings: '"wdth" 100, "wght" 700',
+          boxShadow:
+            "0 0 0 1px rgba(255,255,255,0.4), " +
+            "0 10px 28px -6px rgba(255,255,255,0.55), " +
+            "0 4px 12px -2px rgba(0,0,0,0.18)",
+        }}
+        // Pulsing glow halo — same cadence as the tile's outer halo so
+        // they breathe together.
+        animate={{
+          boxShadow: [
+            "0 0 0 1px rgba(255,255,255,0.4), 0 8px 22px -6px rgba(255,255,255,0.55), 0 4px 12px -2px rgba(0,0,0,0.18)",
+            "0 0 0 1px rgba(255,255,255,0.6), 0 14px 36px -4px rgba(255,255,255,0.8), 0 4px 12px -2px rgba(0,0,0,0.18)",
+            "0 0 0 1px rgba(255,255,255,0.4), 0 8px 22px -6px rgba(255,255,255,0.55), 0 4px 12px -2px rgba(0,0,0,0.18)",
+          ],
+        }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+      >
+        Start
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M4 2L9 6.5L4 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </motion.div>
     </motion.button>
   );
 }

@@ -123,7 +123,7 @@ export type ConfigState = {
   cubeCount: number;                 // 0..4 — centre-of-room cube plinths with upload/generate hotspots
   cubeAssets: ({ url: string; kind: "uploaded" | "generated" } | null)[];
   platformHeightM: number;           // 0.10..0.30 — raised platform thickness
-  cameraFov: number;                 // 20..70
+  cameraFov: number;                 // 20..90
   cameraPreset: string;              // last requested preset id ('' = no command)
   /** Per-preset custom overrides (position + target + fov) — overlays the built-in defaults. */
   cameraPresetOverrides: Record<string, { pos: [number, number, number]; target: [number, number, number]; fov: number }>;
@@ -291,7 +291,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   cubeCount: 0,
   cubeAssets: [null, null, null, null],
   platformHeightM: 0.20,
-  cameraFov: 60,
+  cameraFov: 75,
   cameraPreset: "",
   cameraPresetOverrides: {},
   cameraActivePreset: "hero",
@@ -717,7 +717,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
         break;
       }
       case "camera.setFov": {
-        set({ cameraFov: clamp(intent.value, 20, 70) });
+        set({ cameraFov: clamp(intent.value, 20, 90) });
         break;
       }
       case "camera.gotoPreset": {

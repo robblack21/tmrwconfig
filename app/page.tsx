@@ -245,7 +245,7 @@ export default function Page() {
             <input
               type="range"
               min={20}
-              max={70}
+              max={90}
               step={1}
               value={cameraFov}
               onChange={(e) => apply({ type: "camera.setFov", value: Number(e.target.value) })}
