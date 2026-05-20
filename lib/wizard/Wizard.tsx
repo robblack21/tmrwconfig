@@ -233,19 +233,21 @@ export function Wizard({
     r.onload = () => { if (typeof r.result === "string") setLogoUrl(r.result); };
     r.readAsDataURL(file);
   }, []);
+  const onArtworkUrl = useCallback((url: string, slot: number) => {
+    setArtworkUrls((prev) => {
+      const next = [...prev] as [string | null, string | null, string | null, string | null];
+      next[slot] = url;
+      return next;
+    });
+  }, []);
   const onArtworkFile = useCallback((file: File, slot: number) => {
     const r = new FileReader();
     r.onload = () => {
       if (typeof r.result !== "string") return;
-      const url = r.result;
-      setArtworkUrls((prev) => {
-        const next = [...prev] as [string | null, string | null, string | null, string | null];
-        next[slot] = url;
-        return next;
-      });
+      onArtworkUrl(r.result, slot);
     };
     r.readAsDataURL(file);
-  }, []);
+  }, [onArtworkUrl]);
   const onArtworkClear = useCallback((slot: number) => {
     setArtworkUrls((prev) => {
       const next = [...prev] as [string | null, string | null, string | null, string | null];
@@ -491,6 +493,7 @@ export function Wizard({
                       slot={slot}
                       fileUrl={artworkUrls[slot]}
                       onFile={(f) => onArtworkFile(f, slot)}
+                      onUrl={(u) => onArtworkUrl(u, slot)}
                       onClear={() => onArtworkClear(slot)}
                       accent={accent}
                     />
@@ -649,14 +652,19 @@ export function Wizard({
                       setEnvError(null);
                       try {
                         const { generateTexture } = await import("@/lib/services/falTexture");
-                        // Use flux/schnell — fast (4 steps, ~3s) and the
-                        // free-tier-friendly default. Generation quality is
-                        // plenty for a skydome backdrop. Falls back to a
-                        // helpful auth-error message if the FAL key is
-                        // missing or rejected.
-                        const r = await generateTexture(`Wide cinematic landscape view through floor-to-ceiling glass: ${p}. Photoreal, soft daylight, deep horizon, no people, no logos, no text.`, {
-                          model: "fal-ai/flux/schnell",
-                          image_size: "landscape_16_9",
+                        // flux/dev — higher quality than schnell (~10s vs
+                        // ~3s) but the skydome is the dominant backdrop
+                        // so quality matters. Custom 2:1 width:height
+                        // (2048×1024) maps to a panoramic-friendly aspect
+                        // and the prompt explicitly asks for an
+                        // equirectangular projection so the skydome
+                        // wrap reads as a real environment rather than
+                        // a stretched landscape photo.
+                        const r = await generateTexture(`Equirectangular 360-degree panoramic photo, 2:1 ratio, seamless horizon, view through floor-to-ceiling glass of: ${p}. Photoreal, soft cinematic daylight, deep distant horizon, even lighting across the full frame, no people, no logos, no text, sharp details edge-to-edge — formatted as a skydome environment map.`, {
+                          model: "fal-ai/flux/dev",
+                          image_size: { width: 2048, height: 1024 },
+                          num_inference_steps: 28,
+                          guidance_scale: 3.5,
                         });
                         if (r.ok) {
                           setCustomEnvironmentUrl(r.url);
@@ -851,14 +859,54 @@ function SizeCard({ size: s, active, onClick, accent }: { size: WizardSize; acti
 
 // ── Compact 4-slot artwork tile (step 2) ───────────────────────────────
 function ArtworkSlot({
-  slot, fileUrl, onFile, onClear, accent,
+  slot, fileUrl, onFile, onUrl, onClear, accent,
 }: {
   slot: number;
   fileUrl: string | null;
   onFile: (f: File) => void;
+  onUrl: (url: string) => void;
   onClear: () => void;
   accent: string;
 }) {
+  // Per-slot AI generation state. Slot-local so each tile has its own
+  // prompt input + spinner without one slot's generation blocking the
+  // others.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const generate = async () => {
+    const p = aiPrompt.trim();
+    if (!p) return;
+    setAiBusy(true);
+    setAiError(null);
+    try {
+      const { generateTexture } = await import("@/lib/services/falTexture");
+      // flux/schnell here — 4 slots means cost adds up, and schnell at
+      // ~3s gives a good preview-quality artwork. The user can re-roll
+      // if they want, or upload a hi-res image instead.
+      const r = await generateTexture(`High-quality artistic photo for a corporate boardroom wall, 16:9 landscape: ${p}. Sharp focus, gallery-grade composition, vivid colour, no people, no logos, no text.`, {
+        model: "fal-ai/flux/schnell",
+        image_size: "landscape_16_9",
+      });
+      if (r.ok) {
+        onUrl(r.url);
+        setAiOpen(false);
+        setAiPrompt("");
+      } else {
+        const lower = r.error.toLowerCase();
+        if (lower.includes("no user found") || lower.includes("unauthorized") || lower.includes("invalid") || lower.includes("forbidden")) {
+          setAiError("fal.ai key rejected. Check .env.local + rebuild.");
+        } else {
+          setAiError(r.error);
+        }
+      }
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAiBusy(false);
+    }
+  };
   return (
     <div
       className="relative rounded-[14px] overflow-hidden neumorph-raised"
@@ -892,6 +940,18 @@ function ArtworkSlot({
           onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
         />
       </label>
+      {/* ✨ AI generate button — opens a tiny prompt overlay. Top-LEFT
+          so it doesn't clash with the clear (×) button on the top-right
+          when a slot already has artwork. */}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setAiOpen((v) => !v); }}
+        className="absolute top-1.5 left-1.5 h-6 px-2 rounded-full grid place-items-center text-[0.65rem] font-medium"
+        style={{ background: aiOpen ? accent : "rgba(0,0,0,0.55)", color: "#fff", backdropFilter: "blur(6px)" }}
+        aria-label={`AI generate slot ${slot + 1}`}
+      >
+        ✨ AI
+      </button>
       {fileUrl && (
         <button
           onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClear(); }}
@@ -899,6 +959,52 @@ function ArtworkSlot({
           style={{ background: "rgba(0,0,0,0.55)", color: "#fff", backdropFilter: "blur(6px)" }}
           aria-label={`Clear slot ${slot + 1}`}
         >×</button>
+      )}
+      {aiOpen && (
+        <div
+          className="absolute inset-x-1 bottom-1 rounded-[10px] p-2 flex flex-col gap-1.5"
+          style={{ background: "rgba(15,16,20,0.96)", border: "1px solid rgba(255,255,255,0.14)", backdropFilter: "blur(8px)" }}
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); }}
+        >
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="A misty mountain at dawn…"
+            className="px-2 py-1 rounded-[6px] text-[0.7rem] outline-none"
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)", color: "#fff" }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy && aiPrompt.trim()) { e.preventDefault(); void generate(); } }}
+          />
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={aiBusy || !aiPrompt.trim()}
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); void generate(); }}
+              className="flex-1 px-2 py-1 rounded-[6px] text-[0.7rem] font-medium"
+              style={{
+                background: accent,
+                color: "#fff",
+                opacity: aiBusy || !aiPrompt.trim() ? 0.5 : 1,
+                cursor: aiBusy || !aiPrompt.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              {aiBusy ? "Generating…" : "Generate"}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); setAiOpen(false); setAiError(null); }}
+              className="px-2 py-1 rounded-[6px] text-[0.7rem]"
+              style={{ background: "rgba(255,255,255,0.08)", color: "#fff" }}
+            >
+              Cancel
+            </button>
+          </div>
+          {aiError && (
+            <div className="text-[0.6rem] px-1.5 py-1 rounded-[4px]" style={{ background: "rgba(255,80,80,0.14)", color: "#ff8a8a" }}>
+              {aiError}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

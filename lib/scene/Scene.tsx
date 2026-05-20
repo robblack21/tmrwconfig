@@ -604,6 +604,16 @@ export function Scene() {
               kit={kit}
             />
 
+            {/* Side-wall picture frames — 2 frames on each side wall near
+                the door. Each frame is long-pressable to open the
+                upload-or-AI-generate modal. */}
+            <SideWallPictureFrames
+              widthM={widthM}
+              depthM={depthM}
+              wallHeightM={wallHeightM}
+              platformHeightM={platformHeightM}
+            />
+
             {/* Centre-of-room cube plinths — dealers'-choice slots. The
                 clickable hotspot UI (upload / generate) is the next
                 iteration; for now each cube renders with a brand
@@ -2304,6 +2314,121 @@ function Posterboard({ position, rotationY, heightM, url, mounted = false }: {
           <planeGeometry args={[imgW, imgH]} />
           <meshStandardMaterial map={tex} color="#ffffff" toneMapped={false} />
         </mesh>
+      )}
+    </group>
+  );
+}
+
+// ── Side-wall picture frames ────────────────────────────────────────────
+// Four square picture frames mounted on the left + right walls near the
+// door (2 per side). Long-press a frame to open the upload-or-AI-generate
+// modal (handled by `PictureFrameModal` in LongPressEditor).
+//
+// Slot index:
+//   0 = LEFT wall, near door  (closest to +Z, the door end)
+//   1 = LEFT wall, mid-room   (~2 m further inward)
+//   2 = RIGHT wall, near door
+//   3 = RIGHT wall, mid-room
+//
+// Each frame's mesh carries `userData={{ kind: "picture-frame", slot }}`
+// so the raycaster can fire the right slot into the modal.
+
+function SideWallPictureFrames({
+  widthM, depthM, wallHeightM, platformHeightM,
+}: { widthM: number; depthM: number; wallHeightM: number; platformHeightM: number }) {
+  const pictureFrameUrls = useConfig((s) => s.pictureFrameUrls) ?? [null, null, null, null];
+  const kit = useBrandKit();
+  // Square frame size — scales with wall height but capped so it reads as
+  // a picture frame, not a billboard. ~0.9 m on a 4.5 m wall.
+  const size = Math.min(1.0, wallHeightM * 0.22);
+  // Y centre — user eye-level-ish, biased slightly above so the frame
+  // doesn't sit at chair-back height.
+  const cy = platformHeightM + wallHeightM * 0.58;
+  // Z positions for the two frames per side — both at the DOOR END so they
+  // sit visibly when entering the room.
+  const zNear = depthM / 2 - 1.0;                // ~1 m inside the door
+  const zMid  = depthM / 2 - 1.0 - size - 0.6;   // 0.6 m gap behind it
+  // X mount — flush against the wall, frame back sits ~0.05 proud of the
+  // inner face. Wall is 0.08 m thick.
+  const xLeft  = -widthM / 2 + 0.08 + 0.025;
+  const xRight =  widthM / 2 - 0.08 - 0.025;
+  // Define the four slots (slot index → world placement + rotation).
+  const slots: { slot: number; pos: [number, number, number]; rotY: number }[] = [
+    { slot: 0, pos: [xLeft,  cy, zNear], rotY:  Math.PI / 2 },  // left wall, near door (face → +X)
+    { slot: 1, pos: [xLeft,  cy, zMid],  rotY:  Math.PI / 2 },
+    { slot: 2, pos: [xRight, cy, zNear], rotY: -Math.PI / 2 },  // right wall (face → -X)
+    { slot: 3, pos: [xRight, cy, zMid],  rotY: -Math.PI / 2 },
+  ];
+  return (
+    <>
+      {slots.map((s) => (
+        <SideWallPictureFrame
+          key={s.slot}
+          slot={s.slot}
+          size={size}
+          position={s.pos}
+          rotationY={s.rotY}
+          url={pictureFrameUrls[s.slot] ?? null}
+          kit={kit}
+        />
+      ))}
+    </>
+  );
+}
+
+function SideWallPictureFrame({
+  slot, size, position, rotationY, url, kit,
+}: {
+  slot: number;
+  size: number;
+  position: [number, number, number];
+  rotationY: number;
+  url: string | null;
+  kit: BrandKit;
+}) {
+  const tex = useWallGraphic(url ?? "");
+  const accent = kit.palette.accent;
+  // Frame thickness + inner image area. Square aspect; 4 cm matt border.
+  const matt = 0.04;
+  const innerS = size - matt * 2;
+  return (
+    // userData carries kind + slot so LongPressDetector's raycaster
+    // resolves which frame got hit and routes to the right modal.
+    <group position={position} rotation-y={rotationY} userData={{ kind: "picture-frame", slot }}>
+      {/* Frame body — extruded dark slab to read as a real picture frame. */}
+      <mesh castShadow receiveShadow userData={{ kind: "picture-frame", slot }}>
+        <boxGeometry args={[size, size, 0.05]} />
+        <meshPhysicalMaterial color="#0e1014" roughness={0.5} metalness={0.45} clearcoat={0.3} />
+      </mesh>
+      {/* Matt — pale board between frame edge and image. */}
+      <mesh position={[0, 0, 0.026]} receiveShadow userData={{ kind: "picture-frame", slot }}>
+        <planeGeometry args={[size - 0.012, size - 0.012]} />
+        <meshStandardMaterial color="#e8e6df" roughness={0.7} toneMapped={false} />
+      </mesh>
+      {url ? (
+        <mesh position={[0, 0, 0.028]} userData={{ kind: "picture-frame", slot }}>
+          <planeGeometry args={[innerS, innerS]} />
+          <meshStandardMaterial map={tex} color="#ffffff" toneMapped={false} />
+        </mesh>
+      ) : (
+        // Empty-frame placeholder — brand-accent crosshair so the user
+        // can see WHERE to long-press, and a tiny "tap to edit" cue.
+        <group position={[0, 0, 0.028]}>
+          <mesh userData={{ kind: "picture-frame", slot }}>
+            <planeGeometry args={[innerS, innerS]} />
+            <meshStandardMaterial color="#1a1c22" roughness={0.85} toneMapped={false} />
+          </mesh>
+          {/* Centred plus sign — accent-coloured so it reads as
+              "tap me". Two thin bars forming a +. */}
+          <mesh position={[0, 0, 0.001]} userData={{ kind: "picture-frame", slot }}>
+            <planeGeometry args={[innerS * 0.45, 0.012]} />
+            <meshBasicMaterial color={accent} toneMapped={false} />
+          </mesh>
+          <mesh position={[0, 0, 0.001]} userData={{ kind: "picture-frame", slot }}>
+            <planeGeometry args={[0.012, innerS * 0.45]} />
+            <meshBasicMaterial color={accent} toneMapped={false} />
+          </mesh>
+        </group>
       )}
     </group>
   );

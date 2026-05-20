@@ -7,7 +7,7 @@ import { useConfig } from "@/lib/store/configStore";
 import { LongPressDetector, LongPressIndicator, LongPressModal, type PressProgressRef } from "./LongPressEditor";
 import { CubePickerModal } from "./CubePickerModal";
 
-type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss";
+type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame";
 
 export default function CanvasShell() {
   const highDpr = useConfig((s) => s.highDpr);
@@ -18,7 +18,7 @@ export default function CanvasShell() {
   // Long-press surface editor — the detector lives inside the canvas to
   // raycast, but the modal portals to document.body so it can render plain
   // DOM controls (colour input, swatch buttons) overlaid on the canvas.
-  const [editor, setEditor] = useState<{ kind: SurfaceKind; screenX: number; screenY: number } | null>(null);
+  const [editor, setEditor] = useState<{ kind: SurfaceKind; slot?: number; screenX: number; screenY: number } | null>(null);
   // Long-press hold progress lives in a REF, not state. Previously this
   // was useState + setPress called per rAF tick — that re-rendered the
   // canvas wrapper 60×/sec which (a) churned the inline `onOpen` /
@@ -34,9 +34,9 @@ export default function CanvasShell() {
     pressRef.current.y = y;
     pressRef.current.t = t;
   }, []);
-  const onOpen = useCallback((kind: SurfaceKind, screenX: number, screenY: number) => {
+  const onOpen = useCallback((kind: SurfaceKind, screenX: number, screenY: number, slot?: number) => {
     pressRef.current.t = 0;
-    setEditor({ kind, screenX, screenY });
+    setEditor({ kind, slot, screenX, screenY });
   }, []);
   return (
     <>
@@ -98,6 +98,7 @@ export default function CanvasShell() {
       {editor && (
         <LongPressModal
           kind={editor.kind}
+          slot={editor.slot}
           screenX={editor.screenX}
           screenY={editor.screenY}
           onClose={() => setEditor(null)}

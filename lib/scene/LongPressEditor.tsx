@@ -15,7 +15,7 @@ import { generateTexture, isFalConfigured, type FalModel } from "@/lib/services/
 const LONG_PRESS_MS = 350;
 const DRAG_THRESHOLD_PX = 10;
 
-type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss";
+type SurfaceKind = "walls" | "floor" | "ceiling" | "table" | "chair" | "pendant" | "truss" | "picture-frame";
 
 const KIND_LABEL: Record<SurfaceKind, string> = {
   walls: "Walls",
@@ -25,6 +25,7 @@ const KIND_LABEL: Record<SurfaceKind, string> = {
   chair: "Chairs",
   pendant: "Pendant",
   truss: "Truss",
+  "picture-frame": "Picture frame",
 };
 
 /** Inside the canvas: detects long-press, raycasts to find a meshed surface
@@ -32,7 +33,11 @@ const KIND_LABEL: Record<SurfaceKind, string> = {
  *  Optionally calls `onPressProgress(x, y, t)` continuously during the hold
  *  (t goes 0→1 over LONG_PRESS_MS) so a sibling can render a radial ring. */
 export function LongPressDetector({ onOpen, onPressProgress }: {
-  onOpen: (kind: SurfaceKind, screenX: number, screenY: number) => void;
+  /** `slot` is undefined for surfaces that are unique (walls, floor…)
+   *  and a 0-based index for kinds where multiple instances exist
+   *  (picture-frame: 0..3). The raycaster reads `userData.slot` off
+   *  the hit object's userData. */
+  onOpen: (kind: SurfaceKind, screenX: number, screenY: number, slot?: number) => void;
   onPressProgress?: (x: number, y: number, t: number) => void;
 }) {
   const { camera, scene, gl } = useThree();
@@ -83,9 +88,10 @@ export function LongPressDetector({ onOpen, onPressProgress }: {
       for (const h of hits) {
         let o: THREE.Object3D | null = h.object;
         while (o) {
-          const kind = (o.userData as { kind?: string } | undefined)?.kind;
+          const ud = o.userData as { kind?: string; slot?: number } | undefined;
+          const kind = ud?.kind;
           if (kind && kind in KIND_LABEL) {
-            onOpen(kind as SurfaceKind, clientX, clientY);
+            onOpen(kind as SurfaceKind, clientX, clientY, ud?.slot);
             return true;
           }
           o = o.parent;
@@ -248,12 +254,20 @@ const FLOOR_STYLES = ["herringbone", "diagonal", "rectangular"] as const;
 
 /** Modal rendered OUTSIDE the Canvas (via portal to body). Shows a colour
  *  swatch + texture controls for the target surface. */
-export function LongPressModal({ kind, screenX, screenY, onClose }: {
+export function LongPressModal({ kind, slot, screenX, screenY, onClose }: {
   kind: SurfaceKind;
+  /** 0-based instance index when `kind` is multi-instance (picture-frame). */
+  slot?: number;
   screenX: number;
   screenY: number;
   onClose: () => void;
 }) {
+  // Picture frames have their own dedicated editor (upload + AI prompt
+  // + clear). They don't carry a base "colour" — the frame is just a
+  // photo viewer.
+  if (kind === "picture-frame") {
+    return <PictureFrameModal slot={slot ?? 0} screenX={screenX} screenY={screenY} onClose={onClose} />;
+  }
   const colourOverrides = useConfig((s) => s.colourOverrides);
   const floorStyle = useConfig((s) => s.floorStyle);
   const apply = useConfig((s) => s.apply);
@@ -556,5 +570,192 @@ function defaultColourForKind(kind: SurfaceKind, kit: { palette: { primary: stri
     case "chair":   return kit.palette.secondary;
     case "pendant": return kit.palette.primary;
     case "truss":   return "#15171c";
+    // Picture frames have a dedicated modal (no base colour); this
+    // fallback is unused but the switch must be exhaustive.
+    case "picture-frame": return "#1a1c22";
   }
+}
+
+// Dedicated modal for the side-wall picture frames. The frame slot
+// carries either a user-uploaded data:URL or a fal.ai-generated URL —
+// neither path needs a "colour" picker, so the modal is a small
+// upload-or-generate panel only.
+function PictureFrameModal({ slot, screenX, screenY, onClose }: {
+  slot: number;
+  screenX: number;
+  screenY: number;
+  onClose: () => void;
+}) {
+  const apply = useConfig((s) => s.apply);
+  const pictureFrameUrls = useConfig((s) => s.pictureFrameUrls) ?? [null, null, null, null];
+  const current = pictureFrameUrls[slot] ?? null;
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Close on Escape + outside-click — copy of the main modal's pattern
+  // so the picture-frame editor feels identical.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (panelRef.current && t && panelRef.current.contains(t)) return;
+      onClose();
+    };
+    const tid = window.setTimeout(() => {
+      document.addEventListener("pointerdown", onDown, true);
+    }, 0);
+    return () => {
+      window.clearTimeout(tid);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [onClose]);
+
+  const onUpload = (file: File) => {
+    const r = new FileReader();
+    r.onload = () => {
+      if (typeof r.result !== "string") return;
+      apply({ type: "frames.setUrl", slot, url: r.result });
+      onClose();
+    };
+    r.readAsDataURL(file);
+  };
+  const onGenerate = async () => {
+    const p = prompt.trim();
+    if (!p) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await generateTexture(`Square framed artwork for a corporate boardroom wall: ${p}. Photoreal or fine-art photography, gallery-grade composition, sharp focus, no people, no logos, no text.`, {
+        model: "fal-ai/flux/schnell",
+        image_size: "square_hd",
+      });
+      if (r.ok) {
+        apply({ type: "frames.setUrl", slot, url: r.url });
+        onClose();
+      } else {
+        const lower = r.error.toLowerCase();
+        if (lower.includes("no user found") || lower.includes("unauthorized") || lower.includes("invalid") || lower.includes("forbidden")) {
+          setError("fal.ai key rejected. Check .env.local + rebuild.");
+        } else {
+          setError(r.error);
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const W = 300;
+  const H = 280;
+  const x = Math.min(Math.max(8, screenX + 12), window.innerWidth - W - 8);
+  const y = Math.min(Math.max(8, screenY + 12), window.innerHeight - H - 8);
+
+  return createPortal(
+    <div
+      ref={panelRef}
+      className="ui-overlay panel-glass"
+      style={{
+        position: "fixed",
+        left: x,
+        top: y,
+        width: W,
+        zIndex: 1001,
+        borderRadius: 12,
+        padding: 14,
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <div className="pb-2 mb-2 border-b border-[color:var(--color-border-soft)] flex items-center justify-between">
+        <span className="t-label uppercase tracking-wider">Picture frame · slot {slot + 1}</span>
+        <button
+          onClick={onClose}
+          className="w-6 h-6 rounded-[6px] neumorph-raised grid place-items-center text-[color:var(--color-text-soft)] hover:text-[color:var(--color-text)]"
+          title="Close"
+          aria-label="Close"
+        >
+          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+            <path d="M1.5 1.5L7.5 7.5M7.5 1.5L1.5 7.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Live preview thumbnail — sits at the top so the user can see
+          what's currently in the frame before deciding to upload or
+          regenerate. */}
+      {current && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={current}
+          alt={`Frame ${slot + 1}`}
+          className="w-full aspect-square object-cover rounded-[6px] mb-2.5"
+          style={{ border: "1px solid var(--color-border-soft)" }}
+        />
+      )}
+
+      {/* Upload tile — accepts standard image formats. data:URLs get
+          stored in pictureFrameUrls so the scene re-renders immediately. */}
+      <label
+        className="flex items-center justify-center neumorph-raised cursor-pointer mb-2"
+        style={{ padding: "10px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500 }}
+      >
+        Upload image…
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(f);
+            e.currentTarget.value = "";
+          }}
+        />
+      </label>
+
+      <div className="t-label uppercase tracking-wider text-[0.6rem] opacity-70 mb-1.5">Generate · AI</div>
+      <input
+        type="text"
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="An abstract expressionist canvas…"
+        className="t-num text-[0.7rem] w-full px-2 py-1.5 rounded-[5px] neumorph-inset bg-transparent outline-none mb-1.5"
+        onKeyDown={(e) => { if (e.key === "Enter" && !busy && prompt.trim()) { void onGenerate(); } }}
+      />
+      <button
+        type="button"
+        disabled={busy || !prompt.trim()}
+        onClick={() => void onGenerate()}
+        className="w-full t-label text-[0.65rem] py-1.5 rounded-[5px] transition-all flex items-center justify-center gap-1.5 neumorph-raised"
+        style={{
+          color: busy || !prompt.trim() ? "var(--color-text-soft)" : "var(--color-accent)",
+          opacity: busy || !prompt.trim() ? 0.6 : 1,
+        }}
+      >
+        {busy && <RadialSpinner size={12} />}
+        <span>{busy ? "Generating…" : "Generate"}</span>
+      </button>
+      {error && (
+        <div className="t-label text-[0.55rem] mt-1 opacity-80 leading-snug" style={{ color: "var(--color-accent)" }}>
+          {error}
+        </div>
+      )}
+      {current && (
+        <button
+          type="button"
+          onClick={() => { apply({ type: "frames.setUrl", slot, url: null }); onClose(); }}
+          className="w-full mt-2 t-label text-[0.6rem] py-1 rounded-[5px] neumorph-raised text-[color:var(--color-text-soft)] hover:text-[color:var(--color-accent)]"
+        >
+          Clear frame
+        </button>
+      )}
+    </div>,
+    document.body,
+  );
 }

@@ -125,6 +125,11 @@ export type ConfigState = {
   standingDisplayCount: number;      // 0..4 — angled standing displays around the room (suppressed when kit opts out via noDefaultDressing)
   posterboardCount: number;          // 0..4 — upright portrait frames against the side walls
   posterboardUrls: (string | null)[]; // one image per posterboard slot; null = brand logo fallback
+  /** Side-wall picture frames — 4 square frames mounted on the left
+   *  and right walls near the door (2 per side). Each slot's URL is
+   *  uploaded or AI-generated via long-press on the frame in 3D. Null
+   *  = empty frame (the brand-grade placeholder shows). */
+  pictureFrameUrls: (string | null)[];
   /** Back-wall hero artwork URLs (up to 4). When set, panels are
    *  distributed across the back wall at full wall height instead of
    *  the single full-bleed `kit.scene.wallGraphic`. */
@@ -303,6 +308,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   standingDisplayCount: 2,
   posterboardCount: 0,
   posterboardUrls: [null, null, null, null],
+  pictureFrameUrls: [null, null, null, null],
   heroArtworkUrls: [null, null, null, null],
   cubeCount: 0,
   cubeAssets: [null, null, null, null],
@@ -720,6 +726,17 @@ export const useConfig = create<ConfigState>((set, get) => ({
       }
       case "layout.setPosterboardUrls": {
         set({ posterboardUrls: intent.urls.slice(0, 4) });
+        break;
+      }
+      case "frames.setUrl": {
+        const next = [...(get().pictureFrameUrls ?? [null, null, null, null])] as (string | null)[];
+        const i = Math.max(0, Math.min(3, intent.slot));
+        next[i] = intent.url;
+        set({ pictureFrameUrls: next });
+        break;
+      }
+      case "frames.setUrls": {
+        set({ pictureFrameUrls: intent.urls.slice(0, 4) });
         break;
       }
       case "layout.setHeroArtworkUrls": {

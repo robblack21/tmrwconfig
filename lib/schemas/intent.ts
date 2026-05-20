@@ -144,6 +144,12 @@ export const Intent = z.discriminatedUnion("type", [
    *  fal.ai-generated). null = empty cube. */
   z.object({ type: z.literal("layout.setCubeCount"), value: z.number() }),
   z.object({ type: z.literal("layout.setCubeAssets"), assets: z.array(z.object({ url: z.string(), kind: z.enum(["uploaded", "generated", "preset"]), label: z.string().optional() }).nullable()) }),
+  /** Side-wall picture frames — 4 square frames mounted near the door
+   *  on the left + right walls. `slot` is 0..3 (left-near, left-back,
+   *  right-near, right-back). url=null clears the frame back to its
+   *  empty-frame placeholder. */
+  z.object({ type: z.literal("frames.setUrl"), slot: z.number(), url: z.string().nullable() }),
+  z.object({ type: z.literal("frames.setUrls"), urls: z.array(z.string().nullable()) }),
 
   z.object({ type: z.literal("scene.save"), name: z.string() }),
 ]);
