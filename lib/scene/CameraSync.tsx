@@ -98,6 +98,13 @@ export function CameraSync() {
       // Wipe any partial offset so the user starts from a clean pose.
       lastYawDeltaRef.current = 0;
       anchorRef.current = null;
+      // CRITICAL: cancel any in-flight preset transition the MOMENT the
+      // user grabs the camera. The 5.5s slow preset lerp was overriding
+      // every drag/zoom for the full transition window — felt like the
+      // camera was actively fighting back. Null'ing animRef here means
+      // the very next frame skips the lerp block and OrbitControls is
+      // the sole writer of cam.position again.
+      animRef.current = null;
     };
     const onEnd = () => {
       interactingRef.current = false;
@@ -176,7 +183,12 @@ export function CameraSync() {
     const cam = camera as THREE.PerspectiveCamera;
     const ctrl = controls as unknown as OrbitControlsLike | null;
 
-    if (animRef.current) {
+    if (animRef.current && !interactingRef.current) {
+      // Skip the preset lerp on any frame where the user is grabbing
+      // the camera. onStart already cleared animRef but this is a
+      // second line of defence in case a preset is dispatched mid-drag
+      // (e.g. wizard step transitions firing gotoPreset while the
+      // user is still mousedown on the canvas).
       const a = animRef.current;
       a.t = Math.min(1, a.t + dt * 0.18); // ~5.5s total — 5× slower (was 0.9) for a gentle cinematic pan that lets the user appreciate the move rather than feeling whip-panned between presets
       const ease = easeOutCubic(a.t);
