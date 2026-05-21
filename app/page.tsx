@@ -39,7 +39,7 @@ export default function Page() {
     lightShaftsEnabled, lightShaftDensity, lightboxLogoEnabled,
     radiatingRigEnabled, radiatingRings,
     glassBalconyEnabled, circularScreenEnabled, wraparoundScreenEnabled,
-    windowsEnabled, ceilingEnabled, wallTextureEnabled, cupsEnabled, windowSegments, tableOrientationDeg, windowSillM, roomCount,
+    windowsEnabled, ceilingEnabled, wallTextureEnabled, cupsEnabled, windowSegments, tableOrientationDeg, windowSillM, roomCount, roomColumns,
     tableLengthM, tableWidthM, chairCount, tableVariant, chairVariant,
     ledWallEnabled, ledWallWidthM, ledWallHeightM, ledWallBrightness,
     hallMode, brandKitId, cameraFov,
@@ -468,7 +468,11 @@ export default function Page() {
           {windowsEnabled && (
             <Slider label="Panes" value={windowSegments} onChange={(v) => apply({ type: "room.setWindowSegments", value: v })} min={1} max={8} step={1} />
           )}
-          <Slider label="Rooms" value={roomCount} onChange={(v) => apply({ type: "room.setCount", value: v })} min={1} max={6} step={1} />
+          {/* Rows clone the room along X (side-wall doorways); columns clone
+              along Z (front-door geometry — 2 mirrors around the front door,
+              3+ adds doorways front & back to the in-between rooms). */}
+          <Slider label="Rows" value={roomCount} onChange={(v) => apply({ type: "room.setCount", value: v })} min={1} max={6} step={1} />
+          <Slider label="Cols" value={roomColumns} onChange={(v) => apply({ type: "room.setColumns", value: v })} min={1} max={6} step={1} />
         </Section>
 
         <Section label="Table">

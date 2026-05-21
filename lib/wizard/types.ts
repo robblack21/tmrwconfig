@@ -75,6 +75,12 @@ export type WizardCustomisation = {
    *  silhouette decision before brand + colour choices. Optional — when
    *  undefined the design-line's default applies. */
   pendantShape?: PendantShape;
+  /** Multi-room cluster picked in step 1. `roomCount` = ROWS cloned along
+   *  X (side-wall doorways); `roomColumns` = COLUMNS cloned along Z (2
+   *  mirrors around the front door, 3+ adds doorways front & back to the
+   *  in-between rooms). Both 1..6; 1 × 1 = a single room. */
+  roomCount: number;
+  roomColumns: number;
 };
 
 /** Returned to the host's `onComplete` callback. The host wires this into

@@ -344,6 +344,13 @@ export function applyWizardState(apply: ApplyFn, state: WizardState, prev?: Wiza
   if (!prev || prev.customisation.cubeCount !== state.customisation.cubeCount) {
     apply({ type: "layout.setCubeCount", value: state.customisation.cubeCount });
   }
+  // Multi-room cluster — rows (X) and columns (Z), picked in step 1.
+  if (!prev || prev.customisation.roomCount !== state.customisation.roomCount) {
+    apply({ type: "room.setCount", value: state.customisation.roomCount });
+  }
+  if (!prev || prev.customisation.roomColumns !== state.customisation.roomColumns) {
+    apply({ type: "room.setColumns", value: state.customisation.roomColumns });
+  }
   // Pendant shape — if the user picked one in step 1, it overrides the
   // design-line default. Undefined = "Auto", so we don't dispatch
   // anything; the design-line patch downstream wins.
@@ -475,6 +482,9 @@ export function applyWizardResult(apply: ApplyFn, result: WizardResult): void {
   apply({ type: "layout.setPosterboardUrls",  urls:  result.customisation.posterboardUrls });
   apply({ type: "layout.setCubeCount",  value: result.customisation.cubeCount });
   apply({ type: "layout.setCubeAssets", assets: result.customisation.cubeAssets });
+  // Multi-room cluster — rows (X) and columns (Z).
+  apply({ type: "room.setCount",   value: result.customisation.roomCount });
+  apply({ type: "room.setColumns", value: result.customisation.roomColumns });
 
   // 9. Reasonable defaults for everything else the wizard didn't ask
   //    about — lights on, ceiling closed.

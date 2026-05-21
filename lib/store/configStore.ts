@@ -58,7 +58,8 @@ export type ConfigState = {
   windowSegments: number;             // number of mullion bays per ribbon window (1..8)
   tableOrientationDeg: 0 | 90;        // table+chairs+cups orientation: 0 (long axis along Z) or 90 (along X)
   windowSillM: number;                // 0.4..1.6 — height of the window sill off the floor
-  roomCount: number;                  // 1..6 — cloned rooms linked by mid-wall doorways
+  roomCount: number;                  // 1..6 — ROWS: rooms cloned along X, linked by side-wall doorways
+  roomColumns: number;                // 1..6 — COLUMNS: rooms cloned along Z. 2 = mirror around the front door; 3+ = front-door geometry front & back on the in-between rooms
   tableLengthM: number;               // 2.0..8.0 — boardroom table length (non-parametric resize)
   tableWidthM: number;                // 1.0..3.0 — boardroom table width
   chairCount: number;                 // 0..16 — chairs arranged around the table, facing in
@@ -253,6 +254,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
   tableOrientationDeg: 90,
   windowSillM: 0.95,
   roomCount: 1,
+  roomColumns: 1,
   tableLengthM: 3.6,
   tableWidthM: 1.4,
   chairCount: 8,
@@ -425,6 +427,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
       }
       case "room.setWindowSill":         { set({ windowSillM: clamp(intent.value, 0.4, 1.6) }); break; }
       case "room.setCount":              { set({ roomCount: Math.round(clamp(intent.value, 1, 6)) }); break; }
+      case "room.setColumns":            { set({ roomColumns: Math.round(clamp(intent.value, 1, 6)) }); break; }
       case "boardroom.setTableLength": {
         const next = clamp(intent.value, 2.0, 8.0);
         const fit = fitRoomForTable(s.shape, s.tier, s.widthM, s.depthM, next, s.tableWidthM, s.tableOrientationDeg);
@@ -661,6 +664,7 @@ export const useConfig = create<ConfigState>((set, get) => ({
           ceilingEnabled: true,
           windowSillM: 0.95,
           roomCount: 1,
+          roomColumns: 1,
           tableLengthM: 3.6,
           tableWidthM: 1.4,
           chairCount: 8,

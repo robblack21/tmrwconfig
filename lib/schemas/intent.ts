@@ -50,6 +50,7 @@ export const Intent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("boardroom.setTableOrientation"), value: z.union([z.literal(0), z.literal(90)]) }),
   z.object({ type: z.literal("room.setWindowSill"), value: z.number() }),
   z.object({ type: z.literal("room.setCount"), value: z.number().int() }),
+  z.object({ type: z.literal("room.setColumns"), value: z.number().int() }),
   z.object({ type: z.literal("boardroom.setTableLength"), value: z.number() }),
   z.object({ type: z.literal("boardroom.setTableWidth"), value: z.number() }),
   z.object({ type: z.literal("boardroom.setChairCount"), value: z.number().int() }),

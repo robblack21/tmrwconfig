@@ -122,6 +122,8 @@ export function Wizard({
     cubeCount: 0,
     cubeAssets: [null, null, null, null],
     pendantShape: undefined,
+    roomCount: 1,
+    roomColumns: 1,
   });
   // Anthracite dark-mode toggle. Applies only to the wizard chrome —
   // swaps a small set of CSS vars on the wizard's own root element so
@@ -453,6 +455,24 @@ export function Wizard({
                   <WizardSlider
                     label="Height" value={heightM} min={2.4} max={5.5} step={0.1} unit="m"
                     onChange={(v) => { setHeightM(v); setDimsTouched((t) => ({ ...t, h: true })); }}
+                    accent={accent}
+                  />
+                </div>
+                {/* Multi-room cluster. Rows clone the room along X (linked by
+                    side-wall doorways); columns clone along Z via front-door
+                    geometry — 2 mirrors the room around its front door, 3+
+                    gives the in-between rooms doorways front & back. 1 × 1 is
+                    a single room. */}
+                <div className="text-[0.62rem] uppercase tracking-wider opacity-50 mt-5 mb-2">Rooms</div>
+                <div className="flex flex-col gap-3">
+                  <WizardSlider
+                    label="Rows" value={customisation.roomCount} min={1} max={6} step={1}
+                    onChange={(v) => setCustomisation((c) => ({ ...c, roomCount: v }))}
+                    accent={accent}
+                  />
+                  <WizardSlider
+                    label="Columns" value={customisation.roomColumns} min={1} max={6} step={1}
+                    onChange={(v) => setCustomisation((c) => ({ ...c, roomColumns: v }))}
                     accent={accent}
                   />
                 </div>
@@ -1395,19 +1415,16 @@ function WizardSlider({
   );
 }
 
-// Compact pendant shape row used on step 1. SVG glyphs are intentionally
-// tiny (18×12) so the seven options + an "Auto" reset fit in a single
-// 420px column without wrapping awkwardly. Each glyph is a stylised
-// silhouette of the pendant body — not a literal projection, but enough
-// for the user to recognise rectangle vs ring vs hexagon.
+// Compact pendant shape row used on step 1. Thinned to a curated trio
+// (Squircle / Ring / Hexagon) so the three options + an "Auto" reset fill
+// a single 4-up row in the 420px column without wrapping. The full shape
+// set (bar, triangle, curve, wedge, …) still lives in the main editor.
+// Each glyph is a stylised silhouette of the pendant body — not a literal
+// projection, but enough to recognise squircle vs ring vs hexagon.
 const PENDANT_SHAPES: { id: PendantShape; label: string; glyph: ReactNode }[] = [
-  { id: "rectangle",   label: "Bar",      glyph: <rect  x="3" y="6" width="18" height="4" rx="1" /> },
   { id: "squircle",    label: "Squircle", glyph: <rect  x="4" y="5" width="16" height="6" rx="3" /> },
   { id: "ring",        label: "Ring",     glyph: <circle cx="12" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.5" /> },
   { id: "hexagon",     label: "Hexagon",  glyph: <polygon points="6,8 9,4 15,4 18,8 15,12 9,12" fill="none" stroke="currentColor" strokeWidth="1.4" /> },
-  { id: "triangle",    label: "Triangle", glyph: <polygon points="12,3 21,13 3,13" /> },
-  { id: "innerCurve",  label: "Curve",    glyph: <path  d="M3 11 Q 12 3, 21 11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /> },
-  { id: "wedge",       label: "Wedge",    glyph: <polygon points="3,12 21,4 21,12" /> },
 ];
 
 function PendantShapeRow({

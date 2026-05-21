@@ -122,6 +122,7 @@ export function Scene() {
   const ceilingEnabled = useConfig((s) => s.ceilingEnabled);
   const windowSillM = useConfig((s) => s.windowSillM);
   const roomCount = useConfig((s) => s.roomCount);
+  const roomColumns = useConfig((s) => s.roomColumns);
   const tableLengthM = useConfig((s) => s.tableLengthM);
   const tableWidthM = useConfig((s) => s.tableWidthM);
   const chairCount = useConfig((s) => s.chairCount);
@@ -181,12 +182,20 @@ export function Scene() {
   const giMult  = kit.scene?.giMultiplier  ?? 1;
   const keyMult = kit.scene?.keyMultiplier ?? 1;
 
-  // Multi-room cluster — rooms are cloned along X with doorways linking the
-  // shared side walls. `xOffsetFor` centres the cluster on the origin so
-  // OrbitControls' pivot still maps to roughly the cluster centre.
+  // Multi-room cluster — a ROWS × COLUMNS grid of rooms centred on the
+  // origin so OrbitControls' pivot still maps to roughly the cluster centre.
+  //  • Rows clone along X, linked by side-wall doorways (WindowedDoorwayWall).
+  //  • Columns clone along Z, linked by front-door geometry (DoorEdgeWall):
+  //    cols=2 mirrors the room around its front door (so feature walls land
+  //    on both outer ends and the doors meet in the middle); cols=3+ gives
+  //    the in-between rooms front-door geometry on BOTH front and back.
+  const colCount = Math.max(1, roomColumns);
   const roomIndices = Array.from({ length: roomCount }, (_, i) => i);
+  const colIndices = Array.from({ length: colCount }, (_, j) => j);
   const xOffsetFor = (i: number) => (i - (roomCount - 1) / 2) * widthM;
+  const zOffsetFor = (j: number) => (j - (colCount - 1) / 2) * depthM;
   const clusterWidthM = widthM * roomCount;
+  const clusterDepthM = depthM * colCount;
 
   // Renderer-side: exposure + soft-shadow type set once on mount.
   const gl = useThree((s) => s.gl);
@@ -266,18 +275,37 @@ export function Scene() {
       <directionalLight position={[-6, 6, -4]} intensity={(isDark ? 0.22 : 0.3) * keyLightIntensity} color="#a8b4cc" />
 
       <Suspense fallback={null}>
-        <PbrFloor isDark={isDark} widthM={clusterWidthM} depthM={depthM} />
+        <PbrFloor isDark={isDark} widthM={clusterWidthM} depthM={clusterDepthM} />
       </Suspense>
 
       <Suspense fallback={null}>
-        <PlatformBlock widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} shape={shape} />
+        <PlatformBlock widthM={clusterWidthM} depthM={clusterDepthM} platformHeightM={platformHeightM} sideColor={floorColor} floorStyle={floorStyle} shape={shape} />
       </Suspense>
 
-      <PlatformEdgeAccent widthM={clusterWidthM} depthM={depthM} platformHeightM={platformHeightM} color={trimColor} shape={shape} />
+      <PlatformEdgeAccent widthM={clusterWidthM} depthM={clusterDepthM} platformHeightM={platformHeightM} color={trimColor} shape={shape} />
 
-      {roomIndices.map((ri) => (
-        <group key={`room-${ri}`} position={[xOffsetFor(ri), 0, 0]}>
-      {!editMode && (
+      {roomIndices.map((ri) => colIndices.map((cj) => {
+        // Column wall treatment (Z axis). The cluster comment above has the
+        // full rationale; per room:
+        //  • colDoorBack — every room but the back-most renders its back edge
+        //    as the shared connecting front-door (links to the room behind).
+        //  • colSkipFront — every room but the front-most skips its front
+        //    edge; the room in front renders that shared door on its back.
+        //  • colFeatureFront — the front-most room (cols>1) renders its front
+        //    edge as a feature wall instead of the entrance door, completing
+        //    the mirror so both outer ends of the column read as feature walls.
+        const colDoorBack     = cj > 0;
+        const colSkipFront    = cj < colCount - 1;
+        const colFeatureFront = colCount > 1 && cj === colCount - 1;
+        return (
+        <group key={`room-${ri}-${cj}`} position={[xOffsetFor(ri), 0, zOffsetFor(cj)]}>
+      {/* Interior light rig + back-wall sconce live in the back-most column
+          only (cj===0). When cols===1 that's every room — identical to the
+          old rows-only behaviour — but for a deep grid it stops the real
+          spot/point lights from multiplying per cell and blowing the WebGL
+          light budget. The forward columns are carried by the key light,
+          ambient + HDR and the back column's spill. */}
+      {!editMode && cj === 0 && (
         <>
           <BoothInteriorLights widthM={widthM} depthM={depthM} wallHeightM={wallHeightM} accent={kit.palette.accent} isDark={isDark} />
           {/* Sconce — overhead spot grazing the back-wall logo */}
@@ -303,6 +331,9 @@ export function Scene() {
             logo={exteriorLogo}
             connectLeft={ri > 0}
             skipRight={ri < roomCount - 1}
+            colDoorBack={colDoorBack}
+            colSkipFront={colSkipFront}
+            colFeatureFront={colFeatureFront}
           />
         </Suspense>
       </TimedReveal>
@@ -328,13 +359,16 @@ export function Scene() {
         </TimedReveal>
       )}
         </group>
-      ))}
+        );
+      }))}
 
-      {/* Props + branded content — rendered ONLY in the first room of the
-          cluster. Multi-room duplication is for empty architectural shells;
-          the pendant, logo, video wall, hero GLBs and default dressing all
-          stay anchored to the lead room rather than copying across clones. */}
-      <group position={[xOffsetFor(0), 0, 0]}>
+      {/* Props + branded content — rendered ONLY in the lead room of the
+          grid (row 0, back-most column). Multi-room duplication is for empty
+          architectural shells; the pendant, logo, video wall, hero GLBs and
+          default dressing all stay anchored to the lead room rather than
+          copying across clones. The back-most column keeps its solid feature
+          wall, so the LED/logo wall mounts exactly as in the single room. */}
+      <group position={[xOffsetFor(0), 0, zOffsetFor(0)]}>
         {/* Brand logo — prominent inside the room (migrates to the left flank
             when the video wall occupies the back wall). The exterior signage
             flanking the front door is rendered by Room/DoorEdgeWall. */}
@@ -654,7 +688,7 @@ export function Scene() {
       <ContactShadows
         position={[0, 0.012, 0]}
         opacity={isDark ? 0.4 : 0.32}
-        scale={Math.max(clusterWidthM, depthM) * 1.8}
+        scale={Math.max(clusterWidthM, clusterDepthM) * 1.8}
         blur={3.5}
         far={6}
       />
@@ -691,7 +725,7 @@ export function Scene() {
         // clip through the front wall. Room diagonal sets the upper
         // bound: half the diagonal plus a 1.5m breathing buffer keeps
         // the camera comfortably inside even at the widest rooms.
-        maxDistance={Math.hypot(clusterWidthM, depthM) * 0.5 + 1.5}
+        maxDistance={Math.hypot(clusterWidthM, clusterDepthM) * 0.5 + 1.5}
         maxPolarAngle={Math.PI / 2 - 0.04}
       />
       {/* CameraRoomClamp was removed — it ran every frame and lerped the
@@ -968,6 +1002,7 @@ function Room({
   shape, widthM, depthM, wallHeightM, platformHeightM, kitPrimary, kitAccent,
   backWallGraphic, backWallMotif, windowsEnabled, windowSillM, windowTrimColor, logo,
   connectLeft = false, skipRight = false,
+  colDoorBack = false, colSkipFront = false, colFeatureFront = false,
 }: {
   shape: FootprintShape; widthM: number; depthM: number; wallHeightM: number; platformHeightM: number;
   kitPrimary: string; kitAccent: string;
@@ -987,6 +1022,18 @@ function Room({
   /** When true, skip rendering the rightmost side wall — the next room
    *  on the right renders the shared wall as its connecting doorway. */
   skipRight?: boolean;
+  /** COLUMNS (Z axis). When true, the back edge (rear feature wall) is
+   *  rendered as a connecting front-door opening linking to the room
+   *  behind. The back-most column leaves this false to keep its solid
+   *  feature wall (logo + video). */
+  colDoorBack?: boolean;
+  /** When true, skip the front (door) edge entirely — the room in front
+   *  renders the shared connecting door on its back edge. */
+  colSkipFront?: boolean;
+  /** When true, render the front edge as a feature wall instead of the
+   *  entrance door — the front-most room of a 2+ column, completing the
+   *  mirror so both outer ends of the column read as feature walls. */
+  colFeatureFront?: boolean;
 }) {
   // Walls are built edge-by-edge around the footprint polygon: the rearmost
   // edge is the solid feature wall (logo + video live there), the frontmost
@@ -996,6 +1043,11 @@ function Room({
   const poly = footprintPolygon(shape, widthM, depthM);
   const n = poly.length;
   const circular = shape === "circular";
+  // Columns only restyle the front/back edges for box-like footprints. For
+  // circular / pavilion the door & back edges are single short chords (or the
+  // central atrium dominates), so swapping in a feature wall / door there would
+  // gap the shell — those shapes just translate as full rooms instead.
+  const colCapable = shape !== "circular" && shape !== "pavilion";
 
   let doorEdge = 0, backEdge = 0, maxZ = -Infinity, minZ = Infinity;
   for (let i = 0; i < n; i++) {
@@ -1027,6 +1079,20 @@ function Room({
         const sideish = Math.abs(dz) >= Math.abs(dx);
 
         if (i === doorEdge) {
+          // Front (door) edge. With columns: a room with another in front of
+          // it skips this edge (the front room renders the shared connecting
+          // door on its back); the front-most room of a 2+ column mirrors it
+          // as a feature wall; otherwise it's the normal entrance door +
+          // exterior signage.
+          if (colCapable && colSkipFront) return null;
+          if (colCapable && colFeatureFront) {
+            return (
+              <group key={i} position={mid} rotation-y={rotY}>
+                <BackWallPanel w={len} h={wallHeightM} d={thick} pos={[0, wallHeightM / 2, 0]}
+                  color={kitPrimary} accent={kitAccent} graphicUrl={backWallGraphic} motif={backWallMotif} />
+              </group>
+            );
+          }
           return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} logo={logo} />;
         }
         // Multi-room: shared edges become connecting doorways (left) or are
@@ -1046,6 +1112,13 @@ function Room({
           );
         }
         if (i === backEdge) {
+          // Back (feature wall) edge. With columns, every room but the
+          // back-most renders this as the shared connecting front-door — an
+          // interior opening, so no exterior signage (logo omitted). The
+          // back-most column keeps its solid feature wall (logo + video).
+          if (colCapable && colDoorBack) {
+            return <DoorEdgeWall key={i} lengthM={len} wallHeightM={wallHeightM} thick={thick} position={mid} rotationY={rotY} color={kitPrimary} />;
+          }
           return (
             <group key={i} position={mid} rotation-y={rotY}>
               <BackWallPanel w={len} h={wallHeightM} d={thick} pos={[0, wallHeightM / 2, 0]}
