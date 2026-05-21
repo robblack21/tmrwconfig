@@ -725,7 +725,9 @@ export function Scene() {
         // clip through the front wall. Room diagonal sets the upper
         // bound: half the diagonal plus a 1.5m breathing buffer keeps
         // the camera comfortably inside even at the widest rooms.
-        maxDistance={Math.hypot(clusterWidthM, clusterDepthM) * 0.5 + 1.5}
+        maxDistance={(roomCount > 1 || roomColumns > 1)
+          ? Math.hypot(clusterWidthM, clusterDepthM) * 1.4 + 6
+          : Math.hypot(clusterWidthM, clusterDepthM) * 0.5 + 1.5}
         maxPolarAngle={Math.PI / 2 - 0.04}
       />
       {/* CameraRoomClamp was removed — it ran every frame and lerped the

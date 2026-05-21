@@ -71,6 +71,10 @@ export function CameraSync() {
   const yawBreathEnabled = useConfig((s) => s.cameraYawBreathEnabled);
   const cameraPresetOverrides = useConfig((s) => s.cameraPresetOverrides);
   const cameraEntryFired = useConfig((s) => s.cameraEntryFired);
+  const roomCount = useConfig((s) => s.roomCount);
+  const roomColumns = useConfig((s) => s.roomColumns);
+  const widthM = useConfig((s) => s.widthM);
+  const depthM = useConfig((s) => s.depthM);
   const apply = useConfig((s) => s.apply);
 
   // Target state being animated toward; null when at-rest.
@@ -170,14 +174,44 @@ export function CameraSync() {
     const override = cameraPresetOverrides[cameraPreset];
     const p = override ?? CAMERA_PRESETS[cameraPreset];
     if (!p) return;
-    animRef.current = {
-      pos: new THREE.Vector3(...p.pos),
-      target: new THREE.Vector3(...p.target),
-      t: 0,
-    };
+    // Fit-to-cluster — multi-room clusters are centred on the origin, so a
+    // preset tuned for one room would frame an off-centre wall as the grid
+    // grows. `fit` = how many rooms span the widest axis (1×1 → fit=1).
+    const fit = Math.max(1, roomCount, roomColumns);
+    let pos: THREE.Vector3, target: THREE.Vector3;
+    if (fit > 1 && yawBreathEnabled) {
+      // Wizard live preview: a high, slightly-angled overview centred on the
+      // grid (which is itself centred on the origin), so every room reads at
+      // once however many rows/columns there are. Distance scales with the
+      // real cluster size in metres — being above everything, it can never
+      // graze a perimeter wall the way a low corner shot would.
+      const clusterW = widthM * roomCount;
+      const clusterD = depthM * roomColumns;
+      const R = 0.5 * Math.hypot(clusterW, clusterD); // half-diagonal
+      target = new THREE.Vector3(0, 0.8, 0);
+      pos = new THREE.Vector3(R * 0.45, R * 1.5, R * 1.15);
+    } else {
+      // Editor / single room: keep the preset's framing, pulled back to fit.
+      target = new THREE.Vector3(...p.target);
+      pos = new THREE.Vector3(...p.pos).sub(target).multiplyScalar(fit).add(target);
+    }
+    animRef.current = { pos, target, t: 0 };
     apply({ type: "camera.setFov", value: p.fov });
     apply({ type: "camera.gotoPreset", preset: "" });
-  }, [cameraPreset, cameraPresetOverrides, apply]);
+  }, [cameraPreset, cameraPresetOverrides, apply, roomCount, roomColumns, widthM, depthM, yawBreathEnabled]);
+
+  // Re-frame when the multi-room cluster grows / shrinks so the live preview
+  // pulls back to fit the new footprint instead of staring at a wall as the
+  // cluster recentres. Wizard preview only (gated on the yaw-breath flag,
+  // which the wizard turns on) so the main editor keeps its manual camera.
+  // Skips the initial mount — the entry sequence owns first framing.
+  const firstClusterRun = useRef(true);
+  useEffect(() => {
+    if (firstClusterRun.current) { firstClusterRun.current = false; return; }
+    const s = useConfig.getState();
+    if (!s.cameraYawBreathEnabled) return;
+    apply({ type: "camera.gotoPreset", preset: s.cameraActivePreset || "hero" });
+  }, [roomCount, roomColumns, apply]);
 
   // Each frame: animate the camera (if a preset is in flight) and push state.
   useFrame((_, dt) => {
